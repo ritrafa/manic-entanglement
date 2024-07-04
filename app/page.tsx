@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { Player } from '../lib/types'; // Adjust the import path according to your project structure
 import GameState from '../lib/GameState';
 import Hud from '../components/Hud';
-import Maze from '../components/Maze';
 import '../styles/globals.css';
 
 const Page: React.FC = () => {
@@ -26,22 +25,7 @@ const Page: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        console.log('page:29');
-        const mazeContainer = document.getElementById('maze-container');
-        const mazeElement = document.getElementById('maze');
-
-        const updateMazeContainerSize = () => {
-            const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
-            if (mazeContainer) {
-                mazeContainer.style.width = `${containerSize}px`;
-                mazeContainer.style.height = `${containerSize}px`;
-            }
-            if (mazeElement && gameState) {
-                mazeElement.style.gridTemplateColumns = `repeat(${gameState.maze.width * 2 + 1}, 1fr)`;
-                mazeElement.style.gridTemplateRows = `repeat(${gameState.maze.height * 2 + 1}, 1fr)`;
-            }
-            gameState?.handleResize();
-        };
+        const updateMazeContainerSize = () => gameState?.handleResize();
 
         window.addEventListener('resize', updateMazeContainerSize);
         updateMazeContainerSize();
@@ -58,10 +42,9 @@ const Page: React.FC = () => {
     return (
         <div className="game-container">
             <div id="maze-container">
-                <div id="maze">
-                    <Maze player={player} setPlayer={setPlayer} />
-                </div>
+                <div id="maze"/>
                 <img src="/images/title.png" alt="Title Screen" id="title-screen" onClick={() => gameState?.startGame()}/>
+                <div id="level-complete-animation"></div>
             </div>
             <Hud player={player} />
         </div>

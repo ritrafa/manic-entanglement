@@ -66,8 +66,7 @@ body {
 }
 
 .player {
-  /*background-image: url('images/sagamonke.gif');*/
-  background-image: url('/images/enemy.gif');
+  background-image: url('/images/sagamonke.gif');
   background-size: cover;
 }
 
@@ -119,15 +118,41 @@ body {
   background: radial-gradient(circle, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0) 50%);
 }
 
-.level-complete-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: url('/images/level-complete.gif') no-repeat center center;
+.message {
+  position: absolute;
+  font-size: 1rem;
+  color: #ffd700; /* Same as the player's color */
+  animation: moveUp 3s ease-out;
+  pointer-events: none; /* Ensure the message does not interfere with clicks */
+}
+
+.message-counter-flip {
+  transform: scaleX(-1);
+}
+
+@keyframes moveUp {
+  0% {
+      transform: translateY(0);
+      opacity: 1;
+  }
+  100% {
+      transform: translateY(-50px);
+      opacity: 0;
+  }
+}
+
+#level-complete-animation {
+  position: absolute;
+  top: 2%;
+  width: 10%;
+  height: 10%;
+  background-image: url('/images/exit.gif');
   background-size: cover;
-  animation: expand-and-fade 2s ease-in-out forwards;
+  background-position: center;
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
 }
 
 @keyframes expand-and-fade {
@@ -155,7 +180,7 @@ body {
   cursor: pointer;
 }
 
-.hud {
+#hud {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -168,7 +193,7 @@ body {
   max-width: 600px;
 }
 
-.energy-bar, .progress-bar {
+#energy-bar, #progress-bar {
   width: 100%;
   height: 25px;
   background-color: #555;
@@ -177,26 +202,26 @@ body {
   margin-top: 10px;
 }
 
-.energy-bar-inner {
+#energy-bar-inner {
   height: 100%;
   background-color: #1bbf85;
   transition: width 0.3s ease;
 }
 
-.status {
+#status {
   margin-top: 10px;
   font-size: 18px;
   font-weight: bold;
   text-align: center;
 }
 
-.progress-bar-inner {
+#progress-bar-inner {
   height: 100%;
   background-color: #ffd700;
   transition: width 0.3s ease;
 }
 
-.high-score, .points {
+#high-score, #points {
   margin-top: 10px;
   font-size: 18px;
   font-weight: bold;

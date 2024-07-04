@@ -4,7 +4,9 @@ import Maze, { Cell, Item, Enemy } from './maze';
 const INITIAL_MAZE_SIZE = 7;
 const POWERUP_COUNT = [2, 5];
 const ENEMY_COUNT = [1, 3];
-const SHUFFLE_COUNT = 20;
+const SHUFFLE_COUNT = 15;
+let energyInterval: NodeJS.Timeout;
+//const SOUND = {pickup: new Audio('pickup.wav'), background: new Audio('standoff-loop.mp3'), fight: new Audio('fight.wav'), playbackRate: 0.7};
 
 class GameState {
     public maze: Maze;
@@ -12,7 +14,7 @@ class GameState {
     public powerups: { x: number, y: number, type: string }[];
     public enemies: { x: number, y: number }[];
     public exit: { x: number, y: number };
-    public sound: HTMLAudioElement;
+    //public sound: HTMLAudioElement;
 
     constructor() {
         console.log('constructor');
@@ -24,17 +26,28 @@ class GameState {
         this.powerups = [];
         this.enemies = [];
         this.exit = { x: 0, y: 0 };
-        this.sound = new Audio('drum-loop.mp3');
-        this.sound.loop = true;
-        this.sound.playbackRate = 0.7;
-        this.sound.play();
-
-        //this.initGame(INITIAL_MAZE_SIZE);
+        //this.sound = new Audio('/drum-loop.mp3');
+        //this.sound.loop = true;
+        //this.sound.playbackRate = 0.7;
+        //this.sound.play();
+        //console.log(this.sound)
     }
 
     initGame(size: number = INITIAL_MAZE_SIZE): Player {
-        console.log('initGame');
         this.maze = new Maze(size, size);
+
+        const mazeElement = document.getElementById('maze');
+        if (!mazeElement) return this.player;
+        const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+        mazeElement.style.width = `${containerSize}px`;
+        mazeElement.style.height = `${containerSize}px`;
+    
+        const cellSize = Math.floor(containerSize / (size * 2 + 1));
+        document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
+        document.documentElement.style.setProperty('--item-size', `${cellSize}px`);
+        document.documentElement.style.setProperty('--grid-size', `${size * 2 + 1}`);
+
+
         this.player.x = Math.floor(this.maze.width / 2);
         this.player.y = this.maze.height - 1;
         this.player.energy = Math.max(100, this.player.energy);
@@ -44,6 +57,24 @@ class GameState {
         this.placeEnemies();
         this.renderMaze();
         this.updateStatus();
+
+        // Start the background music
+        //SOUND.background.playbackRate = SOUND.playbackRate;
+        //SOUND.background.loop = true;
+        //SOUND.background.play();
+
+        clearInterval(energyInterval);
+        energyInterval = setInterval(() => {
+            this.player.energy--;
+            this.updateStatus();
+            if (this.player.energy <= 0) {
+                clearInterval(energyInterval);
+                this.player.high_score = Math.max(this.player.points, this.player.high_score);
+                this.gameOver();
+                this.player.points = 0;
+                //sound.playbackRate = 0.7;
+            }
+        }, this.player.speed * 250);
 
         return this.player;
     }
@@ -126,11 +157,11 @@ class GameState {
             }
         }
         // Add the overlay
-        this.addOverlay(this.maze.origin.x * 2 + 1, this.maze.origin.y * 2 + 1);
+        this.maze.addOverlay(this.maze.origin.x * 2 + 1, this.maze.origin.y * 2 + 1);
     }
 
     updateStatus(): void {
-        console.log('updateStatus');
+        console.log('status')
         const energyBar = document.getElementById('energy-bar-inner');
         if (energyBar) {
             energyBar.style.width = `${100 * this.player.energy / this.player.energy_storage}%`;
@@ -151,28 +182,7 @@ class GameState {
         }
     }
 
-    addOverlay(x: number, y: number): void {
-        console.log('addOverlay');
-        const mazeElement = document.getElementById('maze');
-        if (!mazeElement) return;
 
-        const overlay = document.createElement('div');
-        overlay.className = 'fade-overlay';
-        overlay.style.width = '400px';
-        overlay.style.height = '400px';
-        overlay.style.left = `${x * 24 - 176}px`;
-        overlay.style.top = `${y * 24 - 176}px`;
-        mazeElement.appendChild(overlay);
-    }
-
-    updateOverlayPosition(x: number, y: number): void {
-        console.log('updateOverlayPosition');
-        const overlay = document.querySelector('.fade-overlay') as HTMLElement;
-        if (overlay) {
-            overlay.style.left = `${x * 24 - 176}px`;
-            overlay.style.top = `${y * 24 - 176}px`;
-        }
-    }
 
     handleKeyPress(event: KeyboardEvent): void {
         switch (event.key) {
@@ -245,7 +255,7 @@ class GameState {
                     this.triggerLevelCompleteAnimation(() => {
                         this.player.high_score = Math.max(this.player.points, this.player.high_score);
                         this.initGame(this.maze.width + 2);
-                        this.sound.playbackRate += 0.03;
+                        //this.sound.playbackRate += 0.03;
                     });
                     return;
                 }
@@ -254,7 +264,7 @@ class GameState {
                     this.player.high_score = Math.max(this.player.points, this.player.high_score);
                     this.gameOver();
                     this.player.points = 0;
-                    this.sound.playbackRate = 0.7;
+                    //this.sound.playbackRate = 0.7;
                     return;
                 }
             }
@@ -267,24 +277,36 @@ class GameState {
         if (!playerElement) return;
 
         const messageElement = document.createElement('div');
-        messageElement.className = 'message';
+        messageElement.className = `message${player.facing_left ? ' message-counter-flip' : ''}`;
         messageElement.textContent = message;
         playerElement.appendChild(messageElement);
 
-        setTimeout(() => {
-            messageElement.remove();
-        }, 2000);
+            // Animate the message to move up
+            messageElement.animate([
+                { transform: 'translateY(-60px)', opacity: 1 },
+                { transform: 'translateY(-120px)', opacity: 0 }
+            ], {
+                duration: 3000,
+                easing: 'ease-out'
+            });
+
+            // Remove the message after the animation completes
+            setTimeout(() => {
+                messageElement.remove();
+            }, 3000);
     }
 
-    triggerLevelCompleteAnimation(callback: () => void): void {
-        const overlay = document.createElement('div');
-        overlay.className = 'level-complete-overlay';
-        document.body.appendChild(overlay);
-
-        overlay.addEventListener('animationend', () => {
-            overlay.remove();
-            callback();
-        });
+    triggerLevelCompleteAnimation(callback: { (): void; }) {
+        const animationOverlay = document.getElementById('level-complete-animation');
+        if(!animationOverlay) return;
+        animationOverlay.style.opacity = '1';
+        animationOverlay.style.transform = 'scale(20)';
+    
+        setTimeout(() => {
+            animationOverlay.style.opacity = '0';
+            animationOverlay.style.transform = 'scale(1)';
+            setTimeout(callback, 100); // Wait for the animation to complete before starting the new level
+        }, 300);
     }
 
     startGame() {

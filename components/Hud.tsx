@@ -11,16 +11,16 @@ const Hud: React.FC<HudProps> = ({ player }) => {
     const progress = (player.points / player.high_score) * 100;
 
     return (
-        <div className="hud">
-            <div className="energy-bar">
-                <div className="energy-bar-inner" style={{ width: `${player.energy}%` }}></div>
+        <div id="hud">
+            <div id="energy-bar">
+                <div id="energy-bar-inner" style={{ width: `${player.energy}%` }}></div>
             </div>
-            <div className="points">Points: {player.points}</div>
+            <div id="status">Points: {player.points}</div>
 
-            <div className="progress-bar">
-                <div className="progress-bar-inner" style={{ width: `${progress}%` }}></div>
+            <div id="progress-bar">
+                <div id="progress-bar-inner" style={{ width: `${progress}%` }}></div>
             </div>
-            <div className="high-score">High Score: {player.high_score}</div>
+            <div id="high-score">High Score: {player.high_score}</div>
         </div>
     );
 };

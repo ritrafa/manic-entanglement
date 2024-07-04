@@ -327,12 +327,35 @@ class Maze {
             // Update all walls based on the new direction relationships
             this.updateAllWalls();
 
+            
+
             // Update the origin
-            const gameState = new GameState();
-            gameState.updateOverlayPosition(newOrigin.x, newOrigin.y);
+            this.origin = newOrigin;
+            this.updateOverlayPosition(newOrigin.x, newOrigin.y);
         }
 
         this.updateWallGrid();
+    }
+
+    addOverlay(x: number, y: number): void {
+        const mazeElement = document.getElementById('maze');
+        if (!mazeElement) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'fade-overlay';
+        overlay.style.width = '400px';
+        overlay.style.height = '400px';
+        overlay.style.left = `${x * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        overlay.style.top = `${y * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        mazeElement.appendChild(overlay);
+    }
+
+    updateOverlayPosition(x: number, y: number): void {
+        const overlay = document.querySelector('.fade-overlay') as HTMLElement;
+        if (overlay) {
+            overlay.style.left = `${y * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+            overlay.style.top = `${y * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        }
     }
 }
 
