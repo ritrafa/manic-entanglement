@@ -31,13 +31,13 @@ const Hud: React.FC<HudProps> = ({ player }) => {
             </div>
             <div className="right-box">
                 <div className="bar-container">
-                    <div>Energy</div>
+                    <div id="stat-energy">Energy: 0</div>
                     <div id="energy-bar">
                         <div id="energy-bar-inner" style={{ width: `${player.energy}%` }}></div>
                     </div>
                 </div>
                 <div className="bar-container">
-                    <div>Score</div>
+                    <div id="stat-score">Score: 0</div>
                     <div id="progress-bar">
                         <div id="progress-bar-inner" style={{ width: `${(player.points / player.high_score) * 100}%` }}></div>
                     </div>

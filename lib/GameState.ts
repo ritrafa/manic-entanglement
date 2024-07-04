@@ -43,7 +43,7 @@ class GameState {
 
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return this.player;
-        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.7;
+        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.9 : window.innerHeight * 0.7;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
 
@@ -176,20 +176,26 @@ class GameState {
         if (energyBar) {
             energyBar.style.width = `${100 * this.player.energy / this.player.energy_storage}%`;
         }
-        const statusElement = document.getElementById('status');
-        if (statusElement) {
-            statusElement.textContent = `Energy: ${Math.round(this.player.energy * 100) / 100} Points: ${this.player.points} Speed: ${Math.round(this.player.speed * 100)}%`;
-        }
-
         const progressBar = document.getElementById('progress-bar-inner');
         if (progressBar) {
             const progress = Math.min((this.player.points / this.player.high_score) * 100, 100);
             progressBar.style.width = `${progress}%`;
         }
+
+        const scoreElement = document.getElementById('stat-score');
+        if (scoreElement) {
+            scoreElement.textContent = `Score: ${this.player.points}`;
+        }
+        const energyElement = document.getElementById('stat-energy');
+        if (energyElement) {
+            energyElement.textContent = `Energy: ${Math.round(this.player.energy * 100) / 100}`;
+        }
+        /*
         const highScoreElement = document.getElementById('high-score');
         if (highScoreElement) {
             highScoreElement.textContent = `High Score: ${this.player.high_score}`;
         }
+        */
         const levelElement = document.getElementById('stat-level');
         if (levelElement) {
             levelElement.textContent = `${this.player.maze_level}`;
@@ -292,6 +298,7 @@ class GameState {
                 }
 
                 if (this.player.energy <= 0) {
+                    clearInterval(energyInterval);
                     this.player.high_score = Math.max(this.player.points, this.player.high_score);
                     this.gameOver();
                     this.player.points = 0;
@@ -355,7 +362,9 @@ class GameState {
         mazeElement.style.backgroundColor = 'rgba(255, 0, 0, 0.5)'; // Red overlay
         const gameOverMessage = document.createElement('div');
         gameOverMessage.className = 'game-over-message';
-        gameOverMessage.innerHTML = `Game over! You ran out of energy, but you managed to score ${this.player.points} points${this.player.points == this.player.high_score ? ' and managed to set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
+        const gameOverMessageText = document.createElement('p');
+        gameOverMessageText.textContent = `Game over! You ran out of energy, but you managed to score ${this.player.points} points${this.player.points == this.player.high_score ? ' and managed to set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
+        gameOverMessage.appendChild(gameOverMessageText);
         mazeElement.appendChild(gameOverMessage);
 
         gameOverMessage.addEventListener('click', () => {
@@ -368,7 +377,7 @@ class GameState {
         console.log('handleResize');
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.7;
+        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.9 : window.innerHeight * 0.7;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
 
