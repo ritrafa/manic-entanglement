@@ -2,6 +2,7 @@ import Player from './player';
 import Maze, { Cell, Item, Enemy } from './maze';
 
 const INITIAL_MAZE_SIZE = 7;
+const INITIAL_MAZE_LEVEL = 1;
 const POWERUP_COUNT = [2, 5];
 const ENEMY_COUNT = [1, 3];
 const SHUFFLE_COUNT = 15;
@@ -21,6 +22,7 @@ class GameState {
         console.log('constructor');
         this.maze = new Maze(INITIAL_MAZE_SIZE, INITIAL_MAZE_SIZE);
         this.player = new Player();
+        this.player.maze_level = 1;
         this.player.energy = 100;
         this.player.points = 0;
         this.player.high_score = 0;
@@ -41,9 +43,13 @@ class GameState {
 
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return this.player;
-        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.8;
+        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.7;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
+
+        const hudElement = document.getElementById('hud');
+        if (!hudElement) return this.player;
+        hudElement.style.width = `${containerSize}px`;
     
         const cellSize = Math.floor(containerSize / (size * 2 + 1));
         document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
@@ -184,6 +190,26 @@ class GameState {
         if (highScoreElement) {
             highScoreElement.textContent = `High Score: ${this.player.high_score}`;
         }
+        const levelElement = document.getElementById('stat-level');
+        if (levelElement) {
+            levelElement.textContent = `${this.player.maze_level}`;
+        }
+        const attackElement = document.getElementById('stat-attack');
+        if (attackElement) {
+            attackElement.textContent = `${this.player.attack}`;
+        }
+        const defenseElement = document.getElementById('stat-defense');
+        if (defenseElement) {
+            defenseElement.textContent = `${this.player.defense}`;
+        }
+        const speedElement = document.getElementById('stat-speed');
+        if (speedElement) {
+            speedElement.textContent = `${Math.round(this.player.speed * 100)}%`;
+        }
+        const consumptionElement = document.getElementById('stat-consumption');
+        if (consumptionElement) {
+            consumptionElement.textContent = `${Math.round(this.player.energy_usage * 100)}%`;
+        }
     }
 
 
@@ -258,6 +284,7 @@ class GameState {
                 if (this.player.x === this.exit.x && this.player.y === this.exit.y) {
                     this.triggerLevelCompleteAnimation(() => {
                         this.player.high_score = Math.max(this.player.points, this.player.high_score);
+                        this.player.maze_level += 1
                         this.initGame(this.maze.width + 2);
                         //this.sound.playbackRate += 0.03;
                     });
@@ -268,6 +295,7 @@ class GameState {
                     this.player.high_score = Math.max(this.player.points, this.player.high_score);
                     this.gameOver();
                     this.player.points = 0;
+                    this.player.maze_level = 1;
                     //this.sound.playbackRate = 0.7;
                     return;
                 }
@@ -340,9 +368,13 @@ class GameState {
         console.log('handleResize');
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.8;
+        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.7;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
+
+        const hudElement = document.getElementById('hud');
+        if (!hudElement) return this.player;
+        hudElement.style.width = `${containerSize}px`;
     
         const cellSize = containerSize / (this.maze.width * 2 + 1);
         document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);

@@ -10,9 +10,11 @@ export default class Player {
     attack: number;
     defense: number;
     speed: number;
+    maze_level: number;
 
     constructor() {
         this.energy = 100;
+        this.maze_level = 1;
         this.points = 0;
         this.high_score = 0;
         this.x = 0;
