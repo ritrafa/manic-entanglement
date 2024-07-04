@@ -4,7 +4,7 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: linear-gradient(135deg, #1a2a3a, #3a4a6a);
+  background: linear-gradient(135deg, #08412c, #40154f);
   color: white;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
@@ -66,7 +66,7 @@ body {
 }
 
 .player {
-  background-image: url('/images/sagamonke.gif');
+  background-image: url('/images/player.gif');
   background-size: cover;
 }
 
@@ -118,25 +118,21 @@ body {
   background: radial-gradient(circle, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0) 50%);
 }
 
-.message {
+.message{
   position: absolute;
   font-size: 1rem;
-  color: #ffd700; /* Same as the player's color */
-  animation: moveUp 3s ease-out;
-  pointer-events: none; /* Ensure the message does not interfere with clicks */
-}
-
-.message-counter-flip {
-  transform: scaleX(-1);
+  color: #ffd700;
+  animation: moveUp 2.5s ease-out;
+  pointer-events: none;
 }
 
 @keyframes moveUp {
   0% {
-      transform: translateY(0);
+      transform: translateY(-60px);
       opacity: 1;
   }
   100% {
-      transform: translateY(-50px);
+      transform: translateY(-120px);
       opacity: 0;
   }
 }

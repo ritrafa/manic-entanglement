@@ -59,7 +59,7 @@ class GameState {
 
         this.player.x = Math.floor(this.maze.width / 2);
         this.player.y = this.maze.height - 1;
-        this.player.energy = Math.max(100, this.player.energy);
+        this.player.energy = Math.max(100, this.player.energy_storage);
         this.exit = { x: Math.floor(this.maze.width / 2), y: 0 };
 
         this.placePowerups();
@@ -82,6 +82,7 @@ class GameState {
                 this.player.high_score = Math.max(this.player.points, this.player.high_score);
                 this.gameOver();
                 this.player.points = 0;
+                this.player.maze_level = 1;
                 //sound.playbackRate = 0.7;
             }
         }, this.player.speed * 250);
@@ -311,28 +312,19 @@ class GameState {
     }
 
     displayMessage(player: Player, message: string): void {
-        console.log('displayMessage');
         const playerElement = document.querySelector('.player');
         if (!playerElement) return;
 
         const messageElement = document.createElement('div');
-        messageElement.className = `message${player.facing_left ? ' message-counter-flip' : ''}`;
+        
+        messageElement.className = 'message';
         messageElement.textContent = message;
-        playerElement.appendChild(messageElement);
+        playerElement.parentElement?.appendChild(messageElement);
 
-            // Animate the message to move up
-            messageElement.animate([
-                { transform: 'translateY(-60px)', opacity: 1 },
-                { transform: 'translateY(-120px)', opacity: 0 }
-            ], {
-                duration: 3000,
-                easing: 'ease-out'
-            });
-
-            // Remove the message after the animation completes
-            setTimeout(() => {
-                messageElement.remove();
-            }, 3000);
+        // Remove the message after the animation completes
+        setTimeout(() => {
+            messageElement.remove();
+        }, 2500);
     }
 
     triggerLevelCompleteAnimation(callback: { (): void; }) {
