@@ -41,7 +41,7 @@ class GameState {
 
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return this.player;
-        const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.95;
+        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.8;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
     
@@ -340,7 +340,7 @@ class GameState {
         console.log('handleResize');
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.95;
+        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.95 : window.innerHeight * 0.8;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
     
