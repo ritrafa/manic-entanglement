@@ -1,47 +1,59 @@
-import { useCallback, useEffect, useState, useRef } from "react"
+import { useCallback, useEffect, useState, useRef } from "react";
+
+const CLICK_THRESHOLD = 10; // Threshold to differentiate between click and swipe
 
 export default function MobileSwiper({ children, onSwipe }) {
-    const wrapperRef = useRef(null)
-    const [startX, setStartX] = useState(0)
-    const [startY, setStartY] = useState(0)
+  const wrapperRef = useRef(null);
+  const [startX, setStartX] = useState(0);
+  const [startY, setStartY] = useState(0);
+  const [startTime, setStartTime] = useState(0);
 
-    const handleTouchStart = useCallback((e) => {
-        if (!wrapperRef.current.contains(e.target)) {
-            return
-        }
+  const handleTouchStart = useCallback((e) => {
+    if (!wrapperRef.current.contains(e.target)) {
+      return;
+    }
 
-        e.preventDefault()
+    setStartX(e.touches[0].clientX);
+    setStartY(e.touches[0].clientY);
+    setStartTime(Date.now());
+  }, []);
 
-        setStartX(e.touches[0].clientX)
-        setStartY(e.touches[0].clientY)
-    }, [])
+  const handleTouchEnd = useCallback(
+    (e) => {
+      if (!wrapperRef.current.contains(e.target)) {
+        return;
+      }
 
-    const handleTouchEnd = useCallback(
-        (e) => {
-            if (!wrapperRef.current.contains(e.target)) {
-                return
-            }
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const deltaX = endX - startX;
+      const deltaY = endY - startY;
+      const deltaTime = Date.now() - startTime;
 
-            e.preventDefault()
+      if (Math.abs(deltaX) < CLICK_THRESHOLD && Math.abs(deltaY) < CLICK_THRESHOLD && deltaTime < 500) {
+        // Treat it as a click
+        e.target.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        }));
+      } else {
+        // Treat it as a swipe
+        onSwipe && onSwipe({ deltaX, deltaY });
+      }
+    },
+    [startX, startY, startTime, onSwipe]
+  );
 
-            const endX = e.changedTouches[0].clientX
-            const endY = e.changedTouches[0].clientY
-            const deltaX = endX - startX
-            const deltaY = endY - startY
+  useEffect(() => {
+    window.addEventListener("touchstart", handleTouchStart);
+    window.addEventListener("touchend", handleTouchEnd);
 
-            onSwipe({ deltaX, deltaY })
-        }, [startX, startY, onSwipe])
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [handleTouchStart, handleTouchEnd]);
 
-    useEffect(() => {
-        const options = { passive: false }
-        window.addEventListener("touchstart", handleTouchStart, options)
-        window.addEventListener("touchend", handleTouchEnd, options)
-
-        return () => {
-            window.removeEventListener("touchstart", handleTouchStart, options)
-            window.removeEventListener("touchend", handleTouchEnd, options)
-        }
-    }, [handleTouchStart, handleTouchEnd])
-
-    return <div ref={wrapperRef}>{children}</div>
+  return <div ref={wrapperRef}>{children}</div>;
 }

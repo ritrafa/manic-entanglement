@@ -67,9 +67,9 @@ const Page: React.FC = () => {
     }
 
     return (
-        
+        <MobileSwiper onSwipe={handleSwipe}>
         <div className="game-container">
-            <MobileSwiper onSwipe={handleSwipe}>
+            
             <div id="maze-container">
                 <div id="maze"/>
                 <img 
@@ -80,9 +80,10 @@ const Page: React.FC = () => {
                 />
                 <div id="level-complete-animation"></div>
             </div>
-            </MobileSwiper>
+            
             <Hud player={player} />
         </div>
+        </MobileSwiper>
     );
 };
 
