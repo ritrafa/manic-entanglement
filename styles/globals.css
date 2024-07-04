@@ -199,8 +199,8 @@ body {
   justify-content: center;
   padding: 20px;
   margin: 20px;
-  width: 100px;
-  height: 100px;
+  width: 80px;
+  height: 80px;
   position: relative;
 }
 
@@ -218,18 +218,19 @@ body {
   flex-direction: column;
   justify-content: space-around;
   width: 100%;
-  padding: 20px;
+  padding: 20px 20px 0px 0px;
 }
 
 .bar-container {
   display: flex;
   align-items: center;
   margin-bottom: 10px;
+  font-size: 0.9em;
 }
 
 .bar-container div:first-child {
   margin-right: 10px;
-  width: 120px;
+  width: 100px;
 }
 
 #energy-bar, #progress-bar {
@@ -256,6 +257,7 @@ body {
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
+  margin-bottom: 20px;
 }
 
 .stat {
@@ -267,7 +269,7 @@ body {
   width: 75px;
   background-color: rgba(0, 0, 0, 0.8);
   font-size: 0.5em;
-  margin-bottom: 10px;
+  margin-top: 10px;
   margin-right: 10px;
 }
 
