@@ -19,12 +19,16 @@ class Cell {
 
 class Item {
     type: string;
+    sound: HTMLAudioElement;
 
     constructor(type: string) {
         this.type = type;
+        this.sound = new Audio('/pickup.wav');
+        this.sound.playbackRate = 1;
     }
 
     useItem(player: Player): string {
+        this.sound.play();
         let message = '';
         switch (this.type) {
             case 'energy':
@@ -60,13 +64,17 @@ class Item {
 class Enemy {
     attack: number;
     energy: number;
+    sound: HTMLAudioElement;
 
     constructor() {
         this.attack = 10;
         this.energy = 10;
+        this.sound = new Audio('/fight.wav');
+        this.sound.playbackRate = 2;
     }
 
     attackEnemy(player: Player): string {
+        this.sound.play();
         let message = '';
 
         let energyCost = this.energy / player.attack * (this.attack - player.defense);

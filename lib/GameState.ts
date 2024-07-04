@@ -16,7 +16,8 @@ class GameState {
     public enemies: { x: number, y: number }[];
     public exit: { x: number, y: number };
     public active: boolean;
-    //public sound: HTMLAudioElement;
+    public sound: HTMLAudioElement;
+    public lost: HTMLAudioElement;
 
     constructor() {
         console.log('constructor');
@@ -30,15 +31,16 @@ class GameState {
         this.enemies = [];
         this.exit = { x: 0, y: 0 };
         this.active = false;
-        //this.sound = new Audio('/drum-loop.mp3');
-        //this.sound.loop = true;
-        //this.sound.playbackRate = 0.7;
-        //this.sound.play();
-        //console.log(this.sound)
+        this.sound = new Audio('/standoff-loop.mp3');
+        this.sound.loop = true;
+        this.sound.playbackRate = 0.7;
+        this.sound.play();
+        this.lost = new Audio('/lost.mp3');
     }
 
     initGame(size: number = INITIAL_MAZE_SIZE): Player {
         this.active = true;
+        this.sound.play();
         this.maze = new Maze(size, size);
 
         const mazeElement = document.getElementById('maze');
@@ -83,7 +85,7 @@ class GameState {
                 this.gameOver();
                 this.player.points = 0;
                 this.player.maze_level = 1;
-                //sound.playbackRate = 0.7;
+                this.sound.playbackRate = 0.7;
             }
         }, this.player.speed * 250);
 
@@ -293,7 +295,7 @@ class GameState {
                         this.player.high_score = Math.max(this.player.points, this.player.high_score);
                         this.player.maze_level += 1
                         this.initGame(this.maze.width + 2);
-                        //this.sound.playbackRate += 0.03;
+                        this.sound.playbackRate += 0.03;
                     });
                     return;
                 }
@@ -304,7 +306,7 @@ class GameState {
                     this.gameOver();
                     this.player.points = 0;
                     this.player.maze_level = 1;
-                    //this.sound.playbackRate = 0.7;
+                    this.sound.playbackRate = 0.7;
                     return;
                 }
             }
@@ -351,12 +353,17 @@ class GameState {
     gameOver(): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
+        this.sound.pause();
+        this.lost.play();
         mazeElement.style.backgroundColor = 'rgba(255, 0, 0, 0.5)'; // Red overlay
         const gameOverMessage = document.createElement('div');
         gameOverMessage.className = 'game-over-message';
         const gameOverMessageText = document.createElement('p');
-        gameOverMessageText.textContent = `Game over! You ran out of energy, but you managed to score ${this.player.points} points${this.player.points == this.player.high_score ? ' and managed to set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
+        gameOverMessageText.textContent = `You lost -- but the game's not over!`;
         gameOverMessage.appendChild(gameOverMessageText);
+        const gameOverMessageText2 = document.createElement('p');
+        gameOverMessageText2.textContent = `You ran out of energy, but you scored ${this.player.points} points${this.player.points == this.player.high_score ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
+        gameOverMessage.appendChild(gameOverMessageText2);
         mazeElement.appendChild(gameOverMessage);
 
         gameOverMessage.addEventListener('click', () => {
