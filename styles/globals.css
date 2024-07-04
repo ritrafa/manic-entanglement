@@ -1,0 +1,204 @@
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+  background: linear-gradient(135deg, #1a2a3a, #3a4a6a);
+  color: white;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.game-container {
+  display: contents;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+@keyframes moveBackground {
+  0% { background-position: 0 0; }
+  100% { background-position: -1000px -500px; }
+}
+#maze-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+}
+#maze {
+  position: relative;
+  background: url('/images/galaxy2.jpg') repeat;
+  animation: moveBackground 45s ease-in-out infinite alternate;
+  display: grid;
+  grid-template-columns: repeat(var(--grid-size), var(--cell-size));
+  grid-template-rows: repeat(var(--grid-size), var(--cell-size));
+  justify-content: center;
+  align-content: center;
+}
+
+#title-screen {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+  z-index: 1;
+}
+#title-screen img {
+  width: 80%;
+  max-width: 600px;
+}
+
+.cell {
+  position: relative;
+  width: var(--cell-size);
+  height: var(--cell-size);
+}
+
+.player, .exit, .powerup, .enemy, .wall-image {
+  position: absolute;
+  width: var(--item-size);
+  height: var(--item-size);
+  background-size: 100% 100%;
+}
+
+.player {
+  /*background-image: url('images/sagamonke.gif');*/
+  background-image: url('/images/enemy.gif');
+  background-size: cover;
+}
+
+.player.flip-horizontal {
+  transform: scaleX(-1);
+}
+
+.exit {
+  background-image: url('/images/exit.gif');
+  background-size: cover;
+}
+
+.powerup {
+  background-size: cover;
+}
+
+.item_energy {
+  background-image: url('/images/energy.gif');
+}
+
+.item_boots {
+  background-image: url('/images/boots.gif');
+}
+
+.item_gloves {
+  background-image: url('/images/gloves.gif');
+}
+
+.item_shield {
+  background-image: url('/images/shield.gif');
+}
+
+.item_speed {
+  background-image: url('/images/speed.gif');
+}
+
+.item_backpack {
+  background-image: url('/images/backpack.gif');
+}
+
+.enemy {
+  background-image: url('/images/enemy.gif');
+  background-size: cover;
+}
+
+.fade-overlay {
+  position: absolute;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0) 50%);
+}
+
+.level-complete-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: url('/images/level-complete.gif') no-repeat center center;
+  background-size: cover;
+  animation: expand-and-fade 2s ease-in-out forwards;
+}
+
+@keyframes expand-and-fade {
+  0% {
+      transform: scale(1);
+      opacity: 1;
+  }
+  100% {
+      transform: scale(1.5);
+      opacity: 0;
+  }
+}
+
+.game-over-message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 0, 0, 0.8);
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  z-index: 1000;
+  cursor: pointer;
+}
+
+.hud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 10px 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  width: 80%;
+  max-width: 600px;
+}
+
+.energy-bar, .progress-bar {
+  width: 100%;
+  height: 25px;
+  background-color: #555;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.energy-bar-inner {
+  height: 100%;
+  background-color: #1bbf85;
+  transition: width 0.3s ease;
+}
+
+.status {
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.progress-bar-inner {
+  height: 100%;
+  background-color: #ffd700;
+  transition: width 0.3s ease;
+}
+
+.high-score, .points {
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+}
