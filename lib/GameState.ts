@@ -14,6 +14,7 @@ class GameState {
     public powerups: { x: number, y: number, type: string }[];
     public enemies: { x: number, y: number }[];
     public exit: { x: number, y: number };
+    public active: boolean;
     //public sound: HTMLAudioElement;
 
     constructor() {
@@ -26,6 +27,7 @@ class GameState {
         this.powerups = [];
         this.enemies = [];
         this.exit = { x: 0, y: 0 };
+        this.active = false;
         //this.sound = new Audio('/drum-loop.mp3');
         //this.sound.loop = true;
         //this.sound.playbackRate = 0.7;
@@ -34,11 +36,12 @@ class GameState {
     }
 
     initGame(size: number = INITIAL_MAZE_SIZE): Player {
+        this.active = true;
         this.maze = new Maze(size, size);
 
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return this.player;
-        const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+        const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.95;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
     
@@ -62,6 +65,7 @@ class GameState {
         //SOUND.background.playbackRate = SOUND.playbackRate;
         //SOUND.background.loop = true;
         //SOUND.background.play();
+        
 
         clearInterval(energyInterval);
         energyInterval = setInterval(() => {
@@ -336,7 +340,7 @@ class GameState {
         console.log('handleResize');
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+        const containerSize = Math.min(window.innerWidth, window.innerHeight) * 0.95;
         mazeElement.style.width = `${containerSize}px`;
         mazeElement.style.height = `${containerSize}px`;
     
