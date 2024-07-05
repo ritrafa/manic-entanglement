@@ -15,6 +15,10 @@
     "@solana/web3.js": "^1.94.0",
     "@tiplink/wallet-adapter": "^2.1.18",
     "@vercel/analytics": "^1.3.1",
+    "blob-stream": "^0.1.3",
+    "fs": "^0.0.1-security",
+    "gif.js.optimized": "^1.0.1",
+    "gifencoder": "^2.0.1",
     "next": "14.2.4",
     "react": "^18",
     "react-dom": "^18"

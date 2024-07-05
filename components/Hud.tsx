@@ -3,22 +3,45 @@ import { Player } from '../lib/types';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { getRelatedAssetsByOwner } from '../lib/helius';
 import { useWallet } from '@solana/wallet-adapter-react';
+import GameState from '@/lib/GameState';
+import handleGenerateGIF from '@/lib/player_generator';
+
 
 interface HudProps {
     player: Player;
+    gameState: GameState;
 }
 
 const Hud: React.FC<HudProps> = ({ player }) => {
     const { publicKey } = useWallet();
     const [assetImage, setAssetImage] = useState<string | null>(null);
+    const [gameState, setGameState] = useState<GameState | null>(null);
 
     const handleCheckAssets = useCallback(async () => {
         if (publicKey) {
             const assets = await getRelatedAssetsByOwner(publicKey.toBase58());
-            const asset = assets.find(item => item.grouping.some(group => group.group_value === 'h76khMf58obcfMnnQpvU9Snh71DtGQBzj2WoQwxndjL'));
-            if (asset) {
-                setAssetImage(asset.content.files[0].cdn_uri);
-            }
+            assets.forEach((element: {
+                file: any;
+                collection: string; data: any; 
+}) => {
+                if (element.collection == 'Dj5gDUph6CuUiQBjh31HhpmJTXhhfHzbMTNK89wNHzvz' && element.data){
+                    const data = element.data;
+                    const image = element.file;
+
+                    setAssetImage(image);
+                    player.setPlayerDetails(data);
+
+                    const selectedTraits = {
+                        Body: data.find((item: { key: any; }) => item.key === 'Body').value,
+                        Head: data.find((item: { key: any; }) => item.key === 'Head').value,
+                        Back: data.find((item: { key: any; }) => item.key === 'Back').value,
+                        Clothes: data.find((item: { key: any; }) => item.key === 'Clothes').value,
+                        Eye: data.find((item: { key: any; }) => item.key === 'Eye').value
+                    };
+                    handleGenerateGIF(selectedTraits);
+                    return;
+                }   
+            });
         }
     }, [publicKey]);
 
@@ -49,11 +72,11 @@ const Hud: React.FC<HudProps> = ({ player }) => {
                     </div>
                     <div className="stat">
                         <div>⚔️ Attack</div>
-                        <div id="stat-attack">{player.attack}</div>
+                        <div id="stat-attack">{Math.round(player.attack*10)/10}</div>
                     </div>
                     <div className="stat">
                         <div>🛡️ Defense</div>
-                        <div id="stat-defense">{player.defense}</div>
+                        <div id="stat-defense">{Math.round(player.defense*10)/10}</div>
                     </div>
                     <div className="stat">
                         <div>🏃‍♂️ Speed</div>
@@ -61,7 +84,7 @@ const Hud: React.FC<HudProps> = ({ player }) => {
                     </div>
                     <div className="stat">
                         <div>⚡ Consumption</div>
-                        <div id="stat-consumption">{Math.round(player.energy_usage * 100)}%</div>
+                        <div id="stat-consumption">{Math.round(player.consumption * 100)}%</div>
                     </div>
                 </div>
             </div>

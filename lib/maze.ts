@@ -36,25 +36,25 @@ class Item {
                 message = '+25 Energy';
                 break;
             case 'boots':
-                player.energy_usage *= 0.95;
-                message = '-5% Energy Use';
+                player.consumption *= 0.99;
+                message = '-1% Energy Use';
                 break;
             case 'gloves':
-                player.attack += 1;
-                message = '+1 Attack';
+                player.attack += 0.1;
+                message = '+0.1 Attack';
                 break;
             case 'shield':
-                player.defense += 1;
-                message = '+1 Defense';
+                player.defense += 0.1;
+                message = '+0.1 Defense';
                 break;
             case 'speed':
-                player.speed *= 1.1;
-                message = '+10% Speed';
+                player.speed *= 1.01;
+                message = '+1% Speed';
                 break;
             case 'backpack':
-                player.energy_storage += 10;
-                player.energy += 10;
-                message = '+10 Energy Storage';
+                player.energy_storage += 5;
+                player.energy += 5;
+                message = '+5 Energy Storage';
                 break;
         }
         return message;

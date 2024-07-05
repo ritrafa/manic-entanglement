@@ -5,10 +5,13 @@ export interface Player {
     maze_level: number;
     high_score: number;
     energy_storage: number;
-    energy_usage: number;
+    consumption: number;
     attack: number;
     defense: number;
     speed: number;
     x: number;
     y: number;
+    facing_left: boolean;
+    elements: { [key: string]: string };
+    setPlayerDetails(details: { key: string; value: any }[]): void;
 }

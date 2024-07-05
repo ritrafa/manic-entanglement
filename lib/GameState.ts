@@ -1,5 +1,6 @@
 import Player from './player';
 import Maze, { Cell, Item, Enemy } from './maze';
+import handleGenerateGIF from './player_generator';
 
 const INITIAL_MAZE_SIZE = 5;
 const INITIAL_MAZE_LEVEL = 1;
@@ -19,10 +20,10 @@ class GameState {
     public sound: HTMLAudioElement;
     public lost: HTMLAudioElement;
     public levelup: HTMLAudioElement;
+    public countdown: HTMLAudioElement;
     
 
     constructor() {
-        console.log('constructor');
         this.maze = new Maze(INITIAL_MAZE_SIZE, INITIAL_MAZE_SIZE);
         this.player = new Player();
         this.player.maze_level = 1;
@@ -39,6 +40,8 @@ class GameState {
         this.sound.play();
         this.lost = new Audio('/lost.mp3');
         this.levelup = new Audio('/levelup.wav');
+        this.countdown = new Audio('/beep.mp3');
+        this.countdown.playbackRate = 1.5;
     }
 
     initGame(size: number = INITIAL_MAZE_SIZE): Player {
@@ -90,13 +93,12 @@ class GameState {
                 this.player.maze_level = 1;
                 this.sound.playbackRate = 0.7;
             }
-        }, this.player.speed * 250);
+        }, this.player.speed * 150);
 
         return this.player;
     }
 
     placePowerups(): void {
-        console.log('placePowerups');
         const itemTypes = ['energy', 'boots', 'gloves', 'shield', 'speed', 'backpack'];
         this.powerups = [];
         const powerupCount = Math.floor(Math.random() * (POWERUP_COUNT[1] - POWERUP_COUNT[0] + 1)) + POWERUP_COUNT[0];
@@ -112,7 +114,6 @@ class GameState {
     }
 
     placeEnemies(): void {
-        console.log('placeEnemies');
         this.enemies = [];
         const enemyCount = Math.floor(Math.random() * (ENEMY_COUNT[1] - ENEMY_COUNT[0] + 1)) + ENEMY_COUNT[0];
         for (let i = 0; i < enemyCount; i++) {
@@ -126,7 +127,6 @@ class GameState {
     }
 
     renderMaze(): void {
-        console.log('renderMaze');
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         mazeElement.innerHTML = '';
@@ -177,7 +177,6 @@ class GameState {
     }
 
     updateStatus(): void {
-        console.log('status')
         const energyBar = document.getElementById('energy-bar-inner');
         if (energyBar) {
             energyBar.style.width = `${100 * this.player.energy / this.player.energy_storage}%`;
@@ -208,11 +207,11 @@ class GameState {
         }
         const attackElement = document.getElementById('stat-attack');
         if (attackElement) {
-            attackElement.textContent = `${this.player.attack}`;
+            attackElement.textContent = `${Math.round(this.player.attack*10)/10}`;
         }
         const defenseElement = document.getElementById('stat-defense');
         if (defenseElement) {
-            defenseElement.textContent = `${this.player.defense}`;
+            defenseElement.textContent = `${Math.round(this.player.defense*10)/10}`;
         }
         const speedElement = document.getElementById('stat-speed');
         if (speedElement) {
@@ -220,7 +219,7 @@ class GameState {
         }
         const consumptionElement = document.getElementById('stat-consumption');
         if (consumptionElement) {
-            consumptionElement.textContent = `${Math.round(this.player.energy_usage * 100)}%`;
+            consumptionElement.textContent = `${Math.round(this.player.consumption * 100)}%`;
         }
     }
 
@@ -266,7 +265,7 @@ class GameState {
 
                 this.player.x = newX;
                 this.player.y = newY;
-                this.player.energy -= 1 * this.player.energy_usage;
+                this.player.energy -= 1 * this.player.consumption;
                 this.player.points++;
 
                 for (let i = 0; i < SHUFFLE_COUNT; i++) {
@@ -347,10 +346,44 @@ class GameState {
     }
 
     startGame() {
+        const mazeContainerElement = document.getElementById('maze-container');
         const titleElement = document.getElementById('title-screen');
         if (!titleElement) return;
-        titleElement.style.display = 'none';
-        this.initGame(INITIAL_MAZE_SIZE);
+        const selectedTraits = {
+            Body: this.player.body,
+            Head: this.player.head,
+            Back: this.player.back,
+            Clothes: this.player.clothes,
+            Eye: this.player.eye
+        };
+
+        handleGenerateGIF(selectedTraits);
+
+        titleElement.style.opacity = '0.5';
+        const countdownElement = document.createElement('p');
+        countdownElement.className = 'title-screen-countdown';
+        countdownElement.textContent = '3';
+        mazeContainerElement?.appendChild(countdownElement);
+        this.countdown.play();
+
+
+        setTimeout(() => {
+            countdownElement.textContent = '2';
+            this.countdown.play();
+            
+        }, 1000);
+
+        setTimeout(() => {
+            countdownElement.textContent = '1';
+            this.countdown.play();
+        }, 2000);
+
+        setTimeout(() => {
+            countdownElement.remove();
+            titleElement.style.display = 'none';
+            this.initGame(INITIAL_MAZE_SIZE);
+        }, 3000);
+
     }
 
 
@@ -377,7 +410,6 @@ class GameState {
     }
 
     handleResize() {
-        console.log('handleResize');
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.9 : window.innerHeight * 0.7;
