@@ -12,6 +12,10 @@ export interface Player {
     x: number;
     y: number;
     facing_left: boolean;
-    elements: { [key: string]: string };
+    head: string;
+    body: string;
+    eye: string;
+    clothes: string;
+    back: string;
     setPlayerDetails(details: { key: string; value: any }[]): void;
 }

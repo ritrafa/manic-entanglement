@@ -9,7 +9,6 @@ import handleGenerateGIF from '@/lib/player_generator';
 
 interface HudProps {
     player: Player;
-    gameState: GameState;
 }
 
 const Hud: React.FC<HudProps> = ({ player }) => {
