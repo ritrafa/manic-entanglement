@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+Game Live @ https://www.manic-entanglement.com/
+Repo @ https://github.com/ritrafa/manic-entanglement
 
-## Getting Started
 
-First, run the development server:
+# Introducing "Manic Entanglement": A Rogue-Lite Adventure on @solana
+Are you ready to dive into an ever-shifting labyrinth where survival is fleeting, and wisdom and prior attempts are your greatest assets? Welcome to Manic Entanglement, a rogue-lite game on Solana where every step you take alters the labyrinth, challenging your wits and reflexes while you collect gear and items to stave off your eventual return to the cosmic mist. Each time you re-enter, you do so a little wiser, a little stronger and better prepared for the infinite entanglement.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Game Mechanics and the Origin Algorithm
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Your objective is to navigate through this dynamically shifting labyrinth to reach the exit all the while collecting as much gear as possible. Unfortunately, each new exit only drops you further into the depths of the maze. The gear you collect can be integrated into your generative, playable NFT, enhancing your abilities in subsequent runs.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+⚡Energy: You start with 100 energy points. Every move decreases your energy by 1. Slay enemies, find temporary boosts, & upgrade your gear to run on this for as long as possible.
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+🛡️Gear: Anything you find in the maze can be added to your dynamic nft, and will give you bonuses on future runs.
 
-## Learn More
+🔁Dynamic Maze: With each step you take, the maze changes in certain areas, forcing you to make calculated bets on where to proceed and what to attempt on each level. Certain items wll help you wield this chaos 😏
 
-To learn more about Next.js, take a look at the following resources:
+💀Losing: If you run out of energy, you return to the cosmic mist, ready to try again.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+🏆Winning: Every time you play you have hope of getting slightly higher on the global leaderboard.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+A key feature of "Manic Entanglement" is the origin shift algorithm, created by CaptainLuma. This algorithm ensures the maze continuously evolves, providing a unique challenge with every step.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Core NFT Integration
+If you have a Entangled Reptile nft, you can load it into the game and your stats on it are loaded in, also the traits from that nft will automatically make an animated playable character! I didn't finalize the mint new charcters in game, but that would be my next step!

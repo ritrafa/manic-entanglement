@@ -5,16 +5,17 @@ import { getRelatedAssetsByOwner } from '../lib/helius';
 import { useWallet } from '@solana/wallet-adapter-react';
 import GameState from '@/lib/GameState';
 import handleGenerateGIF from '@/lib/player_generator';
+import NFTCreator from './NFTCreator';
 
 
 interface HudProps {
     player: Player;
+    gameState: GameState;
 }
 
-const Hud: React.FC<HudProps> = ({ player }) => {
+const Hud: React.FC<HudProps> = ({ player, gameState }) => {
     const { publicKey } = useWallet();
     const [assetImage, setAssetImage] = useState<string | null>(null);
-    const [gameState, setGameState] = useState<GameState | null>(null);
 
     const handleCheckAssets = useCallback(async () => {
         if (publicKey) {
@@ -48,7 +49,8 @@ const Hud: React.FC<HudProps> = ({ player }) => {
         <div id="hud">
             <div className="left-box">
                 <WalletMultiButton />
-                {publicKey && <button className="check-assets" onClick={handleCheckAssets}>🔎 Assets</button>}
+                {publicKey && <button className="wallet-actions" onClick={handleCheckAssets}>🔎 Assets</button>}
+
                 {assetImage && <img src={assetImage} alt="Asset" className="asset-image" />}
             </div>
             <div className="right-box">

@@ -83,7 +83,7 @@ const Page: React.FC = () => {
                 <div id="level-complete-animation"></div>
             </div>
             
-            <Hud player={player} />
+            {gameState && (<Hud player={player} gameState={gameState} />)}
         </div>
         </MobileSwiper>
         <Analytics/>

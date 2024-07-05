@@ -286,14 +286,15 @@ body {
   margin-right: 10px;
 }
 
-.check-assets {
+.wallet-actions {
   color: white;
   background-color: rgba(0, 0, 0, 0.8);
   border: none;
   padding: 10px;
   border-radius: 5px;
   cursor: pointer;
-
+  margin-top: 5px;
+  width: 120px;
 }
 
 #stat-level, #stat-attack, #stat-defense, #stat-speed, #stat-consumption {
