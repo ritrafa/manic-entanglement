@@ -1,7 +1,7 @@
 import Player from './player';
 import Maze, { Cell, Item, Enemy } from './maze';
 
-const INITIAL_MAZE_SIZE = 7;
+const INITIAL_MAZE_SIZE = 5;
 const INITIAL_MAZE_LEVEL = 1;
 const POWERUP_COUNT = [2, 5];
 const ENEMY_COUNT = [1, 3];
@@ -18,6 +18,8 @@ class GameState {
     public active: boolean;
     public sound: HTMLAudioElement;
     public lost: HTMLAudioElement;
+    public levelup: HTMLAudioElement;
+    
 
     constructor() {
         console.log('constructor');
@@ -36,6 +38,7 @@ class GameState {
         this.sound.playbackRate = 0.7;
         this.sound.play();
         this.lost = new Audio('/lost.mp3');
+        this.levelup = new Audio('/levelup.wav');
     }
 
     initGame(size: number = INITIAL_MAZE_SIZE): Player {
@@ -291,6 +294,7 @@ class GameState {
                 }
 
                 if (this.player.x === this.exit.x && this.player.y === this.exit.y) {
+                    this.levelup.play();
                     this.triggerLevelCompleteAnimation(() => {
                         this.player.high_score = Math.max(this.player.points, this.player.high_score);
                         this.player.maze_level += 1
