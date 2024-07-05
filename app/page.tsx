@@ -6,6 +6,7 @@ import GameState from '../lib/GameState';
 import Hud from '../components/Hud';
 import MobileSwiper from '../components/mobile-swiper';
 import '../styles/globals.css';
+import { Analytics } from "@vercel/analytics/react"
 
 interface SwipeEvent {
     deltaX: number;
@@ -67,6 +68,7 @@ const Page: React.FC = () => {
     }
 
     return (
+        <>
         <MobileSwiper onSwipe={handleSwipe}>
         <div className="game-container">
             
@@ -84,6 +86,8 @@ const Page: React.FC = () => {
             <Hud player={player} />
         </div>
         </MobileSwiper>
+        <Analytics/>
+        </>
     );
 };
 
