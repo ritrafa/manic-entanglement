@@ -148,3 +148,24 @@
   `public/images/tools/*.svg`; `game/tools.test.ts` plus new `game/run.test.ts` cases
   cover the freeze, the reroll, the caps and the refusals, and the forecast baseline in
   `game/forecast.test.ts` was re-captured for the new tool-pickup draws.
+
+- Added the Cut tool: `game/maze.ts` gained `reroot(x, y)` (re-roots the pointer
+  tree at any cell by reversing the path to the origin and clearing the chosen
+  cell's pointer, opening and closing no wall; out-of-bounds or a pointer that
+  does not lead to the origin changes nothing), `game/tools.ts` added `"cut"` to
+  `ToolId`/`TOOL_IDS`/`TOOL_INFO` with a `minDepth` of 3 and a `toolsFor(depth)`
+  the spawner now draws tool pickups from (so Cut pickups only appear from depth
+  3), `game/run.ts` spends a charge on `useTool("cut", dir)`: refused without a
+  direction, at the edge, through an open wall, while anchored, without a charge
+  or outside `playing` — otherwise it re-roots at the player, steps the Knot to
+  the neighbour (that wall opens, the neighbour's former link closes), re-rolls
+  the forecast and emits `tool { id: "cut", dx, dy }` while the player neither
+  moves nor spends energy. `game/keys.ts` binds `tool3` to Digit3; the shell
+  arms Cut instead of firing it (the snapshot carries `armed: "cut" | null`, the
+  next key/swipe/D-pad direction goes to `useTool("cut", dir)` and disarms
+  either way, and the key, button or Escape cancels; arming needs a charge),
+  `lib/board.ts` flashes the opened wall tile gold, and `components/ToolBar.tsx`
+  highlights the armed button with the hint "Choose a direction";
+  `public/images/tools/cut.svg` joins the icons and new `game/maze.test.ts` /
+  `game/tools.test.ts` cases cover the reroot invariants and the Cut's effects
+  and refusals.

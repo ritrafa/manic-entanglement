@@ -5,7 +5,7 @@
 
 import type { Rng } from "./rng";
 import type { ItemType } from "./events";
-import { TOOL_IDS, type ToolId } from "./tools";
+import { toolsFor, type ToolId } from "./tools";
 import { enemyFor, type EnemyKind } from "./enemies";
 
 /** The six pickup kinds. */
@@ -159,13 +159,14 @@ export function spawnLevel(
     }
 
     // Tool pickups come after the gear: the cells the items did not take, with each
-    // type drawn from TOOL_IDS. The count is rolled last, so leaving `tools` out of
-    // the call changes neither the enemies' nor the items' placement.
+    // type drawn from the tools that spawn at this depth (toolsFor, game/tools.ts:
+    // Cut only joins from depth 3). The count is rolled last, so leaving `tools`
+    // out of the call changes neither the enemies' nor the items' placement.
     const toolCount = rollCount(rng, counts.tools ?? 0);
     const firstFreeCell = Math.min(itemCount, left.length);
     for (let i = 0; i < toolCount && firstFreeCell + i < left.length; i++) {
         const cell = left[firstFreeCell + i];
-        items.push({ x: cell.x, y: cell.y, type: rng.pick(TOOL_IDS) });
+        items.push({ x: cell.x, y: cell.y, type: rng.pick(toolsFor(depth)) });
     }
 
     return { items, enemies };

@@ -40,6 +40,8 @@ export interface GameSnapshot extends HudModel {
     tools: Record<ToolId, number>;
     /** Successful moves the Anchor still freezes the maze for, 0 when not anchored. */
     anchored: number;
+    /** The tool waiting for a direction (Cut), null when nothing is armed. */
+    armed: ToolId | null;
 }
 
 /** True when two tool charge records show the same counts. */
@@ -115,6 +117,9 @@ class GameState {
     private hudListeners: Set<() => void> = new Set();
     /** The one model object React reads; replaced only when something actually changed. */
     private hudSnapshot: GameSnapshot;
+    /** The tool waiting for a direction: Cut arms on its key or button and the
+     * next direction (key, swipe or D-pad) spends it; null when nothing waits. */
+    private armedTool: ToolId | null = null;
     /** The best score from before the current run, remembered at start() for isNewBest and the bar. */
     private bestBeforeRun: number = 0;
 
@@ -136,7 +141,7 @@ class GameState {
             },
         });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored };
+        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -273,6 +278,12 @@ class GameState {
         event.preventDefault();
         const dir = dirOf(action);
         if (dir) {
+            // An armed Cut takes the next direction itself: it goes to the tool
+            // instead of moving the player, and the tool disarms either way.
+            if (this.armedTool !== null) {
+                if (this.active) this.fireArmed(action as Dir);
+                return;
+            }
             // The frame loop turns the press into steps at the game's own cadence.
             if (this.active) this.stepper.press(action as Dir, performance.now());
             return;
@@ -282,11 +293,19 @@ class GameState {
         } else if (action === 'mute') {
             this.toggleMute();
         } else if (action === 'pause') {
+            // Escape first cancels an armed tool; only then does it pause.
+            if (this.armedTool !== null) {
+                this.armedTool = null;
+                this.publishHud();
+                return;
+            }
             this.dispatch('pause');
         } else if (action === 'tool1') {
             this.useTool('anchor');
         } else if (action === 'tool2') {
             this.useTool('twist');
+        } else if (action === 'tool3') {
+            this.useTool('cut');
         }
     }
 
@@ -347,6 +366,11 @@ class GameState {
      */
     pressDir(dir: Dir): void {
         if (!this.active) return;
+        // An armed Cut takes the swipe or D-pad direction instead of moving.
+        if (this.armedTool !== null) {
+            this.fireArmed(dir);
+            return;
+        }
         this.stepper.press(dir, performance.now());
     }
 
@@ -614,12 +638,45 @@ class GameState {
      * under a Twist — and wakes the HUD for the new charge count.
      */
     useTool(id: ToolId): boolean {
+        if (id === 'cut') {
+            // Cut needs a direction, so its key and button only arm it; a
+            // second press while armed cancels. Arming is refused without a
+            // charge (and outside a live, unanchored run).
+            if (this.armedTool === 'cut') {
+                this.armedTool = null;
+                this.publishHud();
+                return true;
+            }
+            if (this.run.phase !== 'playing') return false;
+            if (this.run.anchored > 0) return false;
+            if (this.run.tools.cut <= 0) return false;
+            this.armedTool = 'cut';
+            // A key held down from before must not step the player while armed.
+            this.stepper.clear();
+            this.publishHud();
+            return true;
+        }
         const used = this.run.useTool(id);
         if (!used) return false;
         this.handleEvents();
         this.board.update(this.run);
         this.publishHud();
         return true;
+    }
+
+    /**
+     * The armed Cut got its direction (key, swipe or D-pad): the run decides,
+     * and the tool disarms whether or not the use took effect. A successful
+     * Cut re-draws the board — a wall opened behind the Knot — and the events
+     * carry the gold flash for the opened tile.
+     */
+    private fireArmed(dir: Dir): void {
+        const mazeDir = ({ up: 'u', right: 'r', down: 'd', left: 'l' } as const)[dir];
+        this.run.useTool('cut', mazeDir);
+        this.armedTool = null;
+        this.handleEvents();
+        this.board.update(this.run);
+        this.publishHud();
     }
 
     /** The 3-2-1 countdown; true when it started, false when the request was refused. */
@@ -723,6 +780,7 @@ class GameState {
             this.rafId = null;
         }
         this.stepper.clear();
+        this.armedTool = null;
     }
 
     /** Release everything the shell scheduled: after dispose() nothing it owns may fire. */
@@ -783,6 +841,7 @@ class GameState {
             announcement: said ?? this.hudSnapshot.announcement,
             tools: { ...this.run.tools },
             anchored: this.run.anchored,
+            armed: this.armedTool,
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -792,7 +851,8 @@ class GameState {
             && this.hudSnapshot.settings === next.settings
             && this.hudSnapshot.announcement === next.announcement
             && sameTools(this.hudSnapshot.tools, next.tools)
-            && this.hudSnapshot.anchored === next.anchored) {
+            && this.hudSnapshot.anchored === next.anchored
+            && this.hudSnapshot.armed === next.armed) {
             return;
         }
         this.hudSnapshot = next;
@@ -817,6 +877,14 @@ class GameState {
                     break;
                 case 'fight':
                     this.floatMessage(event);
+                    break;
+                case 'tool':
+                    // A successful Cut names the wall it opened: a brief gold
+                    // flash on that tile of the wall grid.
+                    if (event.id === 'cut'
+                        && typeof event.dx === 'number' && typeof event.dy === 'number') {
+                        this.board.flashWallTile(this.run.player.x, this.run.player.y, event.dx, event.dy);
+                    }
                     break;
                 case 'levelClear':
                     this.stopClock();

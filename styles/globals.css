@@ -291,6 +291,10 @@ body {
   background-image: url('/images/tools/twist.svg');
 }
 
+.item_cut {
+  background-image: url('/images/tools/cut.svg');
+}
+
 .enemy {
   background-image: url('/images/enemy.gif');
   background-size: cover;
@@ -1230,4 +1234,50 @@ body {
   border-radius: 10px;
   z-index: 20;
   touch-action: manipulation;
+}
+
+/* The armed Cut: the toolbar button glows gold and carries its hint while
+   the shell waits for the direction (lib/GameState.ts, components/ToolBar.tsx). */
+.tool-button.tool-armed {
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.75);
+  animation: tool-armed-pulse 900ms ease-in-out infinite;
+}
+
+.tool-armed-hint {
+  font-size: calc(0.7em * var(--ui-scale, 1));
+  color: #ffd700;
+}
+
+@keyframes tool-armed-pulse {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.9);
+  }
+}
+
+/* The wall a Cut opened: a brief gold flash on that tile of the wall grid
+   (lib/board.ts flashWallTile places and sizes it on the fx layer). */
+.fx-tile-flash {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  background: rgba(255, 215, 0, 0.85);
+  border-radius: 2px;
+  pointer-events: none;
+  animation: tile-flash var(--fx-ms, 450ms) ease-out forwards;
+}
+
+@keyframes tile-flash {
+  0% {
+    opacity: 0.95;
+    transform: scale(1.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
 }

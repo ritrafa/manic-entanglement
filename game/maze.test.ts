@@ -307,3 +307,92 @@ function copyWallGridOf(maze: Maze): string[][] {
   fresh.updateWallGrid();
   return fresh.wallGrid;
 }
+
+// --- reroot(x, y): re-root the pointer tree without touching a single wall ---
+
+/** The wall state of every cell, as one comparable string. */
+function wallsOf(maze: Maze): string {
+  return JSON.stringify(maze.grid.map((row) => row.map((cell) => cell.walls)));
+}
+
+/** The whole maze state: walls, pointers, wall grid and origin. */
+function fullSnapshot(maze: Maze): string {
+  return JSON.stringify({
+    grid: maze.grid.map((row) => row.map((cell) => [cell.walls, cell.direction])),
+    wallGrid: maze.wallGrid,
+    origin: maze.origin,
+  });
+}
+
+/** True when following the pointers from every cell leads to the origin. */
+function pointersLeadToOrigin(maze: Maze): boolean {
+  for (let y = 0; y < maze.height; y++) {
+    for (let x = 0; x < maze.width; x++) {
+      let cur = { x, y };
+      const seen = new Set<string>();
+      while (!(cur.x === maze.origin.x && cur.y === maze.origin.y)) {
+        const key = `${cur.x},${cur.y}`;
+        if (seen.has(key)) return false; // a pointer loop
+        seen.add(key);
+        const dir = maze.grid[cur.y][cur.x].direction;
+        if (dir === null) return false; // a second cell without a pointer
+        cur = { x: cur.x + dir.x, y: cur.y + dir.y };
+        if (cur.x < 0 || cur.x >= maze.width || cur.y < 0 || cur.y >= maze.height) return false;
+      }
+    }
+  }
+  return true;
+}
+
+describe("Maze reroot", () => {
+  for (const size of [3, 5, 9]) {
+    it(`re-roots at every cell of a ${size}x${size} maze over 20 seeds, wall for wall`, () => {
+      for (let seed = 1; seed <= 20; seed++) {
+        const maze = new Maze(size, size, createRng(seed));
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            const before = wallsOf(maze);
+            expect(maze.reroot(x, y), `seed ${seed}: reroot at ${x},${y}`).toBe(true);
+            expect(wallsOf(maze), `seed ${seed}: walls unchanged after reroot at ${x},${y}`).toBe(before);
+            expect(maze.origin, `seed ${seed}: origin moved to ${x},${y}`).toEqual({ x, y });
+            expect(pointersLeadToOrigin(maze), `seed ${seed}: pointers reach ${x},${y}`).toBe(true);
+            checkInvariants(maze, `seed ${seed}: reroot at ${x},${y}`);
+          }
+        }
+      }
+    });
+  }
+
+  it("re-rooting at the current origin changes nothing", () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const maze = new Maze(5, 5, createRng(seed));
+      const before = fullSnapshot(maze);
+      expect(maze.reroot(maze.origin.x, maze.origin.y)).toBe(true);
+      expect(fullSnapshot(maze)).toBe(before);
+    }
+  });
+
+  it("refuses cells outside the board and leaves everything as it was", () => {
+    for (let seed = 1; seed <= 5; seed++) {
+      const maze = new Maze(5, 5, createRng(seed));
+      const before = fullSnapshot(maze);
+      for (const [x, y] of [[-1, 2], [5, 0], [0, 5], [2, -3], [1.5, 2], [Number.NaN, 0]]) {
+        expect(maze.reroot(x, y), `reroot at ${x},${y}`).toBe(false);
+      }
+      expect(fullSnapshot(maze)).toBe(before);
+    }
+  });
+
+  it("200 further shifts after a reroot keep every maze invariant", () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const maze = new Maze(9, 9, createRng(seed));
+      const rng = createRng(seed + 500);
+      expect(maze.reroot((seed * 7) % 9, (seed * 5) % 9), `seed ${seed}: reroot`).toBe(true);
+      for (let shift = 0; shift < 200; shift++) {
+        maze.shift(rng);
+        checkInvariants(maze, `seed ${seed}: shift ${shift} after reroot`);
+      }
+      expect(pointersLeadToOrigin(maze), `seed ${seed}: pointers reach the origin`).toBe(true);
+    }
+  });
+});

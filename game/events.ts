@@ -16,7 +16,7 @@ export type GameEvent =
     | { type: "move"; x: number; y: number; dx: number; dy: number }
     | { type: "blocked"; dx: number; dy: number }
     | { type: "pickup"; item: PickupType; text: string; x: number; y: number }
-    | { type: "tool"; id: ToolId }
+    | { type: "tool"; id: ToolId; dx?: number; dy?: number }
     | { type: "fight"; cost: number; kind: EnemyKind; x: number; y: number }
     | { type: "levelClear"; level: number; gained: number }
     | { type: "dead"; cause: DeathCause; score: number; level: number };

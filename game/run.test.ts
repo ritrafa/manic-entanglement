@@ -842,10 +842,10 @@ function expectForecastMatchesMove(run: Run): void {
 describe("Run tools: charges", () => {
   it("start carries none, pickups fill up to the cap and levels do not empty the pockets", () => {
     const run = new Run({ seed: 30 });
-    expect(run.tools).toEqual({ anchor: 0, twist: 0 });
+    expect(run.tools).toEqual({ anchor: 0, twist: 0, cut: 0 });
     expect(run.anchored).toBe(0);
     run.start();
-    expect(run.tools).toEqual({ anchor: 0, twist: 0 });
+    expect(run.tools).toEqual({ anchor: 0, twist: 0, cut: 0 });
 
     // Five Anchor pickups in a row: charges stop at the cap of three.
     const free = freeRun(31);
@@ -864,11 +864,11 @@ describe("Run tools: charges", () => {
     reachClear(free);
     free.takeEvents();
     free.nextLevel();
-    expect(free.tools).toEqual({ anchor: CONFIG.toolMax, twist: 0 });
+    expect(free.tools).toEqual({ anchor: CONFIG.toolMax, twist: 0, cut: 0 });
     free.tick(999999);
     expect(free.phase).toBe("dead");
     free.start();
-    expect(free.tools).toEqual({ anchor: 0, twist: 0 });
+    expect(free.tools).toEqual({ anchor: 0, twist: 0, cut: 0 });
     expect(free.anchored).toBe(0);
   });
 
@@ -902,7 +902,7 @@ describe("Run tools: charges", () => {
     run.tools.anchor = 1;
     run.tools.twist = 1;
     const ready = new Run({ seed: 34 });
-    ready.tools = { anchor: 1, twist: 1 };
+    ready.tools = { anchor: 1, twist: 1, cut: 0 };
     expect(ready.useTool("anchor")).toBe(false);
     expect(ready.useTool("twist")).toBe(false);
 
@@ -918,7 +918,7 @@ describe("Run tools: charges", () => {
     expect(run.useTool("anchor")).toBe(false);
     expect(run.useTool("twist")).toBe(false);
     expect(run.takeEvents().filter((event) => event.type === "tool")).toEqual([]);
-    expect(run.tools).toEqual({ anchor: 1, twist: 1 });
+    expect(run.tools).toEqual({ anchor: 1, twist: 1, cut: 0 });
   });
 });
 
@@ -1040,12 +1040,13 @@ describe("Run tools: determinism", () => {
     const scripted = (seed: number): string => {
       const run = new Run({ seed });
       run.start();
-      run.tools = { anchor: 3, twist: 3 };
+      run.tools = { anchor: 3, twist: 3, cut: 3 };
       const all: unknown[] = [];
       for (let i = 0; i < 40 && run.phase !== "dead"; i++) {
         if (run.phase === "clear") run.nextLevel();
         if (i % 7 === 3) run.useTool("anchor");
         if (i % 5 === 2) run.useTool("twist");
+        if (i % 6 === 4) run.useTool("cut", "u");
         const step = openStep(run);
         run.tick(250);
         if (run.phase !== "playing") {

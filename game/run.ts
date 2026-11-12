@@ -3,7 +3,7 @@
 // every random choice comes from one seeded createRng, so a unit test can play a
 // seeded run from start to death. Ported from lib/GameState.ts and lib/maze.ts.
 
-import { Maze, type Dir } from "./maze";
+import { Maze, DIR_DELTAS, type Dir } from "./maze";
 import { forecastOf, rollWalk, type Forecast } from "./forecast";
 import { createRng, type Rng } from "./rng";
 import { spawnLevel, GEAR_TYPES } from "./spawn";
@@ -103,7 +103,7 @@ export class Run {
      * level, at most CONFIG.toolMax of each — a pickup beyond the cap is still
      * removed and scores, but adds nothing.
      */
-    tools: Record<ToolId, number> = { anchor: 0, twist: 0 };
+    tools: Record<ToolId, number> = { anchor: 0, twist: 0, cut: 0 };
     /**
      * Successful moves the Anchor still freezes the maze for, 0 when nothing is
      * anchored. While it is above 0 the forecast stays empty and no shift is applied.
@@ -134,7 +134,7 @@ export class Run {
         this.level = 1;
         this.score = 0;
         this.tally = freshTally();
-        this.tools = { anchor: 0, twist: 0 };
+        this.tools = { anchor: 0, twist: 0, cut: 0 };
         this.anchored = 0;
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.buildLevel();
@@ -280,17 +280,38 @@ export class Run {
 
     /**
      * Use one charge of a tool (game/tools.ts), true when it took effect. Only
-     * while playing and only with a charge to spend; both tools are refused
+     * while playing and only with a charge to spend; every tool is refused
      * while an Anchor still holds, so a refused use costs nothing and emits
      * nothing. A successful use emits a "tool" event: the Anchor freezes the
      * maze for the next CONFIG.anchorMoves successful moves, the Twist rolls a
-     * fresh walk for the next move.
+     * fresh walk for the next move, and the Cut — which needs a direction —
+     * calls the Knot through the wall on that side of the player: the maze is
+     * re-rooted at the player's cell (no wall changes), the origin steps to the
+     * neighbour (that wall opens, the neighbour's former link closes), and a
+     * fresh walk is rolled from the Knot's new position. The player does not
+     * move and no energy is spent; the next move can go through the opening.
+     * A Cut without a direction, or toward the edge, or through a wall that is
+     * already open, is refused like any other.
      */
-    useTool(id: ToolId): boolean {
+    useTool(id: ToolId, dir?: Dir): boolean {
         if (this.phase !== "playing") return false;
         if (!TOOL_IDS.includes(id)) return false;
         if (this.tools[id] <= 0) return false;
         if (this.anchored > 0) return false;
+        if (id === "cut") {
+            if (dir === undefined || !(dir in DIR_DELTAS)) return false;
+            const delta = DIR_DELTAS[dir];
+            const nx = this.player.x + delta.x;
+            const ny = this.player.y + delta.y;
+            if (nx < 0 || nx >= this.maze.width || ny < 0 || ny >= this.maze.height) return false;
+            if (this.maze.canMove(this.player.x, this.player.y, delta.x, delta.y)) return false;
+            this.tools[id] -= 1;
+            this.maze.reroot(this.player.x, this.player.y);
+            this.maze.step(dir);
+            this.rollForecast();
+            this.push({ type: "tool", id, dx: delta.x, dy: delta.y });
+            return true;
+        }
         this.tools[id] -= 1;
         this.push({ type: "tool", id });
         if (id === "anchor") this.anchored = CONFIG.anchorMoves;

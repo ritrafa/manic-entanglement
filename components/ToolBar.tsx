@@ -4,16 +4,19 @@ import { TOOL_IDS, TOOL_INFO, type ToolId } from '@/game/tools';
 import { keyLabel, type Action } from '@/game/keys';
 
 /** Which key action spends which tool's charges (game/keys.ts). */
-const TOOL_ACTION: Record<ToolId, Action> = { anchor: 'tool1', twist: 'tool2' };
+const TOOL_ACTION: Record<ToolId, Action> = { anchor: 'tool1', twist: 'tool2', cut: 'tool3' };
 
 interface ToolBarProps {
     gameState: GameState;
 }
 
 /**
- * The two tool buttons in the HUD: each shows its icon, name, key hint and
+ * The tool buttons in the HUD: each shows its icon, name, key hint and
  * charge count, sits disabled at 0 charges, and spends one charge on a click
- * or tap — the same path the tool1/tool2 keys take through the shell.
+ * or tap — the same path the tool1/tool2 keys take through the shell. Cut
+ * needs a direction, so its button only arms it: while the snapshot says the
+ * board is waiting for that direction, the button is highlighted and carries
+ * the hint "Choose a direction".
  */
 const ToolBar: React.FC<ToolBarProps> = ({ gameState }) => {
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -21,18 +24,21 @@ const ToolBar: React.FC<ToolBarProps> = ({ gameState }) => {
         <div className="toolbar" role="toolbar" aria-label="Tools">
             {TOOL_IDS.map((id) => {
                 const charges = model.tools[id];
+                const armed = model.armed === id;
                 const key = model.settings.keys[TOOL_ACTION[id]]?.[0];
                 return (
                     <button
                         key={id}
                         type="button"
-                        className={`tool-button tool-${id}`}
+                        className={`tool-button tool-${id}${armed ? ' tool-armed' : ''}`}
                         onClick={() => gameState.useTool(id)}
                         disabled={charges <= 0}
-                        aria-label={`${TOOL_INFO[id].name}: ${TOOL_INFO[id].hint}. ${charges} charge${charges === 1 ? '' : 's'}. Key ${key ? keyLabel(key) : 'unbound'}.`}
+                        aria-pressed={id === 'cut' ? armed : undefined}
+                        aria-label={`${TOOL_INFO[id].name}: ${armed ? 'Choose a direction' : TOOL_INFO[id].hint}. ${charges} charge${charges === 1 ? '' : 's'}. Key ${key ? keyLabel(key) : 'unbound'}.`}
                     >
                         <img src={`/images/tools/${id}.svg`} alt="" className="tool-icon" aria-hidden="true" />
                         <span className="tool-name">{TOOL_INFO[id].name}</span>
+                        {armed && <span className="tool-armed-hint">Choose a direction</span>}
                         <span className="tool-key" aria-hidden="true">{key ? keyLabel(key) : ''}</span>
                         <span className="tool-count" aria-hidden="true">{charges}</span>
                     </button>

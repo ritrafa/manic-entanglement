@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Action, DEFAULT_KEYS, actionFor, dirOf } from "@/game/keys";
 
-const ACTIONS: Action[] = ["up", "down", "left", "right", "confirm", "mute", "pause", "tool1", "tool2"];
+const ACTIONS: Action[] = ["up", "down", "left", "right", "confirm", "mute", "pause", "tool1", "tool2", "tool3"];
 
 describe("actionFor", () => {
   it("maps KeyW to up", () => {
@@ -76,6 +76,7 @@ describe("actionFor", () => {
       pause: ["KeyO"],
       tool1: ["Digit1"],
       tool2: ["Digit2"],
+      tool3: ["Digit3"],
     };
     expect(actionFor({ code: "KeyI" }, keys)).toBe("up");
     expect(actionFor({ code: "KeyY" }, keys)).toBe("confirm");
@@ -262,6 +263,7 @@ describe("sanitizeKeys", () => {
       pause: ["Escape", "KeyO"],
       tool1: ["Digit1"],
       tool2: ["Digit3"],
+      tool3: ["Digit4"],
     };
     expect(sanitizeKeys(custom)).toEqual(custom);
     // The copy is independent of the input.

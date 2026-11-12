@@ -3,7 +3,7 @@
 // Caps Lock, Shift or any layout. Pure: no DOM, no listeners.
 
 /** Everything the shell can do in response to a key. */
-export type Action = "up" | "down" | "left" | "right" | "confirm" | "mute" | "pause" | "tool1" | "tool2";
+export type Action = "up" | "down" | "left" | "right" | "confirm" | "mute" | "pause" | "tool1" | "tool2" | "tool3";
 
 /** The plain facts from a keydown the mapping needs, so `game/` never touches the DOM. */
 export interface KeyEventLike {
@@ -25,6 +25,7 @@ export const DEFAULT_KEYS: Record<Action, string[]> = {
     pause: ["Escape", "KeyP"],
     tool1: ["Digit1"],
     tool2: ["Digit2"],
+    tool3: ["Digit3"],
 };
 
 /** Tags whose typing belongs to the page, never to the game. */
@@ -82,10 +83,11 @@ export const ACTION_LABELS: Record<Action, string> = {
     pause: "Pause",
     tool1: "Use Anchor",
     tool2: "Use Twist",
+    tool3: "Use Cut",
 };
 
 /** Every action, in the order the Controls screen lists them. */
-export const ACTIONS: readonly Action[] = ["up", "down", "left", "right", "confirm", "mute", "pause", "tool1", "tool2"];
+export const ACTIONS: readonly Action[] = ["up", "down", "left", "right", "confirm", "mute", "pause", "tool1", "tool2", "tool3"];
 
 /**
  * Put `code` in `action`'s slot, returning a brand-new map (the input is never

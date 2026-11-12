@@ -15,6 +15,8 @@ const WALL_IMAGE_BASE = '/images/';
 /** Milliseconds an effect element waits past its animation before the fallback
     timeout removes it, so a missed animationend never leaves it on the board. */
 const EFFECT_GRACE_MS = 250;
+/** Milliseconds the gold flash on a Cut-opened wall tile lasts. */
+const TILE_FLASH_MS = 450;
 
 function copyGrid(grid: string[][]): string[][] {
     return grid.map((row) => row.slice());
@@ -123,6 +125,28 @@ export class Board {
         message.style.top = `${y}px`;
         message.addEventListener('animationend', () => message.remove(), { once: true });
         this.fxLayer.appendChild(message);
+    }
+
+    /**
+     * A brief gold flash on the wall-grid tile between the cell (cellX, cellY)
+     * and its neighbour at (dx, dy): the wall a successful Cut just opened.
+     * Lives on the fx layer and goes when its animation ends; a board without
+     * an fx layer (never mounted) draws nothing at all.
+     */
+    flashWallTile(cellX: number, cellY: number, dx: number, dy: number): void {
+        if (!this.fxLayer) return;
+        // The wall tile sits between the two cell tiles of the wall grid.
+        const gx = cellX * 2 + 1 + dx;
+        const gy = cellY * 2 + 1 + dy;
+        if (gx < 0 || gy < 0) return;
+        const flash = document.createElement('div');
+        flash.className = 'fx-tile-flash';
+        const half = this.cell / 2;
+        flash.style.left = `${gx * half}px`;
+        flash.style.top = `${gy * half}px`;
+        flash.style.width = `${half}px`;
+        flash.style.height = `${half}px`;
+        this.spawnTemporary(flash, TILE_FLASH_MS);
     }
 
     /**

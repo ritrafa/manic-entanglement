@@ -272,6 +272,47 @@ export class Maze {
         return { from, to: { x: this.origin.x, y: this.origin.y } };
     }
 
+    /**
+     * Make (x, y) the origin without opening or closing a single wall: the
+     * pointers along the path from that cell to the current origin are
+     * reversed (each cell on the path now points at its predecessor) and the
+     * chosen cell keeps none. The same tree of open walls, only rooted
+     * elsewhere. An out-of-bounds cell, or one whose pointers do not lead to
+     * the origin, changes nothing. True when (x, y) is the origin afterwards.
+     */
+    reroot(x: number, y: number): boolean {
+        if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) return false;
+
+        // Walk the pointers from (x, y) up to the origin, collecting the path.
+        const path: { x: number, y: number }[] = [{ x, y }];
+        const seen = new Set<string>([`${x},${y}`]);
+        while (path[path.length - 1].x !== this.origin.x || path[path.length - 1].y !== this.origin.y) {
+            const at = path[path.length - 1];
+            const dir = this.grid[at.y][at.x].direction;
+            if (dir === null) return false; // no pointer: this cell does not lead to the origin
+            const next = { x: at.x + dir.x, y: at.y + dir.y };
+            if (!Number.isInteger(next.x) || !Number.isInteger(next.y)) return false;
+            if (next.x < 0 || next.x >= this.width || next.y < 0 || next.y >= this.height) return false;
+            const key = `${next.x},${next.y}`;
+            if (seen.has(key)) return false; // a pointer loop: refuse to touch anything
+            seen.add(key);
+            path.push(next);
+        }
+
+        // Reverse the path: every cell points at its predecessor, the new origin at nothing.
+        this.grid[y][x].setDirection(0, 0);
+        for (let i = 1; i < path.length; i++) {
+            const cell = path[i];
+            const prev = path[i - 1];
+            this.grid[cell.y][cell.x].setDirection(prev.x - cell.x, prev.y - cell.y);
+        }
+        this.origin = { x, y };
+        this.updateAllWalls();
+        this.updateWallGrid();
+        return true;
+    }
+
     /** Move the origin one step to a random in-bounds neighbour. Returns the old and new origin. */
     shift(rng: Rng): { from: { x: number, y: number }, to: { x: number, y: number } } {
         const validDirections = this.validDirs();
