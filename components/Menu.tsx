@@ -79,6 +79,7 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                             }}
                             onClick={() => {
                                 if (item.id === 'play') gameState.play();
+                                else if (item.id === 'settings') gameState.openSettings();
                                 else gameState.openHowTo();
                             }}
                         >

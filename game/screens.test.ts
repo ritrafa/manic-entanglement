@@ -105,9 +105,45 @@ describe("nextScreen", () => {
         expect(nextScreen("over", "hide")).toBe("over");
     });
 
+    it("the settings screen opens from the title and returns to it", () => {
+        expect(nextScreen("title", "settings")).toBe("settings");
+        expect(nextScreen("settings", "back", { settingsFrom: "title" })).toBe("title");
+        // Esc closes it the same way; the panel's Back button sends "back".
+        expect(nextScreen("settings", "pause", { settingsFrom: "title" })).toBe("title");
+        // Without the context a settings visit came from the title.
+        expect(nextScreen("settings", "back")).toBe("title");
+        // Nothing else moves it: no accidental resume or start.
+        for (const action of ["confirm", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"] as ScreenAction[]) {
+            expect(nextScreen("settings", action, { settingsFrom: "title" })).toBe("settings");
+        }
+    });
+
+    it("the settings screen opens from the pause and returns to it, the clock staying stopped", () => {
+        const paused = nextScreen("playing", "pause");
+        expect(paused).toBe("paused");
+        const settings = nextScreen(paused, "settings", { pausedFrom: "playing" });
+        expect(settings).toBe("settings");
+        // Back lands on the pause, never on "playing": the clock stays stopped
+        // throughout the whole round trip.
+        const back = nextScreen(settings, "back", { pausedFrom: "playing", settingsFrom: "paused" });
+        expect(back).toBe("paused");
+        expect(back).not.toBe("playing");
+        expect(nextScreen(settings, "pause", { pausedFrom: "playing", settingsFrom: "paused" })).toBe("paused");
+        // A hidden tab keeps the settings open, and nothing resumes by itself.
+        expect(nextScreen(settings, "hide", { pausedFrom: "playing", settingsFrom: "paused" })).toBe("settings");
+        // And resuming from that pause still goes back to playing.
+        expect(nextScreen(back, "confirm", { pausedFrom: "playing" })).toBe("playing");
+    });
+
+    it("only the title and the pause open the settings", () => {
+        for (const screen of ["countdown", "playing", "clear", "over"] as Screen[]) {
+            expect(nextScreen(screen, "settings")).toBe(screen);
+        }
+    });
+
     it("unknown pairs keep the screen", () => {
-        const screens: Screen[] = ["title", "howto", "countdown", "playing", "paused", "clear", "over"];
-        const actions: ScreenAction[] = ["confirm", "howto", "back", "pause", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"];
+        const screens: Screen[] = ["title", "howto", "countdown", "playing", "paused", "settings", "clear", "over"];
+        const actions: ScreenAction[] = ["confirm", "howto", "settings", "back", "pause", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"];
         for (const screen of screens) {
             for (const action of actions) {
                 const next = nextScreen(screen, action);

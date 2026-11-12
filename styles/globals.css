@@ -871,3 +871,199 @@ body {
     margin-top: 0;
   }
 }
+
+/* --- Settings, accessibility and the player's own asks ----------------------
+   The shell (lib/GameState.ts) puts data-motion, data-contrast and --ui-scale
+   on the root element from the sanitized settings (game/settings.ts); these
+   rules are what the player sees of them. */
+
+:root {
+  /* The HUD and panel text scale; the shell writes the player's choice. */
+  --ui-scale: 1;
+}
+
+/* Text size: the HUD and the panels grow with --ui-scale (1, 1.25 or 1.5). */
+#hud {
+  font-size: calc(1em * var(--ui-scale, 1));
+}
+
+.game-over-message,
+.settings-panel {
+  font-size: calc(1em * var(--ui-scale, 1));
+}
+
+.overlay-title {
+  font-size: calc(28px * var(--ui-scale, 1));
+}
+
+.summary-line {
+  font-size: calc(16px * var(--ui-scale, 1));
+}
+
+.stat {
+  font-size: calc(11px * var(--ui-scale, 1));
+}
+
+/* Motion: the player's own ask, not only the operating system's. The drifting
+   galaxy stands still, and nothing on the board may transition longer than
+   150 ms (the shell also hands out only fades and pops when reduced). */
+[data-motion="reduced"] #maze {
+  animation: none;
+}
+
+[data-motion="reduced"] #maze-container *,
+[data-motion="reduced"] #maze-container {
+  transition-duration: 150ms !important;
+}
+
+/* Clear shapes (low vision and colour blindness): every entity the player
+   must find gets a white 2 px outline, the forecast marks draw thicker, the
+   galaxy dims to 40% and stands still, and the HUD sits pure white on solid
+   black panels. */
+[data-contrast="true"] .enemy,
+[data-contrast="true"] .powerup,
+[data-contrast="true"] .exit,
+[data-contrast="true"] .player {
+  outline: 2px solid #ffffff;
+  outline-offset: -1px;
+}
+
+[data-contrast="true"] .mark-open {
+  border-width: 4px;
+}
+
+[data-contrast="true"] .mark-close {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #ffffff 0,
+    #ffffff 4px,
+    rgba(255, 255, 255, 0) 4px,
+    rgba(255, 255, 255, 0) 8px
+  );
+}
+
+[data-contrast="true"] #maze {
+  animation: none;
+  /* Multiply the galaxy by 40% grey: the background dims, the tiles on top
+     keep their own brightness. */
+  background-color: #666666;
+  background-blend-mode: multiply;
+}
+
+[data-contrast="true"] #hud {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+[data-contrast="true"] .stat,
+[data-contrast="true"] .wallet-actions,
+[data-contrast="true"] .game-over-message,
+[data-contrast="true"] .settings-panel {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+[data-contrast="true"] .summary-label {
+  opacity: 1;
+}
+
+/* The settings screen (components/Settings.tsx): a panel in the same family
+   as the pause sheet, with one row per SETTING_ROWS entry. */
+.settings-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  background-color: rgba(8, 10, 16, 0.94);
+  color: white;
+  text-align: center;
+  z-index: 3;
+  overflow-y: auto;
+  padding: 16px;
+}
+.settings-panel p {
+  margin: 0;
+}
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(320px, 84%);
+  max-width: 84%;
+  text-align: left;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: calc(15px * var(--ui-scale, 1));
+}
+.settings-row label,
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.settings-row label:first-child {
+  min-width: 8em;
+}
+.settings-choice {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 6px 10px;
+  margin: 0;
+}
+.settings-choice legend {
+  padding: 0 4px;
+}
+.settings-row input[type="range"] {
+  flex: 1;
+  accent-color: #ffd700;
+}
+.settings-row input[type="checkbox"],
+.settings-row input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #ffd700;
+}
+.settings-value {
+  min-width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.settings-panel .overlay-buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.settings-panel .overlay-buttons button:hover,
+.settings-panel .overlay-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+/* Screen-reader-only text: the HUD's polite announcements live here, on the
+   page for the reader and nowhere for the eye. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

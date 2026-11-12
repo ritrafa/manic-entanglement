@@ -13,6 +13,7 @@ import { Board } from './board';
 import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
+import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
 import { beepVoices, sfxFor, warnVoices } from '@/game/audio/sfx';
@@ -30,13 +31,13 @@ export interface GameSnapshot extends HudModel {
     best: number;
     /** True while the how-to was opened by the first Play: its button reads "Start". */
     howtoFromPlay: boolean;
+    /** The player's settings, already sanitized; the settings screen edits these. */
+    settings: Settings;
+    /** The latest spoken announcement (game/settings.ts), shown by the live region. */
+    announcement: string | null;
 }
 
 const SPRITE_FRAME_MS = 150;
-/** The effects bus volume the save carries when it stores none. */
-const DEFAULT_SFX_VOL = 0.7;
-/** The music bus volume the save carries when it stores none. */
-const DEFAULT_MUSIC_VOL = 0.5;
 /** Milliseconds between two music scheduling passes (~20 per second). */
 const MUSIC_TICK_MS = 50;
 /** Below this energy percentage the low-energy pulse starts. */
@@ -81,14 +82,16 @@ class GameState {
     private timeouts: Set<ReturnType<typeof setTimeout>> = new Set();
     /** The wall-grid tile size in whole pixels, set by sizeBoard and handed to the board. */
     private cellSize: number = 4;
-    /** True while M has silenced every sound the shell owns. */
-    private muted: boolean = false;
+    /** The player's settings, sanitized from the save; every change re-applies them. */
+    private settings: Settings = sanitizeSettings(undefined);
     /** The screen the shell is showing; every change routes through nextScreen(). */
     private screen: Screen = 'title';
     /** The summary rows shown on "over"; null everywhere else. */
     private summary: SummaryLine[] | null = null;
     /** The screen the pause was taken from, so resuming knows where to go back to. */
     private pausedFrom: Screen = 'playing';
+    /** The screen the settings were opened from, so Back returns there. */
+    private settingsFrom: Screen = 'title';
     /** The cause of the most recent death, kept for the summary. */
     private lastCause: DeathCause = 'time';
     /** True while the how-to was opened by the first Play: leaving it starts the run. */
@@ -121,14 +124,11 @@ class GameState {
             },
         });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false };
-        // The saved mute choice applies before anything could play; the sound box
+        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null };
+        // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
-        this.muted = this.save.settings.muted === true;
-        this.sfxEngine.setMuted(this.muted);
-        // The saved bus volumes wait in the engine until its first unlock.
-        this.sfxEngine.setVolume('sfx', GameState.readSfxVol(this.save));
-        this.sfxEngine.setVolume('music', GameState.readMusicVol(this.save));
+        this.settings = sanitizeSettings(this.save.settings);
+        this.applySettings();
         this.look = this.lookFromPlayer();
         this.preloadLook();
         this.mountBoard();
@@ -149,7 +149,7 @@ class GameState {
     get active(): boolean {
         const running = this.run.phase === 'playing' || this.run.phase === 'clear';
         // A paused or dead run never accepts a step, whatever phase the Run is in.
-        return running && this.screen !== 'paused' && this.screen !== 'over';
+        return running && this.screen !== 'paused' && this.screen !== 'settings' && this.screen !== 'over';
     }
 
     /**
@@ -349,6 +349,17 @@ class GameState {
         this.dispatch('howto');
     }
 
+    /** The title menu's or the pause panel's Settings: opens the settings panel. */
+    openSettings(): void {
+        if (this.screen !== 'title' && this.screen !== 'paused') return;
+        this.dispatch('settings');
+    }
+
+    /** The settings panel's Back button: Esc and the button both close it. */
+    closeSettings(): void {
+        this.dispatch('back');
+    }
+
     /** The pause panel's Resume: the same toggle Esc/P uses. */
     resume(): void {
         this.dispatch('pause');
@@ -371,7 +382,11 @@ class GameState {
      */
     private dispatch(action: ScreenAction): void {
         const prev = this.screen;
-        const next = nextScreen(prev, action, { pausedFrom: this.pausedFrom, howtoFromPlay: this.howtoFromPlay });
+        const next = nextScreen(prev, action, {
+            pausedFrom: this.pausedFrom,
+            howtoFromPlay: this.howtoFromPlay,
+            settingsFrom: this.settingsFrom,
+        });
         if (next === prev) return;
         this.screen = next;
 
@@ -380,8 +395,17 @@ class GameState {
             this.howtoFromPlay = false;
         }
         if (next === 'paused') {
-            this.pausedFrom = prev;
+            // Coming back from the settings panel keeps the original pause
+            // origin: resuming a pause taken on the clear screen still waits
+            // for the next level, whatever the settings visit did in between.
+            if (prev !== 'settings') this.pausedFrom = prev;
             this.enterPaused();
+        } else if (next === 'settings') {
+            // Wherever it came from, the game stands still behind the panel:
+            // clock stopped and music quiet, and Back returns to the caller.
+            this.settingsFrom = prev;
+            this.stopClock();
+            this.syncMusic();
         } else if (prev === 'paused') {
             this.leavePaused(next);
         }
@@ -471,15 +495,41 @@ class GameState {
 
     /** M: every sound the shell owns goes quiet together, and back. */
     toggleMute(): void {
-        this.setMuted(!this.muted);
+        this.setSetting('muted', !this.settings.muted);
     }
 
-    /** Silence or unsilence music and effects, and remember the choice in the save. */
-    private setMuted(muted: boolean): void {
-        this.muted = muted;
-        this.sfxEngine.setMuted(muted);
-        this.save = { ...this.save, settings: { ...this.save.settings, muted } };
+    /**
+     * One settings row changed (or M was pressed): the value goes through
+     * sanitizeSettings so nothing invalid can stick, the whole object lands in
+     * the save on every change, and the shell re-applies it at once — sound,
+     * motion, contrast and text size all answer immediately.
+     */
+    setSetting(key: keyof Settings, value: unknown): void {
+        this.settings = sanitizeSettings({ ...this.settings, [key]: value });
+        this.save = { ...this.save, settings: { ...this.save.settings, ...this.settings } };
         writeSave(this.storage, this.save);
+        this.applySettings();
+        this.publishHud();
+    }
+
+    /** The settings as they stand now (the settings screen reads the snapshot). */
+    getSettings(): Settings {
+        return this.settings;
+    }
+
+    /**
+     * Put the settings where they belong: the two bus volumes and the mute on
+     * the engine, and data-motion, data-contrast and --ui-scale on the root
+     * element, where styles/globals.css reads them for motion and contrast.
+     */
+    private applySettings(): void {
+        this.sfxEngine.setVolume('sfx', this.settings.sfxVol);
+        this.sfxEngine.setVolume('music', this.settings.musicVol);
+        this.sfxEngine.setMuted(this.settings.muted);
+        const root = document.documentElement;
+        root.setAttribute('data-motion', resolveMotion(this.settings.motion, GameState.systemReduced()));
+        root.setAttribute('data-contrast', this.settings.contrast ? 'true' : 'false');
+        root.style.setProperty('--ui-scale', String(this.settings.textScale));
     }
 
     /** One step: the run decides everything; the shell only turns its events into feedback. */
@@ -637,18 +687,26 @@ class GameState {
         // The board breathes the low-energy pulse while the run is live and
         // the energy sits under the warning line (game/fx.ts lowEnergy).
         this.board.setLowEnergy(this.run.phase === 'playing' && lowEnergy(this.energyPct() / 100));
+        const model = hudModel(this.run, this.bestBeforeRun);
+        // The moments that matter (game/settings.ts) speak once through the
+        // HUD's polite live region; anything else keeps the last thing said.
+        const said = announcement(this.hudSnapshot, { ...model, screen: this.screen });
         const next: GameSnapshot = {
-            ...hudModel(this.run, this.bestBeforeRun),
+            ...model,
             screen: this.screen,
             summary: this.summary,
             best: this.highScore,
             howtoFromPlay: this.howtoFromPlay,
+            settings: this.settings,
+            announcement: said ?? this.hudSnapshot.announcement,
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
             && sameSummary(this.hudSnapshot.summary, next.summary)
             && this.hudSnapshot.best === next.best
-            && this.hudSnapshot.howtoFromPlay === next.howtoFromPlay) {
+            && this.hudSnapshot.howtoFromPlay === next.howtoFromPlay
+            && this.hudSnapshot.settings === next.settings
+            && this.hudSnapshot.announcement === next.announcement) {
             return;
         }
         this.hudSnapshot = next;
@@ -727,9 +785,11 @@ class GameState {
      * board draws what survives. Effects never touch the rules or the score.
      */
     private playFx(event: GameEvent): void {
-        const motion: Motion = this.reducedMotion() ? 'reduced' : 'full';
+        const motion: Motion = resolveMotion(this.settings.motion, GameState.systemReduced());
         const now = GameState.nowMs();
         for (const fx of fxFor(event, { motion, exit: { ...this.run.exit } })) {
+            // The shake switch off removes every shake, limiter or no limiter.
+            if (fx.kind === 'shake' && !this.settings.shake) continue;
             if ((fx.kind === 'shake' || fx.kind === 'flash') && !this.fxLimiter.allow(fx.kind, now)) {
                 continue;
             }
@@ -737,8 +797,8 @@ class GameState {
         }
     }
 
-    /** The browser's reduced-motion ask, read fresh so a mid-run change is honoured. */
-    private reducedMotion(): boolean {
+    /** The browser's own reduced-motion ask, read fresh so a mid-run change is honoured. */
+    private static systemReduced(): boolean {
         try {
             return typeof window !== 'undefined'
                 && typeof window.matchMedia === 'function'
@@ -746,6 +806,11 @@ class GameState {
         } catch {
             return false;
         }
+    }
+
+    /** True when motion stands reduced now: the player's setting, or the system's ask. */
+    private reducedMotion(): boolean {
+        return resolveMotion(this.settings.motion, GameState.systemReduced()) === 'reduced';
     }
 
     /** A wall clock in milliseconds for the limiter's sliding window. */
@@ -775,20 +840,6 @@ class GameState {
         if (this.lastWarnAt !== 0 && now - this.lastWarnAt < WARN_EVERY_MS) return;
         this.lastWarnAt = now;
         this.sfxEngine.play(warnVoices(), 'sfx');
-    }
-
-    /** The effects bus volume from the save; anything odd gives the default. */
-    private static readSfxVol(save: SaveData): number {
-        const stored = save.settings.sfxVol;
-        if (typeof stored !== 'number' || !Number.isFinite(stored)) return DEFAULT_SFX_VOL;
-        return Math.min(1, Math.max(0, stored));
-    }
-
-    /** The music bus volume from the save; anything odd gives the default. */
-    private static readMusicVol(save: SaveData): number {
-        const stored = save.settings.musicVol;
-        if (typeof stored !== 'number' || !Number.isFinite(stored)) return DEFAULT_MUSIC_VOL;
-        return Math.min(1, Math.max(0, stored));
     }
 
     /**

@@ -16,6 +16,7 @@ export function menuItems(): MenuItem[] {
     return [
         { id: "play", label: "Play" },
         { id: "howto", label: "How to play" },
+        { id: "settings", label: "Settings" },
     ];
 }
 

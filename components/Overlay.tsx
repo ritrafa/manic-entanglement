@@ -35,6 +35,7 @@ const Overlay: React.FC<OverlayProps> = ({ gameState }) => {
                 <div className="overlay-buttons">
                     <button ref={firstButtonRef} onClick={() => gameState.resume()}>Resume</button>
                     <button onClick={() => gameState.restart()}>Restart</button>
+                    <button onClick={() => gameState.openSettings()}>Settings</button>
                     <button onClick={() => gameState.quit()}>Quit to title</button>
                 </div>
             </div>

@@ -56,38 +56,58 @@ const Hud: React.FC<HudProps> = ({ player, gameState }) => {
             <div className="right-box">
                 <div className="bar-container">
                     <div id="stat-energy">{model.energyText}</div>
-                    <div id="energy-bar">
+                    <div
+                        id="energy-bar"
+                        role="progressbar"
+                        aria-label="Energy"
+                        aria-valuenow={Math.round(model.energyPct)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                    >
                         <div id="energy-bar-inner" style={{ width: `${model.energyPct}%` }}></div>
                     </div>
                 </div>
                 <div className="bar-container">
                     <div id="stat-score">{model.scoreText}</div>
-                    <div id="progress-bar">
+                    <div
+                        id="progress-bar"
+                        role="progressbar"
+                        aria-label="Progress toward best score"
+                        aria-valuenow={Math.round(model.bestPct)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                    >
                         <div id="progress-bar-inner" style={{ width: `${model.bestPct}%` }}></div>
                     </div>
                 </div>
                 <div className="stats-container">
                 <div className="stat">
-                        <div>🌌 Maze Level</div>
+                        <div><span aria-hidden="true">🌌</span> Maze Level</div>
                         <div id="stat-level">{model.level}</div>
                     </div>
                     <div className="stat">
-                        <div>⚔️ Attack</div>
+                        <div><span aria-hidden="true">⚔️</span> Attack</div>
                         <div id="stat-attack">{model.attack}</div>
                     </div>
                     <div className="stat">
-                        <div>🛡️ Defense</div>
+                        <div><span aria-hidden="true">🛡️</span> Defense</div>
                         <div id="stat-defense">{model.defense}</div>
                     </div>
                     <div className="stat">
-                        <div>🏃‍♂️ Clock</div>
+                        <div><span aria-hidden="true">🏃‍♂️</span> Clock</div>
                         <div id="stat-speed">{model.clockPct}%</div>
                     </div>
                     <div className="stat">
-                        <div>⚡ Step cost</div>
+                        <div><span aria-hidden="true">⚡</span> Step cost</div>
                         <div id="stat-consumption">{model.stepPct}%</div>
                     </div>
                 </div>
+            </div>
+            {/* Spoken by assistive technology when the shell has something to
+                say (game/settings.ts announcement): Energy low, Level N,
+                Paused, Game over. Invisible on screen, polite in the reader. */}
+            <div className="visually-hidden" aria-live="polite" role="status">
+                {model.announcement}
             </div>
         </div>
     );

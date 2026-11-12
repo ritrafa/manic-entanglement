@@ -6,7 +6,7 @@ import type { DeathCause } from "./events";
 import type { Tally } from "./run";
 
 /** Everything the shell can show. */
-export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "clear" | "over";
+export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "clear" | "over";
 
 /** Everything that can move the shell between screens. */
 export type ScreenAction =
@@ -16,8 +16,10 @@ export type ScreenAction =
     | "howto"
     /** The how-to's Back button. */
     | "back"
-    /** Esc or P: pauses while playing, resumes while paused. */
+    /** Esc or P: pauses while playing, resumes while paused, closes settings. */
     | "pause"
+    /** The title menu's or the pause panel's Settings entry. */
+    | "settings"
     /** The tab became hidden. */
     | "hide"
     /** Start a fresh run through the countdown. */
@@ -52,6 +54,12 @@ export interface ScreenContext {
      * the countdown instead of going back to the title. Defaults to false.
      */
     howtoFromPlay?: boolean;
+    /**
+     * The screen "settings" was entered from, so Back (or Esc) returns there:
+     * a settings visit opened from the pause goes back to the pause, the clock
+     * staying stopped. Defaults to "title".
+     */
+    settingsFrom?: Screen;
 }
 
 /**
@@ -67,6 +75,7 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
         case "title":
             if (action === "confirm") return "countdown";
             if (action === "howto") return "howto";
+            if (action === "settings") return "settings";
             return screen;
         case "howto":
             // Back, confirm or Esc closes it: to the countdown when the first
@@ -98,6 +107,8 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
                 case "pause":
                 case "confirm":
                     return resumeTo;
+                case "settings":
+                    return "settings";
                 case "restart":
                     return "countdown";
                 case "quit":
@@ -105,6 +116,18 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
                 default:
                     // "hide" (and anything else) stays paused: returning to the
                     // tab must never resume the game by itself.
+                    return screen;
+            }
+        case "settings":
+            switch (action) {
+                // Back, Esc or the panel's Back button returns where the visit
+                // started; a pause taken from the game comes back to the pause,
+                // so the clock never runs behind the settings panel.
+                case "back":
+                case "pause":
+                    return context.settingsFrom === "paused" ? "paused" : "title";
+                default:
+                    // "hide" (and anything else) keeps the settings open.
                     return screen;
             }
         case "clear":

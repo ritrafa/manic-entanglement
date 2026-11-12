@@ -8,6 +8,7 @@ import TouchLayer from '../components/TouchLayer';
 import Overlay from '../components/Overlay';
 import Menu from '../components/Menu';
 import HowTo from '../components/HowTo';
+import SettingsPanel from '../components/Settings';
 import '../styles/globals.css';
 import { Analytics } from "@vercel/analytics/react"
 
@@ -67,6 +68,7 @@ const Page: React.FC = () => {
                     shell's screen: the art shows on title, howto and countdown. */}
                 {gameState && <Menu gameState={gameState} />}
                 {gameState && <HowTo gameState={gameState} />}
+                {gameState && <SettingsPanel gameState={gameState} />}
                 {gameState && <Overlay gameState={gameState} />}
             </div>
             
