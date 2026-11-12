@@ -4,6 +4,7 @@
 
 import type { DeathCause } from "./events";
 import type { Tally } from "./run";
+import { MODES, type ModeId } from "./modes";
 
 /** Everything the shell can show. */
 export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "keys" | "clear" | "over";
@@ -35,7 +36,9 @@ export type ScreenAction =
     /** A level started: the way out of the clear screen. */
     | "levelStarted"
     /** The run died. */
-    | "died";
+    | "died"
+    /** The last level of a limited mode was cleared: the run finished. */
+    | "finished";
 
 /** One label/value row of the end-of-run summary. */
 export interface SummaryLine {
@@ -96,6 +99,7 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
                 case "cleared":
                     return "clear";
                 case "died":
+                case "finished":
                     return "over";
                 case "restart":
                     return "countdown";
@@ -155,6 +159,7 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
                 case "levelStarted":
                     return "playing";
                 case "died":
+                case "finished":
                     return "over";
                 case "restart":
                     return "countdown";
@@ -193,6 +198,15 @@ function formatClock(ms: number): string {
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+/** Milliseconds with a tenth: 75,400 becomes "1:15.4", 9,050 becomes "0:09.0". */
+export function formatTenths(ms: number): string {
+    const totalTenths = Math.max(0, Math.floor((Number.isFinite(ms) ? ms : 0) / 100));
+    const minutes = Math.floor(totalTenths / 600);
+    const seconds = Math.floor(totalTenths / 10) % 60;
+    const tenths = totalTenths % 10;
+    return `${minutes}:${String(seconds).padStart(2, "0")}.${tenths}`;
+}
+
 /** Everything the summary shows, already measured by the shell. */
 export interface SummaryInput {
     tally: Tally;
@@ -206,19 +220,31 @@ export interface SummaryInput {
     banked?: number;
     /** Pieces of gear this run lost on death; 0 when nothing was carried. */
     lost?: number;
+    /** Which of the four ways to play (game/modes.ts); Descent when left out. */
+    mode?: ModeId;
+    /** True when the run finished by clearing its last level rather than dying. */
+    finished?: boolean;
 }
 
 /**
  * The end-of-run summary as label/value rows: how the run ended, how deep it
  * got, what it scored against the best, and what it did on the way down.
  */
-export function summaryLines({ tally, score, best, newBest, cause, banked = 0, lost = 0 }: SummaryInput): SummaryLine[] {
+export function summaryLines({ tally, score, best, newBest, cause, banked = 0, lost = 0, mode = "descent", finished = false }: SummaryInput): SummaryLine[] {
+    const rules = MODES[mode] ?? MODES.descent;
     return [
-        { label: "Cause", value: CAUSE_TEXT[cause] ?? CAUSE_TEXT.time },
+        { label: "Mode", value: rules.name },
+        // A finished run never died: its time line says so instead of a cause.
+        ...(finished ? [] : [{ label: "Cause", value: CAUSE_TEXT[cause] ?? CAUSE_TEXT.time }]),
         { label: "Depth reached", value: String(Math.max(1, Math.round(tally.depth))) },
         { label: "Score", value: String(Math.max(0, Math.round(score))) },
-        { label: "Best", value: newBest ? "New best!" : String(Math.max(0, Math.round(best))) },
-        { label: "Time", value: formatClock(tally.ms) },
+        {
+            label: "Best",
+            value: newBest
+                ? "New best!"
+                : finished ? formatTenths(best) : String(Math.max(0, Math.round(best))),
+        },
+        { label: "Time", value: finished ? `Finished in ${formatTenths(tally.ms)}` : formatClock(tally.ms) },
         { label: "Enemies beaten", value: String(Math.max(0, Math.round(tally.kills))) },
         { label: "Pickups", value: String(Math.max(0, Math.round(tally.pickups))) },
         { label: "Gear banked", value: String(Math.max(0, Math.round(banked))) },

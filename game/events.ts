@@ -21,4 +21,6 @@ export type GameEvent =
     | { type: "levelClear"; level: number; gained: number }
     /** Carried gear became permanent at the exit: `count` pieces joined the bank. */
     | { type: "banked"; count: number }
+    /** The last level of a limited run was cleared: it finished in `ms` (the tally's time). */
+    | { type: "finished"; ms: number }
     | { type: "dead"; cause: DeathCause; score: number; level: number; lost: number };

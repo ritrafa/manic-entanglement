@@ -7,7 +7,8 @@ import { KILL_SCORE, PICKUP_SCORE, levelScore } from "@/game/score";
 import { ENEMY_KINDS, type EnemyKind } from "@/game/enemies";
 import { fightCost } from "@/game/combat";
 import { GEAR_TYPES } from "@/game/spawn";
-import { routeCells } from "@/game/bot";
+import { playBot, routeCells } from "@/game/bot";
+import { MODES, dailySeed, type ModeRules } from "@/game/modes";
 import {
     addGear,
     gearCap,
@@ -1187,5 +1188,161 @@ describe("Run gear: carried, banked and lost", () => {
     run.tick(999999);
     run.start();
     expect(run.energy).toBe(140);
+  });
+});
+
+// --- game/modes.ts: the same Run under the other three ways to play ------
+
+/** A started run of the given mode, events drained. */
+function startedModeRun(seed: number, mode: ModeRules): Run {
+  const run = new Run({ seed, mode });
+  run.start();
+  run.takeEvents();
+  return run;
+}
+
+describe("Zen mode: no clock, double steps", () => {
+  it("60 s of ticks cost no energy but still count the time", () => {
+    const run = startedModeRun(201, MODES.zen);
+    const before = run.energy;
+    for (let i = 0; i < 60; i++) run.tick(1000);
+    expect(run.energy).toBe(before);
+    expect(run.phase).toBe("playing");
+    expect(run.tally.ms).toBe(60000);
+  });
+
+  it("a step costs 2 at default stats", () => {
+    const run = startedModeRun(202, MODES.zen);
+    run.items = [];
+    run.enemies = [];
+    expect(run.stats.consumption).toBe(1);
+    const step = openStep(run);
+    const before = run.energy;
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(before - run.energy).toBeCloseTo(2, 10);
+  });
+
+  it("a fight still costs its toll", () => {
+    const run = startedModeRun(203, MODES.zen);
+    run.items = [];
+    const step = openStep(run);
+    const foe = enemyAt(990, run.player.x + step.dx, run.player.y + step.dy, "wisp");
+    run.enemies = [foe];
+    const before = run.energy;
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(before - run.energy).toBeCloseTo(2 + fightCost(run.stats, foe), 10);
+    expect(run.tally.kills).toBe(1);
+  });
+
+  it("Descent still drains with the clock and pays 1 per step", () => {
+    const run = startedModeRun(204, MODES.descent);
+    run.items = [];
+    run.enemies = [];
+    const before = run.energy;
+    run.tick(1500); // ten drains at speed 1
+    expect(before - run.energy).toBe(10);
+    const step = openStep(run);
+    const afterTick = run.energy;
+    run.move(step.dx, step.dy);
+    expect(afterTick - run.energy).toBeCloseTo(1, 10);
+  });
+});
+
+describe("Sprint mode: five levels, fastest time wins", () => {
+  it("a bot run that clears five levels ends in phase done with one finished event", () => {
+    const run = new Run({ seed: 1, mode: MODES.sprint });
+    const deepest = playBot(run, 20, 2000);
+    expect(run.phase).toBe("done");
+    expect(run.level).toBe(5);
+    expect(deepest).toBe(5);
+    const finished = run.takeEvents().filter((event) => event.type === "finished");
+    expect(finished).toHaveLength(1);
+    expect((finished[0] as { ms: number }).ms).toBe(run.tally.ms);
+    // move is ignored afterwards, and so is the next level.
+    const before = { energy: run.energy, score: run.score, x: run.player.x, y: run.player.y };
+    expect(run.move(0, 1)).toBe(false);
+    expect(run.energy).toBe(before.energy);
+    expect(run.score).toBe(before.score);
+    expect(run.takeEvents()).toEqual([]);
+    run.nextLevel();
+    expect(run.phase).toBe("done");
+    expect(run.level).toBe(5);
+  });
+
+  it("a Sprint run that dies has no finished event", () => {
+    const run = new Run({ seed: 3, mode: MODES.sprint });
+    run.start();
+    run.takeEvents();
+    run.tick(60000);
+    expect(run.phase).toBe("dead");
+    expect(run.takeEvents().some((event) => event.type === "finished")).toBe(false);
+  });
+
+  it("clearing the fifth level is the only finished: four clears before it stay clear", () => {
+    const run = startedModeRun(1, MODES.sprint);
+    for (let level = 1; level <= 4; level++) {
+      reachClear(run);
+      expect(run.phase).toBe("clear");
+      expect(run.takeEvents().some((event) => event.type === "finished")).toBe(false);
+      run.nextLevel();
+      run.takeEvents();
+    }
+    reachClear(run);
+    expect(run.phase).toBe("done");
+    expect(run.takeEvents().filter((event) => event.type === "finished")).toHaveLength(1);
+  });
+});
+
+describe("Modes without gear: Sprint and Daily", () => {
+  for (const id of ["sprint", "daily"] as const) {
+    it(`${id}: banked gear is ignored and nothing is banked at an exit`, () => {
+      const run = new Run({ seed: 11, gear: { ...noGear(), gloves: 10 }, mode: MODES[id] });
+      run.start();
+      run.takeEvents();
+      expect(run.stats.attack).toBe(1); // the banked gloves never arrive
+      run.banked.gloves = 10; // even a bank set by hand changes nothing
+      expect(run.stats.attack).toBe(1);
+      // Nothing is banked at an exit, whatever was carried.
+      const bankedBefore = { ...run.banked };
+      run.carried.gloves = 2;
+      reachClear(run);
+      expect(run.takeEvents().some((event) => event.type === "banked")).toBe(false);
+      expect(run.banked).toEqual(bankedBefore); // the exit added nothing to it
+      expect(run.carried).toEqual(noGear());
+    });
+
+    it(`${id}: a gear pickup gives +10 energy and its text says so`, () => {
+      const run = startedModeRun(12, MODES[id]);
+      run.energy = 50;
+      pickUp(run, "gloves");
+      expect(run.carried).toEqual(noGear());
+      expect(run.stats.attack).toBe(1);
+      // 50 - one step + the pickup's energy, capped at storage.
+      expect(run.energy).toBe(Math.min(run.stats.storage, 50 - run.stats.consumption * MODES[id].stepFactor + 10));
+      const pickup = run.takeEvents().find((event) => event.type === "pickup");
+      expect(pickup).toBeDefined();
+      expect((pickup as { text: string }).text).toContain("+10 Energy");
+    });
+  }
+});
+
+describe("Daily mode: one seed per calendar day", () => {
+  it("two runs of the same date agree on the level-1 maze, pickups and enemies", () => {
+    const seed = dailySeed(20261112);
+    const a = startedModeRun(seed, MODES.daily);
+    const b = startedModeRun(seed, MODES.daily);
+    expect(a.maze.grid).toEqual(b.maze.grid);
+    expect(a.items).toEqual(b.items);
+    expect(a.enemies).toEqual(b.enemies);
+    expect(a.player).toEqual(b.player);
+    expect(a.exit).toEqual(b.exit);
+    expect(a.items.length).toBeGreaterThan(0);
+    expect(a.enemies.length).toBeGreaterThan(0);
+  });
+
+  it("another date rolls another maze", () => {
+    const a = startedModeRun(dailySeed(20261112), MODES.daily);
+    const b = startedModeRun(dailySeed(20261113), MODES.daily);
+    expect(a.maze.grid).not.toEqual(b.maze.grid);
   });
 });

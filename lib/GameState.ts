@@ -10,9 +10,10 @@ import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
 import { defaultSave, loadSave, resetProgress, writeSave, type SaveData, type StorageLike } from '@/game/save';
-import { countGear, noGear, sanitizeGear } from '@/game/gear';
+import { countGear, noGear, sanitizeGear, type GearLevels } from '@/game/gear';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
-import { nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
+import { formatTenths, nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
+import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules } from '@/game/modes';
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
@@ -28,7 +29,7 @@ export interface GameSnapshot extends HudModel {
     screen: Screen;
     /** The summary rows, built once when the run dies and shown on "over". */
     summary: SummaryLine[] | null;
-    /** The stored best score (save.best.descent), 0 when none was kept. */
+    /** The stored best for the current mode (save.best[mode]), 0 when none was kept. */
     best: number;
     /** True while the how-to was opened by the first Play: its button reads "Start". */
     howtoFromPlay: boolean;
@@ -45,6 +46,15 @@ export interface GameSnapshot extends HudModel {
     /** Pieces of gear carried since the last exit (game/gear.ts); the HUD marks them
      * while above 0: they are kept by reaching the exit and lost on death. */
     carried: number;
+    /** The chosen way to play (game/modes.ts); the title's mode row edits it. */
+    mode: ModeId;
+    /** The mode's name and blurb, ready for the title's mode row. */
+    modeName: string;
+    modeBlurb: string;
+    /** The mode's stored best already formatted: m:ss.t for a time mode, else a whole number. */
+    modeBestText: string;
+    /** True when the last run finished by clearing its last level, not by dying. */
+    finished: boolean;
 }
 
 /** True when two tool charge records show the same counts. */
@@ -62,7 +72,7 @@ const WARN_EVERY_MS = 1000;
 
 class GameState {
     public run: Run;
-    /** The best score kept in the save (save.best.descent), 0 when none was stored. */
+    /** The best kept in the save for the current mode (save.best[mode]), 0 when none was stored. */
     public highScore: number = 0;
     /** The one save object, loaded once from storage in the constructor. */
     private save: SaveData = defaultSave();
@@ -128,18 +138,27 @@ class GameState {
     private armedTool: ToolId | null = null;
     /** The best score from before the current run, remembered at start() for isNewBest and the bar. */
     private bestBeforeRun: number = 0;
+    /** The chosen way to play (game/modes.ts); the title's mode row edits it. */
+    private modeId: ModeId = 'descent';
+    /** True once the live run emitted "finished"; decides the summary's wording. */
+    private lastFinished: boolean = false;
 
     constructor() {
         // The save is read once, here: private windows, blocked site data and the
         // server render all get null storage and a fresh default save instead.
         this.storage = GameState.readStorage();
         this.save = loadSave(this.storage);
-        this.highScore = this.save.best.descent ?? 0;
+        // The mode is remembered in the save; anything unknown plays Descent.
+        this.modeId = GameState.readModeSetting(this.save.settings);
+        // A new calendar day wipes the stored Daily best before it is read.
+        this.rollDailyDay();
+        this.highScore = this.save.best[this.modeId] ?? 0;
         // The bank carries what earlier runs kept by reaching exits; anything
-        // wrongly stored reads as no gear (game/gear.ts).
-        this.run = new Run({ seed: Date.now(), gear: sanitizeGear(this.save.gear) });
+        // wrongly stored reads as no gear (game/gear.ts), and a no-gear mode
+        // never sees the bank at all (game/modes.ts).
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried) };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -452,6 +471,32 @@ class GameState {
     }
 
     /**
+     * The title's mode row picked a way to play (game/modes.ts): only the title
+     * may change it, the choice lands in `save.settings.mode` for the next
+     * visit, and the title's board is rebuilt under the new rules at once.
+     */
+    setMode(id: ModeId): void {
+        if (this.screen !== 'title') return;
+        if (MODES[id] === undefined || id === this.modeId) return;
+        this.modeId = id;
+        this.save = { ...this.save, settings: { ...this.save.settings, mode: id } };
+        writeSave(this.storage, this.save);
+        this.rollDailyDay();
+        this.highScore = this.storedBest() ?? 0;
+        this.bestBeforeRun = this.highScore;
+        // The title shows a run of the chosen mode's rules, ready for the countdown.
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
+        this.board.setLevel(this.run, this.cellSize);
+        this.refreshSprite();
+        this.publishHud();
+    }
+
+    /** The mode row's arrows: step to the next or previous mode, wrapping around. */
+    stepMode(step: number): void {
+        this.setMode(cycleMode(this.modeId, step));
+    }
+
+    /**
      * The one way the screen moves: the pure nextScreen decides where an action
      * leads, and the shell only acts on the change — pausing stops the clock and
      * quiets the music, quitting abandons the run, restarting starts a new one.
@@ -506,10 +551,14 @@ class GameState {
                 tally: this.run.tally,
                 score: this.run.score,
                 best: this.bestBeforeRun,
-                newBest: isNewBest(this.run.score, this.bestBeforeRun),
+                newBest: this.lastFinished
+                    ? betterScore(this.modeId, this.run.tally.ms, this.bestBeforeRun > 0 ? this.bestBeforeRun : undefined)
+                    : isNewBest(this.run.score, this.bestBeforeRun),
                 cause: this.lastCause,
                 banked: this.runBanked,
                 lost: this.runLost,
+                mode: this.modeId,
+                finished: this.lastFinished,
             });
         }
         this.publishHud();
@@ -546,11 +595,74 @@ class GameState {
         this.pendingNextLevel = false;
         this.summary = null;
         this.howtoFromPlay = false;
+        this.lastFinished = false;
         this.run.abandon();
         // The page shows the title again by itself: the title art belongs to
         // components/Menu.tsx, driven by the screen in the snapshot.
         this.board.setLevel(this.run, this.cellSize);
         this.refreshSprite();
+    }
+
+    /** The mode the save remembers; anything unknown plays Descent. */
+    private static readModeSetting(settings: Record<string, unknown>): ModeId {
+        const stored = settings.mode;
+        return typeof stored === 'string' && MODES[stored as ModeId] !== undefined ? (stored as ModeId) : 'descent';
+    }
+
+    /** The rules the live run plays by (game/modes.ts). */
+    private get modeRules(): ModeRules {
+        return MODES[this.modeId] ?? MODES.descent;
+    }
+
+    /**
+     * Today's local date as a yyyymmdd number. The shell is the only place a
+     * Date is read: everything under game/ takes the date as an argument.
+     */
+    private static todayYyyymmdd(): number {
+        const now = new Date();
+        return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    }
+
+    /** The run's seed: pinned to the calendar day for Daily, the wall clock otherwise. */
+    private seedForMode(): number {
+        return this.modeRules.seed === 'daily' ? dailySeed(GameState.todayYyyymmdd()) : Date.now();
+    }
+
+    /** The gear a new run starts with: the bank, or nothing in a no-gear mode. */
+    private gearForMode(): GearLevels {
+        return this.modeRules.gear ? sanitizeGear(this.save.gear) : noGear();
+    }
+
+    /**
+     * A new calendar day retires the day's run: the stored Daily best is wiped
+     * and `save.totals.dailyDay` remembers the current date. Called at load and
+     * before every run, so a tab left open overnight starts a fresh Daily.
+     */
+    private rollDailyDay(): void {
+        const today = GameState.todayYyyymmdd();
+        if (this.save.totals.dailyDay === today) return;
+        const best = { ...this.save.best };
+        delete best.daily;
+        this.save = { ...this.save, best, totals: { ...this.save.totals, dailyDay: today } };
+        writeSave(this.storage, this.save);
+    }
+
+    /** The best stored for the current mode, undefined when this mode never had one. */
+    private storedBest(): number | undefined {
+        const stored = this.save.best[this.modeId];
+        return typeof stored === 'number' && Number.isFinite(stored) ? stored : undefined;
+    }
+
+    /** The number the HUD bar measures against: 0 in a time mode, where bests are milliseconds. */
+    private hudBest(): number {
+        return this.modeRules.scoring === 'time' ? 0 : this.bestBeforeRun;
+    }
+
+    /** The mode's best as the title row prints it: m:ss.t for a time mode, else a whole number. */
+    private modeBestText(): string {
+        const best = this.storedBest();
+        if (best === undefined) return '0';
+        return this.modeRules.scoring === 'time' ? formatTenths(best) : String(Math.round(best));
     }
 
     /** The browser's storage, or null where it is missing or refuses to be touched. */
@@ -563,13 +675,17 @@ class GameState {
     }
 
     /**
-     * Fold a finished score into the save: when it beats the stored best, the best
-     * is updated and written back, so it survives closing the tab.
+     * Fold a finished result into the save, per mode (game/modes.ts): when it
+     * beats the stored best by the mode's own rule (betterScore — higher score,
+     * or lower time for Sprint), it is kept and written back, so it survives
+     * closing the tab. Sprint bests are milliseconds, recorded only for runs
+     * that actually finished.
      */
-    private recordBest(score: number): void {
-        if (score <= this.highScore) return;
-        this.highScore = score;
-        this.save = { ...this.save, best: { ...this.save.best, descent: score } };
+    private recordBest(value: number): void {
+        if (!Number.isFinite(value)) return;
+        if (!betterScore(this.modeId, value, this.storedBest())) return;
+        this.highScore = value;
+        this.save = { ...this.save, best: { ...this.save.best, [this.modeId]: value } };
         writeSave(this.storage, this.save);
     }
 
@@ -737,8 +853,16 @@ class GameState {
         this.pendingNextLevel = false;
         this.pickupStreak = 0;
         this.lastWarnAt = 0;
+        this.lastFinished = false;
+        // A tab left open overnight starts a fresh Daily: the old day's best is
+        // retired before this run can be measured against it.
+        this.rollDailyDay();
+        // The run is built fresh under the chosen mode's rules: its own seed
+        // (the calendar day for Daily) and its own gear (no bank without gear).
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
         // The bar and the "new high score" claim measure this run against the best it started with.
-        this.bestBeforeRun = this.highScore;
+        this.bestBeforeRun = this.storedBest() ?? 0;
+        this.highScore = this.bestBeforeRun;
         this.run.start();
         this.handleEvents();
         this.publishHud();
@@ -834,7 +958,7 @@ class GameState {
         // The board breathes the low-energy pulse while the run is live and
         // the energy sits under the warning line (game/fx.ts lowEnergy).
         this.board.setLowEnergy(this.run.phase === 'playing' && lowEnergy(this.energyPct() / 100));
-        const model = hudModel(this.run, this.bestBeforeRun);
+        const model = hudModel(this.run, this.hudBest());
         // The moments that matter (game/settings.ts) speak once through the
         // HUD's polite live region; anything else keeps the last thing said.
         const said = announcement(this.hudSnapshot, { ...model, screen: this.screen });
@@ -850,6 +974,11 @@ class GameState {
             anchored: this.run.anchored,
             armed: this.armedTool,
             carried: countGear(this.run.carried),
+            mode: this.modeId,
+            modeName: this.modeRules.name,
+            modeBlurb: this.modeRules.blurb,
+            modeBestText: this.modeBestText(),
+            finished: this.lastFinished,
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -861,7 +990,12 @@ class GameState {
             && sameTools(this.hudSnapshot.tools, next.tools)
             && this.hudSnapshot.anchored === next.anchored
             && this.hudSnapshot.armed === next.armed
-            && this.hudSnapshot.carried === next.carried) {
+            && this.hudSnapshot.carried === next.carried
+            && this.hudSnapshot.mode === next.mode
+            && this.hudSnapshot.modeName === next.modeName
+            && this.hudSnapshot.modeBlurb === next.modeBlurb
+            && this.hudSnapshot.modeBestText === next.modeBestText
+            && this.hudSnapshot.finished === next.finished) {
             return;
         }
         this.hudSnapshot = next;
@@ -908,11 +1042,16 @@ class GameState {
                     this.stopClock();
                     this.dispatch('cleared');
                     this.board.float(`+${event.gained}`, this.run.player.x, this.run.player.y);
-                    this.recordBest(this.run.score);
+                    // Only score modes record at the exit; a time mode records
+                    // its milliseconds once, when the run finishes.
+                    if (this.modeRules.scoring === 'score') this.recordBest(this.run.score);
                     // The board pulls toward the exit for the zoom's length; the
                     // next level turns over when it is done. Reduced motion gets
                     // no zoom, so it waits not at all.
                     this.after(this.reducedMotion() ? 0 : FX.clearZoomMs, () => {
+                        // The last level of a limited mode ended the run at the
+                        // exit ("done"): there is no next level to turn over to.
+                        if (this.run.phase !== 'clear') return;
                         if (this.screen === 'paused') {
                             // The zoom finished behind the pause panel: turn the
                             // level over on resume instead, so the clock never runs paused.
@@ -933,10 +1072,19 @@ class GameState {
                     break;
                 case 'dead':
                     this.stopClock();
-                    this.recordBest(this.run.score);
+                    // A time mode never records a death: only a finished run's
+                    // milliseconds count (see the "finished" case).
+                    if (this.modeRules.scoring === 'score') this.recordBest(this.run.score);
                     this.lastCause = event.cause;
                     this.runLost = event.lost;
                     this.dispatch('died');
+                    break;
+                case 'finished':
+                    // The last level is down: the tally's time is the result.
+                    this.stopClock();
+                    this.lastFinished = true;
+                    this.recordBest(this.run.tally.ms);
+                    this.dispatch('finished');
                     break;
             }
         }

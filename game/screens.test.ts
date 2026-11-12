@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+    formatTenths,
     nextScreen,
     sameSummary,
     summaryLines,
     type Screen,
     type ScreenAction,
 } from "@/game/screens";
+import { MODES } from "@/game/modes";
 import { Run, type Tally } from "@/game/run";
 
 /** A tally with patches on top of a fresh run's numbers. */
@@ -76,6 +78,16 @@ describe("nextScreen", () => {
     it("the run drives playing -> clear -> playing", () => {
         expect(nextScreen("playing", "cleared")).toBe("clear");
         expect(nextScreen("clear", "levelStarted")).toBe("playing");
+    });
+
+    it("a finished run goes to the summary from playing and from the clear screen", () => {
+        expect(nextScreen("playing", "finished")).toBe("over");
+        expect(nextScreen("clear", "finished")).toBe("over");
+        // Everywhere else the finished action moves nothing.
+        expect(nextScreen("title", "finished")).toBe("title");
+        expect(nextScreen("countdown", "finished")).toBe("countdown");
+        expect(nextScreen("paused", "finished")).toBe("paused");
+        expect(nextScreen("over", "finished")).toBe("over");
     });
 
     it("pausing on the clear screen resumes to clear, and only the level start plays", () => {
@@ -193,6 +205,7 @@ describe("summaryLines", () => {
 
     it("shows the run's rows in order", () => {
         expect(summaryLines(base).map((entry) => entry.label)).toEqual([
+            "Mode",
             "Cause",
             "Depth reached",
             "Score",
@@ -203,6 +216,28 @@ describe("summaryLines", () => {
             "Gear banked",
             "Gear lost",
         ]);
+    });
+
+    it("names the mode on every summary", () => {
+        expect(line(summaryLines(base), "Mode")).toBe("Descent");
+        expect(line(summaryLines({ ...base, mode: "sprint" }), "Mode")).toBe("Sprint");
+        for (const id of ["descent", "sprint", "zen", "daily"] as const) {
+            expect(line(summaryLines({ ...base, mode: id }), "Mode")).toBe(MODES[id].name);
+        }
+    });
+
+    it("a finished run says Finished in m:ss.t and shows no cause", () => {
+        const lines = summaryLines({ ...base, tally: tallyAt({ ms: 75_400 }), mode: "sprint", finished: true });
+        expect(line(lines, "Time")).toBe("Finished in 1:15.4");
+        expect(lines.some((entry) => entry.label === "Cause")).toBe(false);
+        expect(line(lines, "Mode")).toBe("Sprint");
+        // The stored time best reads as a time too, until it is beaten.
+        expect(line(summaryLines({ ...base, best: 65_000, mode: "sprint", finished: true }), "Best")).toBe("1:05.0");
+        expect(line(summaryLines({ ...base, best: 65_000, newBest: true, mode: "sprint", finished: true }), "Best")).toBe("New best!");
+        // A run that died still shows its cause and the plain clock.
+        const dead = summaryLines({ ...base, mode: "sprint", finished: false });
+        expect(line(dead, "Cause")).toBe("Out of time");
+        expect(line(dead, "Time")).toBe("1:15");
     });
 
     it("formats 75,400 ms as 1:15", () => {
@@ -295,5 +330,18 @@ describe("a paused Run", () => {
         expect(run.phase).toBe("dead");
         run.abandon();
         expect(run.phase).toBe("ready");
+    });
+});
+
+describe("formatTenths", () => {
+    it("prints minutes, padded seconds and tenths", () => {
+        expect(formatTenths(0)).toBe("0:00.0");
+        expect(formatTenths(9_050)).toBe("0:09.0");
+        expect(formatTenths(9_099)).toBe("0:09.0");
+        expect(formatTenths(75_400)).toBe("1:15.4");
+        expect(formatTenths(65_000)).toBe("1:05.0");
+        expect(formatTenths(600_000)).toBe("10:00.0");
+        expect(formatTenths(-5)).toBe("0:00.0");
+        expect(formatTenths(NaN)).toBe("0:00.0");
     });
 });

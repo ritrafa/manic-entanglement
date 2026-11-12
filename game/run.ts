@@ -15,6 +15,7 @@ import { fightCost } from "./combat";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "./score";
 import type { DeathCause, GameEvent, ItemType, PickupType } from "./events";
 import { TOOL_INFO, TOOL_IDS, isToolType, type ToolId } from "./tools";
+import { MODES, type ModeRules } from "./modes";
 import {
     addGear,
     countGear,
@@ -28,7 +29,7 @@ import {
     type Stats,
 } from "./gear";
 
-export type RunPhase = "ready" | "playing" | "clear" | "dead";
+export type RunPhase = "ready" | "playing" | "clear" | "dead" | "done";
 
 /** The five numbers of a run, all derived from gear levels (game/gear.ts). */
 export type RunStats = Stats;
@@ -82,6 +83,8 @@ export interface RunOptions {
     seed: number;
     /** The banked gear levels the run starts with (game/gear.ts); anything invalid reads as 0. */
     gear?: GearLevels;
+    /** Which of the four ways to play (game/modes.ts); Descent when left out. */
+    mode?: ModeRules;
 }
 
 export class Run {
@@ -125,6 +128,7 @@ export class Run {
      */
     anchored = 0;
 
+    private mode: ModeRules;
     private rng: Rng;
     /** The directions behind the current forecast, applied with maze.step on the next move. */
     private forecastDirs: Dir[] = [];
@@ -132,9 +136,12 @@ export class Run {
     private nextId = 1;
     private pendingMs = 0;
 
-    constructor({ seed, gear }: RunOptions) {
+    constructor({ seed, gear, mode = MODES.descent }: RunOptions) {
+        this.mode = mode;
         this.rng = createRng(seed);
-        this.banked = sanitizeGear(gear);
+        // A no-gear mode keeps the bank out of the run entirely: base stats for
+        // the whole run, and gear pickups give energy instead (applyItem).
+        this.banked = mode.gear ? sanitizeGear(gear) : noGear();
         this.carried = noGear();
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.maze = new Maze(CONFIG.startSize, CONFIG.startSize, this.rng);
@@ -149,12 +156,13 @@ export class Run {
      * them, so a pickup takes effect the moment it lands in `carried`.
      */
     get stats(): RunStats {
+        if (!this.mode.gear) return statsFromGear(noGear());
         return statsFromGear(addGear(this.banked, this.carried));
     }
 
     /** Start (or restart) at level 1 with score 0; the banked gear is kept. */
     start(): void {
-        if (this.phase !== "ready" && this.phase !== "dead") return;
+        if (this.phase !== "ready" && this.phase !== "dead" && this.phase !== "done") return;
         this.push({ type: "start" });
         this.carried = noGear();
         this.level = 1;
@@ -196,7 +204,7 @@ export class Run {
 
         this.player.x += dx;
         this.player.y += dy;
-        this.energy -= 1 * this.stats.consumption;
+        this.energy -= this.stats.consumption * this.mode.stepFactor;
         this.tally.moves += 1;
         this.push({ type: "move", x: this.player.x, y: this.player.y, dx, dy });
 
@@ -237,18 +245,29 @@ export class Run {
         }
 
         if (this.player.x === this.exit.x && this.player.y === this.exit.y) {
-            this.phase = "clear";
             const gained = levelScore({ level: this.level, energyLeft: this.energy });
             this.score += gained;
             this.tally.cleared += 1;
             this.tally.depth = Math.max(this.tally.depth, this.level + 1);
             this.push({ type: "levelClear", level: this.level, gained });
             // The exit keeps what the level carried: it joins the bank for good.
-            const count = countGear(this.carried);
+            // A no-gear mode banks nothing: there was never anything to keep.
+            const count = this.mode.gear ? countGear(this.carried) : 0;
             if (count > 0) {
                 this.banked = addGear(this.banked, this.carried);
-                this.carried = noGear();
                 this.push({ type: "banked", count });
+            }
+            // The carry is spent either way: kept by the bank, or gone with the level.
+            this.carried = noGear();
+            // The last level of a limited mode ends the run where the exit is:
+            // "done" ticks nothing and takes no move; one "finished" event tells
+            // the tally's time and there is no next level.
+            if (this.mode.levels !== null && this.level >= this.mode.levels) {
+                this.phase = "done";
+                this.pendingMs = 0;
+                this.push({ type: "finished", ms: this.tally.ms });
+            } else {
+                this.phase = "clear";
             }
             return true;
         }
@@ -265,11 +284,13 @@ export class Run {
         return true;
     }
 
-    /** Advance the energy clock. Only runs while playing: stopped in "ready", "clear" and "dead". */
+    /** Advance the energy clock. Only runs while playing: stopped in "ready", "clear" and "dead".
+     * A mode without a clock still counts the time into the tally but never drains. */
     tick(ms: number): void {
         if (this.phase !== "playing") return;
         if (!(ms > 0)) return;
         this.tally.ms += ms;
+        if (!this.mode.clock) return;
         this.pendingMs += ms;
         while (this.pendingMs >= CONFIG.drainMs * this.stats.speed) {
             // The current speed is used, so a "speed" pickup takes effect at once.
@@ -380,6 +401,12 @@ export class Run {
         if (type === "energy") {
             this.energy = Math.min(this.stats.storage, this.energy + CONFIG.pickups.energy);
             return "+25 Energy";
+        }
+        // Without gear the whole run (game/modes.ts): a gear pickup is only a
+        // small energy top-up, its text says so, and nothing is ever banked.
+        if (!this.mode.gear) {
+            this.energy = Math.min(this.stats.storage, this.energy + GEAR_RULES.maxedEnergy);
+            return `+${GEAR_RULES.maxedEnergy} Energy`;
         }
         // A gear pickup raises its carried level by one, until banked plus
         // carried stands at the cap; one past it gives energy instead.

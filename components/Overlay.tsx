@@ -43,8 +43,8 @@ const Overlay: React.FC<OverlayProps> = ({ gameState }) => {
     }
 
     return (
-        <div className="game-over-message" role="dialog" aria-modal="true" aria-label="Game over">
-            <p className="overlay-title">Game over</p>
+        <div className="game-over-message" role="dialog" aria-modal="true" aria-label={model.finished ? 'Run finished' : 'Game over'}>
+            <p className="overlay-title">{model.finished ? 'Run complete' : 'Game over'}</p>
             <div className="summary">
                 {(model.summary ?? []).map((line: SummaryLine) => (
                     <div className="summary-line" key={line.label}>

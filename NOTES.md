@@ -188,3 +188,37 @@
   the save; `game/gear.test.ts` covers the curves, caps and sanitizer and new
   `game/run.test.ts` / `game/save.test.ts` cases cover banking, loss and the
   wipe.
+
+
+- Added the four ways to play: `game/modes.ts` (pure) holds `ModeId` with
+  `MODE_IDS` in order, `ModeRules` and `MODES` (Descent the game as it is,
+  Sprint five gearless levels against the clock, Zen no clock with steps at
+  double cost, Daily one seeded maze per calendar day without gear, blurbs at
+  most 60 characters), `dailySeed(yyyymmdd)` (a 32-bit avalanche hash of the
+  date number, always 0..2^32-1), `betterScore(mode, a, b)` (higher for score
+  modes, lower for time modes, any value beats `undefined`) and
+  `cycleMode(id, step)` (wrap-around stepping); `game/run.ts` takes
+  `mode: ModeRules` (default Descent), so `clock: false` drains no energy
+  while the tally still counts the time, a step costs `consumption *
+  stepFactor`, `gear: false` pins the stats to `statsFromGear(noGear())` for
+  the whole run and turns a gear pickup into a `+10 Energy` top-up with
+  nothing banked at an exit, and clearing the last level of a `levels: 5`
+  Sprint sets the new `done` phase with one `finished { ms }` event (new in
+  `game/events.ts`) and no sixth level; `game/screens.ts` added the `finished`
+  action to the summary, `formatTenths` and summary rows naming the mode on
+  every run and reading `Finished in m:ss.t` for a finished Sprint;
+  `lib/GameState.ts` reads the local date for `dailySeed(today)` (the only
+  `Date` outside the shell), exposes `setMode(id)` on the title (remembered in
+  `save.settings.mode`) and `stepMode(step)`, reads and writes bests per mode
+  through `betterScore` (Sprint stores milliseconds, only for finished runs),
+  keeps `save.totals.dailyDay` and clears `save.best.daily` when the day
+  changes, and builds every run fresh under the mode's rules;
+  `components/Menu.tsx` shows a mode row above the buttons — the name between
+  two arrow buttons, the blurb and the best underneath, Left/Right cycling
+  through `cycleMode` while the row is focused and the arrows answering clicks
+  and taps — and `components/Overlay.tsx` titles a finished run "Run
+  complete"; `styles/globals.css` adds `.mode-row`, `.mode-picker`,
+  `.mode-name`, `.mode-blurb` and `.mode-best`; new `game/modes.test.ts` plus
+  cases in `game/run.test.ts` and `game/screens.test.ts` cover the rules, the
+  bot's five-level Sprint, the gearless runs, the daily determinism and the
+  summaries.
