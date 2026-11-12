@@ -12,7 +12,7 @@ import { Board } from './board';
 import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
-import { Sound } from './sound';
+import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
 import { beepVoices, sfxFor, warnVoices } from '@/game/audio/sfx';
 
@@ -32,10 +32,12 @@ export interface GameSnapshot extends HudModel {
 }
 
 const SPRITE_FRAME_MS = 150;
-const BASE_PLAYBACK_RATE = 0.7;
-const PLAYBACK_RATE_PER_LEVEL = 0.03;
 /** The effects bus volume the save carries when it stores none. */
 const DEFAULT_SFX_VOL = 0.7;
+/** The music bus volume the save carries when it stores none. */
+const DEFAULT_MUSIC_VOL = 0.5;
+/** Milliseconds between two music scheduling passes (~20 per second). */
+const MUSIC_TICK_MS = 50;
 /** Below this energy percentage the low-energy pulse starts. */
 const LOW_ENERGY_PCT = 25;
 /** Milliseconds between two low-energy pulses. */
@@ -50,10 +52,12 @@ class GameState {
     private save: SaveData = defaultSave();
     /** window.localStorage where it works, null where storage is missing or throws. */
     private storage: StorageLike = null;
-    /** The music loop: a lazy element, unlocked by the first gesture. */
-    private audio: Sound = new Sound((src) => new Audio(src));
-    /** The synthesized effects: oscillators only, from the injected context factory. */
+    /** The synthesized sound: effects and the generated music, oscillators only. */
     private sfxEngine: AudioEngine = new AudioEngine(() => new AudioContext());
+    /** The generative music, made on the first gesture and driven by a 50 ms timer. */
+    private music: Sequencer | null = null;
+    /** The interval that hands the engine the next music steps while playing. */
+    private musicTimer: ReturnType<typeof setInterval> | null = null;
     /** Pickups taken since the level started; the pickup sound climbs with it. */
     private pickupStreak: number = 0;
     /** performance.now() of the last low-energy pulse, so it plays about once a second. */
@@ -118,10 +122,10 @@ class GameState {
         // The saved mute choice applies before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.muted = this.save.settings.muted === true;
-        this.audio.setMuted(this.muted);
-        this.audio.setHidden(document.hidden);
-        // The saved effects volume waits in the engine until its first unlock.
+        this.sfxEngine.setMuted(this.muted);
+        // The saved bus volumes wait in the engine until its first unlock.
         this.sfxEngine.setVolume('sfx', GameState.readSfxVol(this.save));
+        this.sfxEngine.setVolume('music', GameState.readMusicVol(this.save));
         this.look = this.lookFromPlayer();
         this.preloadLook();
         this.mountBoard();
@@ -152,18 +156,21 @@ class GameState {
      * restarts on return so a throttled tab never hands the run one huge step.
      */
     private handleVisibilityChange = (): void => {
-        this.audio.setHidden(document.hidden);
         if (document.hidden) {
             this.dispatch('hide');
         } else {
             this.lastTickAt = performance.now();
         }
+        // A hidden tab stops the music; returning starts it again when live.
+        this.syncMusic();
     };
 
     /** The player's first keydown/pointerdown/touchstart: sound is allowed from now on. */
     private handleFirstGesture = (): void => {
-        this.audio.unlock();
         this.sfxEngine.unlock();
+        // The sequencer is born with the audio clock it schedules on.
+        if (this.music === null) this.music = new Sequencer();
+        this.syncMusic();
     };
 
     /** Losing the window mid-run must not leave a key stuck down. */
@@ -389,7 +396,7 @@ class GameState {
         } else if (next === 'title') {
             this.quitToTitle();
         } else if (next === 'over') {
-            this.audio.stopMusic();
+            this.syncMusic();
             this.summary = summaryLines({
                 tally: this.run.tally,
                 score: this.run.score,
@@ -404,7 +411,7 @@ class GameState {
     /** Entering the pause: clock stopped, held keys forgotten, music quiet. */
     private enterPaused(): void {
         this.stopClock();
-        this.audio.stopMusic();
+        this.syncMusic();
     }
 
     /**
@@ -414,7 +421,7 @@ class GameState {
      */
     private leavePaused(next: Screen): void {
         if (next !== 'playing' && next !== 'clear') return;
-        this.audio.startMusic();
+        this.syncMusic();
         if (this.pendingNextLevel) {
             this.pendingNextLevel = false;
             this.run.nextLevel();
@@ -428,7 +435,7 @@ class GameState {
     private quitToTitle(): void {
         this.cancelCountdown();
         this.stopClock();
-        this.audio.stopMusic();
+        this.syncMusic();
         this.pendingNextLevel = false;
         this.summary = null;
         this.howtoFromPlay = false;
@@ -467,7 +474,6 @@ class GameState {
     /** Silence or unsilence music and effects, and remember the choice in the save. */
     private setMuted(muted: boolean): void {
         this.muted = muted;
-        this.audio.setMuted(muted);
         this.sfxEngine.setMuted(muted);
         this.save = { ...this.save, settings: { ...this.save.settings, muted } };
         writeSave(this.storage, this.save);
@@ -537,7 +543,7 @@ class GameState {
         this.run.start();
         this.handleEvents();
         this.publishHud();
-        this.audio.startMusic();
+        this.syncMusic();
         this.startClock();
     }
 
@@ -600,7 +606,8 @@ class GameState {
         for (const gesture of ['keydown', 'pointerdown', 'touchstart'] as const) {
             document.removeEventListener(gesture, this.handleFirstGesture);
         }
-        this.audio.stopAll();
+        this.stopMusicTimer();
+        if (this.music !== null) this.music.stop();
     }
 
     /**
@@ -619,6 +626,11 @@ class GameState {
 
     /** Recompute the model; replace the snapshot and wake the listeners only on a real change. */
     private publishHud(): void {
+        // The music follows the run: every HUD change feeds it the depth and
+        // the energy, so tempo and thinning track the game without timers.
+        if (this.music !== null) {
+            this.music.setState({ depth: this.run.level, energyPct: this.energyPct() / 100 });
+        }
         const next: GameSnapshot = {
             ...hudModel(this.run, this.bestBeforeRun),
             screen: this.screen,
@@ -675,7 +687,6 @@ class GameState {
                     this.pickupStreak = 0;
                     this.dispatch('levelStarted');
                     this.sizeBoard(event.size);
-                    this.audio.setMusicRate(BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL);
                     this.board.setLevel(this.run, this.cellSize);
                     this.refreshSprite();
                     break;
@@ -727,6 +738,51 @@ class GameState {
         const stored = save.settings.sfxVol;
         if (typeof stored !== 'number' || !Number.isFinite(stored)) return DEFAULT_SFX_VOL;
         return Math.min(1, Math.max(0, stored));
+    }
+
+    /** The music bus volume from the save; anything odd gives the default. */
+    private static readMusicVol(save: SaveData): number {
+        const stored = save.settings.musicVol;
+        if (typeof stored !== 'number' || !Number.isFinite(stored)) return DEFAULT_MUSIC_VOL;
+        return Math.min(1, Math.max(0, stored));
+    }
+
+    /**
+     * Bring the music to the state the shell is in: while the screen is
+     * playing or clear and the tab is visible, a 50 ms timer hands the engine
+     * each step ahead of time; anywhere else the sequencer stands still.
+     */
+    private syncMusic(): void {
+        const wantsMusic = (this.screen === 'playing' || this.screen === 'clear')
+            && !document.hidden
+            && this.music !== null;
+        if (wantsMusic && this.musicTimer === null) {
+            this.music?.start(this.sfxEngine.now());
+            this.musicTimer = setInterval(() => this.tickMusic(), MUSIC_TICK_MS);
+            this.tickMusic();
+        } else if (!wantsMusic) {
+            this.stopMusicTimer();
+            if (this.music !== null) this.music.stop();
+        }
+    }
+
+    /** One scheduling pass: every step due before the lookahead goes to the engine. */
+    private tickMusic(): void {
+        if (this.music === null) return;
+        const now = this.sfxEngine.now();
+        for (const scheduled of this.music.advance(now)) {
+            if (scheduled.voices.length > 0) {
+                this.sfxEngine.play(scheduled.voices, 'music', scheduled.time);
+            }
+        }
+    }
+
+    /** Silence the music timer; the sequencer itself keeps its place. */
+    private stopMusicTimer(): void {
+        if (this.musicTimer !== null) {
+            clearInterval(this.musicTimer);
+            this.musicTimer = null;
+        }
     }
 
     /** Size the maze, the HUD and the CSS grid for a maze of the given cell side. */

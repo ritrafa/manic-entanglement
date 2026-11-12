@@ -139,6 +139,34 @@ describe("AudioEngine after unlock", () => {
         expect(oscillators[2].started).toBeCloseTo(10.1, 6);
     });
 
+    it("an absolute time schedules the voices there, not at the context's current time", () => {
+        const { engine, oscillators } = harness({ currentTime: 10 });
+        engine.unlock();
+        engine.play(THREE_VOICES, "music", 42);
+        expect(oscillators[0].started).toBeCloseTo(42, 6);
+        expect(oscillators[1].started).toBeCloseTo(42.05, 6);
+        expect(oscillators[2].started).toBeCloseTo(42.1, 6);
+    });
+
+    it("an absolute time in the past is clamped to the clock's zero, and a broken one falls back to now", () => {
+        const { engine, oscillators } = harness({ currentTime: 10 });
+        engine.unlock();
+        engine.play(THREE_VOICES, "music", -5);
+        expect(oscillators[0].started).toBeCloseTo(0, 6);
+        engine.play(THREE_VOICES, "music", Number.NaN);
+        expect(oscillators[3].started).toBeCloseTo(10, 6);
+    });
+
+    it("now() is the context time once unlocked and 0 before or without WebAudio", () => {
+        const { engine } = harness({ currentTime: 3.25 });
+        expect(engine.now()).toBe(0);
+        engine.unlock();
+        expect(engine.now()).toBe(3.25);
+        const { engine: broken } = harness({ throws: true });
+        broken.unlock();
+        expect(broken.now()).toBe(0);
+    });
+
     it("a glide schedules an exponential ramp, a plain voice does not", () => {
         const { engine, oscillators } = harness();
         engine.unlock();

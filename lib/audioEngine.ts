@@ -8,7 +8,7 @@
 
 import type { Voice } from "@/game/audio/voice";
 
-/** The two sound buses: effects and the music loop. */
+/** The two sound buses: effects and the generated music. */
 export type Bus = "sfx" | "music";
 
 /** The part of an AudioParam this engine uses. */
@@ -112,19 +112,39 @@ export class AudioEngine {
     }
 
     /**
+     * The audio clock, in the context's own seconds; 0 before unlock() or
+     * without WebAudio, so a caller can hand it to the Sequencer either way.
+     */
+    now(): number {
+        if (this.ctx === null) return 0;
+        try {
+            return this.ctx.currentTime;
+        } catch {
+            return 0;
+        }
+    }
+
+    /**
      * Schedule one sound: one oscillator and one gain node per voice, on the
      * named bus. Silent before unlock(), while muted, and without WebAudio.
-     * A voice that the context refuses is skipped, never raised.
+     * A voice that the context refuses is skipped, never raised. With an
+     * absolute `time` (audio-clock seconds) the voices start there, which is
+     * how the music stays ahead of the browser's throttled timers; without
+     * one, they start now.
      */
-    play(voices: Voice[], bus: Bus = "sfx"): void {
+    play(voices: Voice[], bus: Bus = "sfx", time?: number): void {
         const ctx = this.ctx;
         const busNode = this.buses[bus];
         if (ctx === null || this.isMuted || busNode === undefined || voices.length === 0) return;
         let when: number;
-        try {
-            when = ctx.currentTime;
-        } catch {
-            return;
+        if (typeof time === "number" && Number.isFinite(time)) {
+            when = Math.max(0, time);
+        } else {
+            try {
+                when = ctx.currentTime;
+            } catch {
+                return;
+            }
         }
         for (const voice of voices) {
             if (!Number.isFinite(voice.freq) || voice.freq <= 0) continue;
@@ -178,7 +198,8 @@ export class AudioEngine {
         const release = Math.min(ENVELOPE_EDGE, voice.dur / 3);
 
         const oscillator = ctx.createOscillator();
-        oscillator.type = voice.wave;
+        const { wave } = voice;
+        oscillator.type = wave;
         oscillator.frequency.setValueAtTime(voice.freq, start);
         const glideTo = voice.freqEnd;
         if (glideTo !== undefined && Number.isFinite(glideTo) && glideTo > 0 && glideTo !== voice.freq) {
