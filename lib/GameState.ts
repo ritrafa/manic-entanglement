@@ -10,6 +10,7 @@ import { CONFIG } from '@/game/config';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
 import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
+import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 
 const SPRITE_FRAME_MS = 150;
 const BASE_PLAYBACK_RATE = 0.7;
@@ -50,6 +51,12 @@ class GameState {
     private muted: boolean = false;
     /** The visible game-over panel, so confirm() can take it away on a restart. */
     private gameOverElement: HTMLElement | null = null;
+    /** Every React listener waiting for the HUD model to change. */
+    private hudListeners: Set<() => void> = new Set();
+    /** The one model object React reads; replaced only when something actually changed. */
+    private hudSnapshot: HudModel;
+    /** The best score from before the current run, remembered at start() for isNewBest and the bar. */
+    private bestBeforeRun: number = 0;
 
     constructor() {
         // The save is read once, here: private windows, blocked site data and the
@@ -68,6 +75,8 @@ class GameState {
                 storage: this.player.energy_storage,
             },
         });
+        this.bestBeforeRun = this.highScore;
+        this.hudSnapshot = hudModel(this.run, this.bestBeforeRun);
         this.sound = new Audio('/standoff-loop.mp3');
         this.sound.loop = true;
         this.sound.playbackRate = BASE_PLAYBACK_RATE;
@@ -277,7 +286,7 @@ class GameState {
         this.run.move(dx, dy);
         this.handleEvents();
         this.board.update(this.run);
-        this.updateStatus();
+        this.publishHud();
     }
 
     startGame(): void {
@@ -327,8 +336,11 @@ class GameState {
     /** Start (or restart) the run at level 1 and set the clock going. */
     private beginRun(): void {
         this.stopClock();
+        // The bar and the "new high score" claim measure this run against the best it started with.
+        this.bestBeforeRun = this.highScore;
         this.run.start();
         this.handleEvents();
+        this.publishHud();
         this.sound.play();
         this.startClock();
     }
@@ -356,7 +368,7 @@ class GameState {
             this.lastTickAt = now;
             this.run.tick(elapsedMs);
             this.handleEvents();
-            this.updateStatus();
+            this.publishHud();
             const dir = this.stepper.poll(now);
             if (dir !== null) {
                 const delta = dirOf(dir);
@@ -385,6 +397,7 @@ class GameState {
         }
         this.timeouts.forEach(clearTimeout);
         this.timeouts.clear();
+        this.hudListeners.clear();
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         window.removeEventListener('blur', this.handleBlur);
         [this.sound, this.lost, this.levelup, this.countdown, this.pickupSound, this.fightSound]
@@ -392,6 +405,28 @@ class GameState {
                 audio.pause();
                 audio.currentTime = 0;
             });
+    }
+
+    /**
+     * Subscribe to HUD model changes; the returned function unsubscribes.
+     * A stable arrow-function field, so useSyncExternalStore never resubscribes.
+     */
+    public subscribe = (listener: () => void): (() => void) => {
+        this.hudListeners.add(listener);
+        return () => {
+            this.hudListeners.delete(listener);
+        };
+    };
+
+    /** The current model; the same object until something changes, so React can bail out. */
+    public getSnapshot = (): HudModel => this.hudSnapshot;
+
+    /** Recompute the model; replace the snapshot and wake the listeners only on a real change. */
+    private publishHud(): void {
+        const next = hudModel(this.run, this.bestBeforeRun);
+        if (sameHudModel(this.hudSnapshot, next)) return;
+        this.hudSnapshot = next;
+        this.hudListeners.forEach((listener) => listener());
     }
 
     /** Turn the run's queued events into sound, drawing and messages, oldest first. */
@@ -422,7 +457,6 @@ class GameState {
                     this.sound.playbackRate = BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL;
                     this.board.setLevel(this.run, this.cellSize);
                     this.refreshSprite();
-                    this.updateStatus();
                     break;
                 case 'dead':
                     this.stopClock();
@@ -431,6 +465,8 @@ class GameState {
                     break;
             }
         }
+        // A phase change (clear, dead, next level) is a HUD change too.
+        this.publishHud();
     }
 
     /** Size the maze, the HUD and the CSS grid for a maze of the given cell side. */
@@ -449,48 +485,6 @@ class GameState {
         document.documentElement.style.setProperty('--cell-size', `${cell}px`);
         document.documentElement.style.setProperty('--item-size', `${cell}px`);
         document.documentElement.style.setProperty('--grid-size', `${tiles}`);
-    }
-
-    updateStatus(): void {
-        const run = this.run;
-        const energyBar = document.getElementById('energy-bar-inner');
-        if (energyBar) {
-            energyBar.style.width = `${100 * run.energy / run.stats.storage}%`;
-        }
-        const progressBar = document.getElementById('progress-bar-inner');
-        if (progressBar) {
-            const progress = this.highScore > 0 ? Math.min((run.score / this.highScore) * 100, 100) : 0;
-            progressBar.style.width = `${progress}%`;
-        }
-
-        const scoreElement = document.getElementById('stat-score');
-        if (scoreElement) {
-            scoreElement.textContent = `Score: ${run.score}`;
-        }
-        const energyElement = document.getElementById('stat-energy');
-        if (energyElement) {
-            energyElement.textContent = `Energy: ${Math.round(run.energy * 100) / 100}`;
-        }
-        const levelElement = document.getElementById('stat-level');
-        if (levelElement) {
-            levelElement.textContent = `${run.level}`;
-        }
-        const attackElement = document.getElementById('stat-attack');
-        if (attackElement) {
-            attackElement.textContent = `${Math.round(run.stats.attack * 10) / 10}`;
-        }
-        const defenseElement = document.getElementById('stat-defense');
-        if (defenseElement) {
-            defenseElement.textContent = `${Math.round(run.stats.defense * 10) / 10}`;
-        }
-        const speedElement = document.getElementById('stat-speed');
-        if (speedElement) {
-            speedElement.textContent = `${Math.round(run.stats.speed * 100)}%`;
-        }
-        const consumptionElement = document.getElementById('stat-consumption');
-        if (consumptionElement) {
-            consumptionElement.textContent = `${Math.round(run.stats.consumption * 100)}%`;
-        }
     }
 
     /** Float the message an event carries above the cell it happened on, if any. */
@@ -529,7 +523,7 @@ class GameState {
         gameOverMessage.appendChild(gameOverMessageText);
         const gameOverMessageText2 = document.createElement('p');
         const reason = cause === 'fight' ? 'An enemy took your last energy' : 'You ran out of energy';
-        gameOverMessageText2.textContent = `${reason}, but you scored ${score} points${score == this.highScore ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
+        gameOverMessageText2.textContent = `${reason}, but you scored ${score} points${isNewBest(score, this.bestBeforeRun) ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
         gameOverMessage.appendChild(gameOverMessageText2);
         mazeElement.appendChild(gameOverMessage);
         this.gameOverElement = gameOverMessage;
