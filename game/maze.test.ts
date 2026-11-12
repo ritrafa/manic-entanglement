@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Maze } from "@/game/maze";
+import { Maze, DIR_DELTAS, type Dir } from "@/game/maze";
 import { createRng } from "@/game/rng";
 
 const SIZES = [3, 5, 9, 13];
@@ -205,3 +205,105 @@ describe("Maze wallGrid", () => {
     }
   });
 });
+
+describe("Maze step and validDirs", () => {
+  it("validDirs lists exactly the in-bounds directions at any cell", () => {
+    const rng = createRng(77);
+    const maze = new Maze(5, 5, rng);
+    expect(maze.validDirs({ x: 0, y: 0 }).sort()).toEqual(["d", "r"]);
+    expect(maze.validDirs({ x: 4, y: 4 }).sort()).toEqual(["l", "u"]);
+    expect(maze.validDirs({ x: 2, y: 2 }).sort()).toEqual(["d", "l", "r", "u"]);
+    // Defaults to the origin.
+    expect(maze.validDirs()).toEqual(maze.validDirs(maze.origin));
+  });
+
+  it("step moves the origin by the direction's delta and returns from and to", () => {
+    const rng = createRng(78);
+    const maze = new Maze(5, 5, rng);
+    for (const dir of ["u", "r", "d", "l"] as Dir[]) {
+      const from = { x: maze.origin.x, y: maze.origin.y };
+      const { from: reportedFrom, to } = maze.step(dir);
+      expect(reportedFrom).toEqual(from);
+      expect(to).toEqual({ x: from.x + DIR_DELTAS[dir].x, y: from.y + DIR_DELTAS[dir].y });
+      expect(maze.origin).toEqual(to);
+    }
+  });
+
+  it("an out-of-bounds step changes nothing", () => {
+    const rng = createRng(79);
+    const maze = new Maze(5, 5, rng);
+    // Walk the origin into a corner first.
+    while (maze.origin.x > 0) maze.step("l");
+    while (maze.origin.y > 0) maze.step("u");
+    expect(maze.origin).toEqual({ x: 0, y: 0 });
+    const grid = maze.wallGrid.map((row) => row.slice());
+    const walls = maze.grid.map((row) => row.map((cell) => cell.walls.slice()));
+    const { from, to } = maze.step("u");
+    expect(from).toEqual(to);
+    expect(maze.origin).toEqual({ x: 0, y: 0 });
+    expect(maze.wallGrid).toEqual(grid);
+    expect(maze.grid.map((row) => row.map((cell) => cell.walls))).toEqual(walls);
+  });
+
+  it("step equals shift with the same direction, and shift picks a valid direction", () => {
+    const rngA = createRng(80);
+    const rngB = createRng(80);
+    const a = new Maze(9, 9, rngA);
+    const b = new Maze(9, 9, rngB);
+    const picker = createRng(8080);
+    for (let i = 0; i < 60; i++) {
+      const dirs = a.validDirs();
+      expect(b.validDirs()).toEqual(dirs);
+      const dir = dirs[picker.clone().int(dirs.length)];
+      a.step(dir);
+      // shift on b draws from the same picker state, so it must pick the same dir.
+      const { from, to } = b.shift(picker);
+      expect(to).toEqual({ x: from.x + DIR_DELTAS[dir].x, y: from.y + DIR_DELTAS[dir].y });
+      expect(b.origin).toEqual(a.origin);
+    }
+    // Same seed, same picks: the two mazes agree.
+    expect(b.wallGrid).toEqual(a.wallGrid);
+  });
+
+});
+
+describe("Maze clone", () => {
+  it("is independent: stepping the clone leaves the original untouched", () => {
+    const rng = createRng(81);
+    const maze = new Maze(9, 9, rng);
+    const origin = { ...maze.origin };
+    const grid = maze.wallGrid.map((row) => row.slice());
+    const walls = maze.grid.map((row) => row.map((cell) => cell.walls.slice()));
+
+    const copy = maze.clone();
+    for (let i = 0; i < 100; i++) copy.step(copy.validDirs()[i % copy.validDirs().length]);
+
+    expect(maze.origin).toEqual(origin);
+    expect(maze.wallGrid).toEqual(grid);
+    expect(maze.grid.map((row) => row.map((cell) => cell.walls))).toEqual(walls);
+
+    // The clone itself is well formed and moved.
+    expect(copy.width).toBe(9);
+    expect(copy.height).toBe(9);
+    expect(copy.wallGrid).toEqual(copyWallGridOf(copy));
+  });
+
+  it("clones of the same maze agree until they are stepped apart", () => {
+    const rng = createRng(82);
+    const maze = new Maze(7, 7, rng);
+    const a = maze.clone();
+    const b = maze.clone();
+    expect(a.wallGrid).toEqual(maze.wallGrid);
+    expect(b.wallGrid).toEqual(maze.wallGrid);
+    a.step("r");
+    expect(a.wallGrid).not.toEqual(b.wallGrid);
+    expect(b.wallGrid).toEqual(maze.wallGrid);
+  });
+});
+
+/** Recompute the wall grid of a maze from its cell walls, the way updateWallGrid does. */
+function copyWallGridOf(maze: Maze): string[][] {
+  const fresh = maze.clone();
+  fresh.updateWallGrid();
+  return fresh.wallGrid;
+}

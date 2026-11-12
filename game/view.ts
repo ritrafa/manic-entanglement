@@ -1,5 +1,6 @@
-// Pure board-view maths: which wall-grid tiles changed, and where a cell's tile
-// sits in pixels. No DOM here; lib/board.ts is the only code that touches it.
+// Pure board-view maths: which wall-grid tiles changed, where a cell's tile
+// sits in pixels, and which wall tiles the forecast marks. No DOM here;
+// lib/board.ts is the only code that touches it.
 
 /** One wall-grid tile whose picture must change. */
 export interface TileChange {
@@ -39,4 +40,29 @@ export function tileDiff(prev: string[][] | null, next: string[][]): TileChange[
  */
 export function entityPx(cellX: number, cellY: number, cell: number): { x: number; y: number } {
     return { x: (2 * cellX + 1) * cell, y: (2 * cellY + 1) * cell };
+}
+
+/** One wall-grid tile the forecast marks, with the kind of mark it gets. */
+export interface MarkTile {
+    /** Column in the wall grid. */
+    tx: number;
+    /** Row in the wall grid. */
+    ty: number;
+    /** Which mark to draw: an opening wall or a sealing wall. */
+    kind: "open" | "close";
+}
+
+/**
+ * The wall-grid tiles to mark for a forecast: the wall between cell (x, y) and its
+ * right neighbour is tile (2x + 2, 2y + 1), the wall below it is tile (2x + 1, 2y + 2).
+ */
+export function markTiles(forecast: { opens: { x: number; y: number; dir: "r" | "d" }[]; closes: { x: number; y: number; dir: "r" | "d" }[] }): MarkTile[] {
+    const marks: MarkTile[] = [];
+    const push = (edge: { x: number; y: number; dir: "r" | "d" }, kind: "open" | "close") => {
+        if (edge.dir === "r") marks.push({ tx: 2 * edge.x + 2, ty: 2 * edge.y + 1, kind });
+        else marks.push({ tx: 2 * edge.x + 1, ty: 2 * edge.y + 2, kind });
+    };
+    for (const edge of forecast.opens) push(edge, "open");
+    for (const edge of forecast.closes) push(edge, "close");
+    return marks;
 }

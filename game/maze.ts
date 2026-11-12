@@ -23,12 +23,20 @@ export class Cell {
     }
 }
 
-const DIRECTIONS = [
-    { x: 0, y: -1 }, // up
-    { x: 1, y: 0 },  // right
-    { x: 0, y: 1 },  // down
-    { x: -1, y: 0 }  // left
-];
+/** One of the four cardinal directions, as the origin walks the board. */
+export type Dir = 'u' | 'r' | 'd' | 'l';
+
+/** The cell delta of each direction. */
+export const DIR_DELTAS: Record<Dir, { x: number, y: number }> = {
+    u: { x: 0, y: -1 }, // up
+    r: { x: 1, y: 0 },  // right
+    d: { x: 0, y: 1 },  // down
+    l: { x: -1, y: 0 }  // left
+};
+
+const DIR_ORDER: Dir[] = ['u', 'r', 'd', 'l'];
+
+const DIRECTIONS = DIR_ORDER.map((dir) => DIR_DELTAS[dir]);
 
 export class Maze {
     width: number;
@@ -225,36 +233,69 @@ export class Maze {
         }
     }
 
-    /** Move the origin one step to a random in-bounds neighbour. Returns the old and new origin. */
-    shift(rng: Rng): { from: { x: number, y: number }, to: { x: number, y: number } } {
+    /** The directions that keep the origin in bounds when stepped from `at` (default: the origin). */
+    validDirs(at: { x: number, y: number } = this.origin): Dir[] {
+        const dirs: Dir[] = [];
+        for (const dir of DIR_ORDER) {
+            const delta = DIR_DELTAS[dir];
+            const nx = at.x + delta.x;
+            const ny = at.y + delta.y;
+            if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) dirs.push(dir);
+        }
+        return dirs;
+    }
+
+    /**
+     * Move the origin one step in the given direction. An out-of-bounds direction
+     * changes nothing (from and to are then equal). Returns the old and new origin.
+     */
+    step(dir: Dir): { from: { x: number, y: number }, to: { x: number, y: number } } {
         const from = { x: this.origin.x, y: this.origin.y };
-        const validDirections = DIRECTIONS.filter(dir => {
-            const nx = this.origin.x + dir.x;
-            const ny = this.origin.y + dir.y;
-            return nx >= 0 && nx < this.width && ny >= 0 && ny < this.height;
-        });
+        const delta = DIR_DELTAS[dir];
+        const nx = from.x + delta.x;
+        const ny = from.y + delta.y;
 
-        if (validDirections.length > 0) {
-            const newDirection = rng.pick(validDirections);
-            const newOrigin = {
-                x: this.origin.x + newDirection.x,
-                y: this.origin.y + newDirection.y
-            };
-
+        if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
             // Update direction relationship
-            this.grid[this.origin.y][this.origin.x].setDirection(newDirection.x, newDirection.y);
-            this.grid[newOrigin.y][newOrigin.x].setDirection(0, 0);
+            this.grid[from.y][from.x].setDirection(delta.x, delta.y);
+            this.grid[ny][nx].setDirection(0, 0);
 
             // Update all walls based on the new direction relationships
             this.updateAllWalls();
 
             // Update the origin
-            this.origin = newOrigin;
+            this.origin = { x: nx, y: ny };
         }
 
         this.updateWallGrid();
 
         return { from, to: { x: this.origin.x, y: this.origin.y } };
+    }
+
+    /** Move the origin one step to a random in-bounds neighbour. Returns the old and new origin. */
+    shift(rng: Rng): { from: { x: number, y: number }, to: { x: number, y: number } } {
+        const validDirections = this.validDirs();
+        if (validDirections.length === 0) {
+            return { from: { x: this.origin.x, y: this.origin.y }, to: { x: this.origin.x, y: this.origin.y } };
+        }
+        return this.step(rng.pick(validDirections));
+    }
+
+    /** A deep, independent copy: stepping the clone never touches this maze. */
+    clone(): Maze {
+        const copy = Object.create(Maze.prototype) as Maze;
+        copy.width = this.width;
+        copy.height = this.height;
+        copy.origin = { x: this.origin.x, y: this.origin.y };
+        copy.grid = this.grid.map((row) => row.map((cell) => {
+            const fresh = new Cell();
+            fresh.walls = cell.walls.slice();
+            fresh.direction = cell.direction ? { x: cell.direction.x, y: cell.direction.y } : null;
+            fresh.visited = cell.visited;
+            return fresh;
+        }));
+        copy.wallGrid = this.wallGrid.map((row) => row.slice());
+        return copy;
     }
 
     /** True when (x, y) plus (dx, dy) stays in bounds and no wall blocks that step. */

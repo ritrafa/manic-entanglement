@@ -3,7 +3,8 @@
 // every random choice comes from one seeded createRng, so a unit test can play a
 // seeded run from start to death. Ported from lib/GameState.ts and lib/maze.ts.
 
-import { Maze } from "./maze";
+import { Maze, type Dir } from "./maze";
+import { forecastOf, rollWalk, type Forecast } from "./forecast";
 import { createRng, type Rng } from "./rng";
 import { spawnLevel } from "./spawn";
 import { levelPlan } from "./plan";
@@ -52,8 +53,17 @@ export class Run {
     exit: { x: number; y: number };
     items: RunItem[] = [];
     enemies: RunEnemy[] = [];
+    /**
+     * What the next successful move's shifts will do: the origin's walk and the net
+     * wall changes. Rolled at each level start and after every successful move, so
+     * it always matches what the next move does to the walls; a blocked move leaves
+     * it unchanged.
+     */
+    forecast: Forecast = { walk: [], opens: [], closes: [] };
 
     private rng: Rng;
+    /** The directions behind the current forecast, applied with maze.step on the next move. */
+    private forecastDirs: Dir[] = [];
     private events: GameEvent[] = [];
     private nextId = 1;
     private pendingMs = 0;
@@ -76,6 +86,7 @@ export class Run {
         this.score = 0;
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.buildLevel();
+        this.rollForecast();
         this.phase = "playing";
         this.push({ type: "levelStart", level: this.level, size: this.maze.width });
     }
@@ -97,8 +108,9 @@ export class Run {
         this.score += 1;
         this.push({ type: "move", x: this.player.x, y: this.player.y, dx, dy });
 
-        const shifts = levelPlan(this.level).shifts;
-        for (let i = 0; i < shifts; i++) this.maze.shift(this.rng);
+        // Apply exactly the walk the forecast promised; the next one is rolled at
+        // the end, only when the run is still playing.
+        for (const dir of this.forecastDirs) this.maze.step(dir);
 
         const itemIndex = this.items.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
         if (itemIndex !== -1) {
@@ -128,6 +140,7 @@ export class Run {
         if (this.energy <= 0) {
             this.die(fought ? "fight" : "move");
         }
+        if (this.phase === "playing") this.rollForecast();
         return true;
     }
 
@@ -154,6 +167,7 @@ export class Run {
         this.energy = Math.min(this.stats.storage, this.energy + levelPlan(this.level).exitBonus);
         this.level += 1;
         this.buildLevel();
+        this.rollForecast();
         this.phase = "playing";
         this.push({ type: "levelStart", level: this.level, size: this.maze.width });
     }
@@ -223,5 +237,11 @@ export class Run {
         const spawned = spawnLevel(this.rng, size, { items: plan.items, enemies: plan.enemies }, plan.energyShare);
         this.items = spawned.items.map((item) => ({ id: this.nextId++, ...item }));
         this.enemies = spawned.enemies.map((enemy) => ({ id: this.nextId++, ...enemy }));
+    }
+
+    /** Roll the walk for the next move and store it as `forecast` (with its directions). */
+    private rollForecast(): void {
+        this.forecastDirs = rollWalk(this.maze, this.rng, levelPlan(this.level).shifts);
+        this.forecast = forecastOf(this.maze, this.forecastDirs);
     }
 }

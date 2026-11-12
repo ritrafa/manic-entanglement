@@ -42,11 +42,11 @@ export function boardLayout(viewW: number, viewH: number, tiles: number): BoardL
 
 /**
  * The dark blob around the maze origin. `origin` is the maze cell; its tile in the
- * wall grid is (2 * origin.x + 1, 2 * origin.y + 1). The blob is BLOB_TILES tiles
- * wide and centred on that tile's centre.
+ * wall grid is (2 * origin.x + 1, 2 * origin.y + 1). The blob is `tiles` tiles wide
+ * (BLOB_TILES unless given) and centred on that tile's centre.
  */
-export function blobRect(origin: { x: number; y: number }, cell: number): BlobRect {
-    const size = BLOB_TILES * cell;
+export function blobRect(origin: { x: number; y: number }, cell: number, tiles: number = BLOB_TILES): BlobRect {
+    const size = tiles * cell;
     const centreX = (2 * origin.x + 1) * cell + cell / 2;
     const centreY = (2 * origin.y + 1) * cell + cell / 2;
     return { left: centreX - size / 2, top: centreY - size / 2, size };

@@ -22,6 +22,8 @@ export const CONFIG = {
     energyShare: 0.4,
     /** Energy added on top of what is left when the exit is reached (capped at storage). */
     exitBonus: 50,
+    /** Tiles across the dark aura that sits under the Knot (lib/board.ts passes it to blobRect). */
+    blobTiles: 4,
     /** Milliseconds between steps while a direction is held (game/stepper.ts). */
     stepMs: 110,
     /** Milliseconds from the first step to the second while a key stays down. */

@@ -172,6 +172,8 @@ body {
   background-size: cover;
 }
 
+/* The blob: the dark aura under the Knot, CONFIG.blobTiles tiles wide and
+   centred on the origin's tile (blobRect in game/layout.ts). */
 .fade-overlay {
   position: absolute;
   left: 0;
@@ -179,6 +181,64 @@ body {
   pointer-events: none;
   transition: transform 150ms linear;
   background: radial-gradient(circle, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0) 50%);
+}
+
+/* The Knot: the visible origin of the shifting, one persistent element that
+   glides with the origin (a gold ring with a teal centre, slowly pulsing).
+   lib/board.ts sizes it to one tile and moves it with a transform. */
+.knot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 3px solid #ffd700;
+  box-sizing: border-box;
+  background: radial-gradient(circle, rgba(0, 160, 160, 0.95) 0%, rgba(0, 160, 160, 0.45) 55%, rgba(0, 160, 160, 0) 75%);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+  transition: transform 150ms linear;
+  animation: knot-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes knot-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* The forecast's wall marks, one .mark element per wall tile, replaced on
+   each update. The two kinds differ by shape and pattern, not only colour,
+   so they read in greyscale too: an opening wall gets a dashed gold outline
+   (the wall still shows through), a sealing wall a diagonal white hatch. */
+.marks {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.mark-open {
+  border: 2px dashed #ffd700;
+  border-radius: 3px;
+}
+
+.mark-close {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.85) 0,
+    rgba(255, 255, 255, 0.85) 2px,
+    rgba(255, 255, 255, 0) 2px,
+    rgba(255, 255, 255, 0) 6px
+  );
 }
 
 .message{

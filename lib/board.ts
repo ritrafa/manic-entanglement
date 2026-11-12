@@ -4,8 +4,9 @@
 // transform. No React here; the shell (lib/GameState.ts) hands the board the Run.
 
 import type { Run } from '@/game/run';
+import { CONFIG } from '@/game/config';
 import { blobRect } from '@/game/layout';
-import { entityPx, tileDiff } from '@/game/view';
+import { entityPx, markTiles, tileDiff } from '@/game/view';
 
 /** Tile pictures live at images/<code>.png. */
 const WALL_IMAGE_BASE = '/images/';
@@ -18,6 +19,8 @@ export class Board {
     private tilesLayer: HTMLElement | null = null;
     private entitiesLayer: HTMLElement | null = null;
     private fxLayer: HTMLElement | null = null;
+    /** The layer inside .fx holding the forecast's wall marks, replaced on each update. */
+    private marksLayer: HTMLElement | null = null;
 
     /** The wall images by [row][column] of the wall grid. */
     private tileImages: HTMLImageElement[][] = [];
@@ -33,6 +36,8 @@ export class Board {
     private layerImages: HTMLImageElement[] = [];
     private exitElement: HTMLElement | null = null;
     private blobElement: HTMLElement | null = null;
+    /** The Knot: one persistent element on the origin's tile, gliding as it moves. */
+    private knotElement: HTMLElement | null = null;
     /** Entity elements keyed by the stable ids run.items / run.enemies carry. */
     private itemElements: Map<number, HTMLElement> = new Map();
     private enemyElements: Map<number, HTMLElement> = new Map();
@@ -45,6 +50,9 @@ export class Board {
         this.entitiesLayer.className = 'entities';
         this.fxLayer = document.createElement('div');
         this.fxLayer.className = 'fx';
+        this.marksLayer = document.createElement('div');
+        this.marksLayer.className = 'marks';
+        this.fxLayer.appendChild(this.marksLayer);
         el.replaceChildren(this.tilesLayer, this.entitiesLayer, this.fxLayer);
 
         this.tileImages = [];
@@ -55,6 +63,7 @@ export class Board {
         this.layerImages = [];
         this.exitElement = null;
         this.blobElement = null;
+        this.knotElement = null;
         this.itemElements.clear();
         this.enemyElements.clear();
     }
@@ -171,9 +180,14 @@ export class Board {
         this.exitElement.className = 'exit';
         this.entitiesLayer.appendChild(this.exitElement);
 
+        // The blob first, so the Knot is drawn on top of its aura.
         this.blobElement = document.createElement('div');
         this.blobElement.className = 'fade-overlay';
         this.entitiesLayer.appendChild(this.blobElement);
+
+        this.knotElement = document.createElement('div');
+        this.knotElement.className = 'knot';
+        this.entitiesLayer.appendChild(this.knotElement);
 
         this.placeAll(run);
     }
@@ -185,6 +199,8 @@ export class Board {
         this.syncItems(run);
         this.syncEnemies(run);
         this.placeBlob(run);
+        this.placeKnot(run);
+        this.syncMarks(run);
         this.playerSprite?.classList.toggle('flip-horizontal', run.player.facingLeft);
     }
 
@@ -238,9 +254,38 @@ export class Board {
 
     private placeBlob(run: Run): void {
         if (!this.blobElement) return;
-        const { left, top, size } = blobRect(run.maze.origin, this.cell);
+        const { left, top, size } = blobRect(run.maze.origin, this.cell, CONFIG.blobTiles);
         this.blobElement.style.width = `${size}px`;
         this.blobElement.style.height = `${size}px`;
         this.blobElement.style.transform = `translate(${left}px, ${top}px)`;
+    }
+
+    private placeKnot(run: Run): void {
+        if (!this.knotElement) return;
+        const { x, y } = entityPx(run.maze.origin.x, run.maze.origin.y, this.cell);
+        this.knotElement.style.width = `${this.cell}px`;
+        this.knotElement.style.height = `${this.cell}px`;
+        this.knotElement.style.transform = `translate(${x}px, ${y}px)`;
+    }
+
+    /** Replace the wall marks with one element per tile the forecast changes. */
+    private syncMarks(run: Run): void {
+        if (!this.marksLayer) return;
+        const forecast = run.forecast;
+        if (!forecast) {
+            this.marksLayer.replaceChildren();
+            return;
+        }
+        const marks: HTMLElement[] = [];
+        for (const mark of markTiles(forecast)) {
+            const element = document.createElement('div');
+            element.className = `mark mark-${mark.kind}`;
+            element.style.left = `${mark.tx * this.cell}px`;
+            element.style.top = `${mark.ty * this.cell}px`;
+            element.style.width = `${this.cell}px`;
+            element.style.height = `${this.cell}px`;
+            marks.push(element);
+        }
+        this.marksLayer.replaceChildren(...marks);
     }
 }

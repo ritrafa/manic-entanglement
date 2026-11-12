@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Maze } from "@/game/maze";
 import { createRng } from "@/game/rng";
-import { entityPx, tileDiff } from "@/game/view";
+import { entityPx, markTiles, tileDiff } from "@/game/view";
 
 function copyGrid(grid: string[][]): string[][] {
     return grid.map((row) => row.slice());
@@ -91,4 +91,36 @@ describe("entityPx", () => {
             }
         }
     });
+});
+
+describe("markTiles", () => {
+  it("maps an r edge at (1, 2) to tile (4, 5) and a d edge at (1, 2) to tile (3, 6)", () => {
+    const forecast = {
+      opens: [{ x: 1, y: 2, dir: "r" as const }],
+      closes: [{ x: 1, y: 2, dir: "d" as const }],
+    };
+    expect(markTiles(forecast)).toEqual([
+      { tx: 4, ty: 5, kind: "open" },
+      { tx: 3, ty: 6, kind: "close" },
+    ]);
+  });
+
+  it("marks every opening and sealing wall, opens first", () => {
+    const forecast = {
+      opens: [
+        { x: 0, y: 0, dir: "r" as const },
+        { x: 2, y: 3, dir: "d" as const },
+      ],
+      closes: [{ x: 1, y: 1, dir: "r" as const }],
+    };
+    expect(markTiles(forecast)).toEqual([
+      { tx: 2, ty: 1, kind: "open" },
+      { tx: 5, ty: 8, kind: "open" },
+      { tx: 4, ty: 3, kind: "close" },
+    ]);
+  });
+
+  it("is empty for an empty forecast", () => {
+    expect(markTiles({ opens: [], closes: [] })).toEqual([]);
+  });
 });
