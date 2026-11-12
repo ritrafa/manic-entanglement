@@ -4,6 +4,7 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
   background: linear-gradient(135deg, #08412c, #40154f);
   color: white;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -13,6 +14,7 @@ body {
 .game-container {
   display: contents;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
 }
@@ -62,7 +64,7 @@ body {
   top: 5%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 20em;
+  font-size: min(40vw, 40vh);
   color: white;
   text-align: center;
   z-index: 2;
@@ -289,7 +291,7 @@ body {
   border-radius: 5px;
   width: 75px;
   background-color: rgba(0, 0, 0, 0.8);
-  font-size: 0.5em;
+  font-size: 11px;
   margin-top: 10px;
   margin-right: 10px;
 }
@@ -331,4 +333,70 @@ body {
   font-size: 12px;
   padding: 0 10px;
   height: 20px;
+}
+
+/* Phones: keep the HUD short (about 200 px) so the board stays the star. */
+@media (max-width: 480px) {
+  #hud {
+    flex-direction: column;
+  }
+
+  .left-box {
+    flex-direction: row;
+    align-self: stretch;
+    padding: 6px;
+    margin: 4px 4px 0 4px;
+    width: auto;
+    height: 44px;
+    gap: 6px;
+  }
+
+  .left-box .asset-image {
+    width: 44px;
+    height: 44px;
+    left: auto;
+    right: 0;
+  }
+
+  .right-box {
+    padding: 6px 8px 8px 8px;
+  }
+
+  .bar-container {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .bar-container div:first-child {
+    margin-right: 6px;
+    width: 76px;
+  }
+
+  #energy-bar, #progress-bar {
+    height: 14px;
+  }
+
+  .stats-container {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-bottom: 0;
+  }
+
+  .stat {
+    width: auto;
+    padding: 3px 2px;
+    margin-top: 0;
+    margin-right: 0;
+  }
+
+  #stat-level, #stat-attack, #stat-defense, #stat-speed, #stat-consumption {
+    font-size: 1.3em;
+  }
+
+  .wallet-actions {
+    width: auto;
+    padding: 4px 8px;
+    margin-top: 0;
+  }
 }

@@ -3,6 +3,7 @@ import { Run } from '@/game/run';
 import type { GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
+import { blobRect, boardLayout } from '@/game/layout';
 
 const SPRITE_FRAME_MS = 150;
 const CLOCK_TICK_MS = 50;
@@ -27,6 +28,8 @@ class GameState {
     private clockInterval: ReturnType<typeof setInterval> | null = null;
     private lastTickAt: number = 0;
     private starting: boolean = false;
+    /** The wall-grid tile size in whole pixels, set by sizeBoard and used to place the blob. */
+    private cellSize: number = 4;
 
     constructor() {
         this.player = new Player();
@@ -252,21 +255,22 @@ class GameState {
         }
     }
 
-    /** Size the maze and HUD elements and the CSS grid for a board of the given side. */
+    /** Size the maze, the HUD and the CSS grid for a maze of the given cell side. */
     private sizeBoard(size: number): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.9 : window.innerHeight * 0.7;
-        mazeElement.style.width = `${containerSize}px`;
-        mazeElement.style.height = `${containerSize}px`;
+        const tiles = size * 2 + 1;
+        const { cell, board } = boardLayout(window.innerWidth, window.innerHeight, tiles);
+        this.cellSize = cell;
+        mazeElement.style.width = `${board}px`;
+        mazeElement.style.height = `${board}px`;
 
         const hudElement = document.getElementById('hud');
-        if (hudElement) hudElement.style.width = `${containerSize}px`;
+        if (hudElement) hudElement.style.width = `${board}px`;
 
-        const cellSize = Math.floor(containerSize / (size * 2 + 1));
-        document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
-        document.documentElement.style.setProperty('--item-size', `${cellSize}px`);
-        document.documentElement.style.setProperty('--grid-size', `${size * 2 + 1}`);
+        document.documentElement.style.setProperty('--cell-size', `${cell}px`);
+        document.documentElement.style.setProperty('--item-size', `${cell}px`);
+        document.documentElement.style.setProperty('--grid-size', `${tiles}`);
     }
 
     renderMaze(): void {
@@ -321,20 +325,22 @@ class GameState {
             }
         }
         // Add the overlay
-        this.addOverlay(run.maze.origin.x * 2 + 1, run.maze.origin.y * 2 + 1);
+        this.placeOverlay();
     }
 
-    /** Draw the fade overlay centred on the given wall-grid tile. */
-    private addOverlay(x: number, y: number): void {
+    /** Place (or re-place) the fade overlay centred on the origin tile at the current cell size. */
+    private placeOverlay(): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
 
+        mazeElement.querySelectorAll('.fade-overlay').forEach((old) => old.remove());
+        const { left, top, size } = blobRect(this.run.maze.origin, this.cellSize);
         const overlay = document.createElement('div');
         overlay.className = 'fade-overlay';
-        overlay.style.width = '400px';
-        overlay.style.height = '400px';
-        overlay.style.left = `${x * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
-        overlay.style.top = `${y * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        overlay.style.width = `${size}px`;
+        overlay.style.height = `${size}px`;
+        overlay.style.left = `${left}px`;
+        overlay.style.top = `${top}px`;
         mazeElement.appendChild(overlay);
     }
 
@@ -442,18 +448,9 @@ class GameState {
     handleResize() {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.9 : window.innerHeight * 0.7;
-        mazeElement.style.width = `${containerSize}px`;
-        mazeElement.style.height = `${containerSize}px`;
-
-        const hudElement = document.getElementById('hud');
-        if (!hudElement) return;
-        hudElement.style.width = `${containerSize}px`;
-
-        const cellSize = this.run.maze.width * 2 + 1;
-        document.documentElement.style.setProperty('--cell-size', `${Math.floor(containerSize / cellSize)}px`);
-        document.documentElement.style.setProperty('--item-size', `${Math.floor(containerSize / cellSize)}px`);
-        document.documentElement.style.setProperty('--grid-size', `${cellSize}`);
+        // Same sizing path as the level start, then the blob follows the new cell size.
+        this.sizeBoard(this.run.maze.width);
+        this.placeOverlay();
     }
 }
 
