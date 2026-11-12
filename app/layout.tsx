@@ -1,4 +1,3 @@
-import type { AppProps } from "next/app";
 import WalletContextProvider from "@/components/WalletContextProvider";
 
 export const metadata = {

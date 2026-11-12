@@ -4,8 +4,6 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { getRelatedAssetsByOwner } from '../lib/helius';
 import { useWallet } from '@solana/wallet-adapter-react';
 import GameState from '@/lib/GameState';
-import handleGenerateGIF from '@/lib/player_generator';
-import NFTCreator from './NFTCreator';
 
 
 interface HudProps {
@@ -31,14 +29,6 @@ const Hud: React.FC<HudProps> = ({ player, gameState }) => {
                     setAssetImage(image);
                     player.setPlayerDetails(data);
 
-                    const selectedTraits = {
-                        Body: data.find((item: { key: any; }) => item.key === 'Body').value,
-                        Head: data.find((item: { key: any; }) => item.key === 'Head').value,
-                        Back: data.find((item: { key: any; }) => item.key === 'Back').value,
-                        Clothes: data.find((item: { key: any; }) => item.key === 'Clothes').value,
-                        Eye: data.find((item: { key: any; }) => item.key === 'Eye').value
-                    };
-                    handleGenerateGIF(selectedTraits);
                     return;
                 }   
             });

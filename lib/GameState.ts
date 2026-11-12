@@ -1,6 +1,5 @@
 import Player from './player';
 import Maze, { Cell, Item, Enemy } from './maze';
-import handleGenerateGIF from './player_generator';
 
 const INITIAL_MAZE_SIZE = 5;
 const INITIAL_MAZE_LEVEL = 1;
@@ -349,16 +348,6 @@ class GameState {
         const mazeContainerElement = document.getElementById('maze-container');
         const titleElement = document.getElementById('title-screen');
         if (!titleElement) return;
-        const selectedTraits = {
-            Body: this.player.body,
-            Head: this.player.head,
-            Back: this.player.back,
-            Clothes: this.player.clothes,
-            Eye: this.player.eye
-        };
-
-        handleGenerateGIF(selectedTraits);
-
         titleElement.style.opacity = '0.5';
         const countdownElement = document.createElement('p');
         countdownElement.className = 'title-screen-countdown';
