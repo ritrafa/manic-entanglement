@@ -44,11 +44,26 @@ body {
   position: relative;
   background: url('/images/galaxy2.jpg') repeat;
   animation: moveBackground 45s ease-in-out infinite alternate;
+}
+
+/* The board's three layers, built once by lib/board.ts: the tile grid, the
+   gliding entities and the effects. Only tiles whose picture changed and the
+   entities' transforms are touched per move. */
+.tiles {
   display: grid;
   grid-template-columns: repeat(var(--grid-size), var(--cell-size));
   grid-template-rows: repeat(var(--grid-size), var(--cell-size));
   justify-content: center;
   align-content: center;
+}
+
+.entities, .fx {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 #title-screen {
@@ -74,22 +89,39 @@ body {
   z-index: 2;
 }
 
-.cell {
-  position: relative;
+.wall-image {
   width: var(--cell-size);
   height: var(--cell-size);
+  image-rendering: pixelated;
 }
 
-.player, .exit, .powerup, .enemy, .wall-image {
+/* Entities are one persistent element each, placed with a transform by
+   lib/board.ts (left/top stay at 0 so every glide is a pure translation). */
+.player, .exit, .powerup, .enemy {
   position: absolute;
+  left: 0;
+  top: 0;
   width: var(--item-size);
   height: var(--item-size);
   background-size: 100% 100%;
+  image-rendering: pixelated;
 }
 
 .player {
-  /* The reptile is drawn by stacked <img class="player-layer"> elements,
-     built in lib/GameState.ts from game/sprite.ts. */
+  /* The outer element's transform carries the position; the glide is the
+     transition between the cells. */
+  transition: transform 90ms linear;
+}
+
+/* The inner wrapper holds the stacked <img class="player-layer"> elements
+   (from game/sprite.ts) and carries the facing flip. */
+.player-sprite {
+  position: absolute;
+  inset: 0;
+}
+
+.player-sprite.flip-horizontal {
+  transform: scaleX(-1);
 }
 
 .player-layer {
@@ -98,10 +130,6 @@ body {
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
-}
-
-.player.flip-horizontal {
-  transform: scaleX(-1);
 }
 
 .exit {
@@ -144,7 +172,10 @@ body {
 
 .fade-overlay {
   position: absolute;
+  left: 0;
+  top: 0;
   pointer-events: none;
+  transition: transform 150ms linear;
   background: radial-gradient(circle, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0) 50%);
 }
 

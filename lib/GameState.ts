@@ -3,9 +3,10 @@ import { Run } from '@/game/run';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
-import { blobRect, boardLayout } from '@/game/layout';
+import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf } from '@/game/keys';
+import { Board } from './board';
 
 const SPRITE_FRAME_MS = 150;
 const CLOCK_TICK_MS = 50;
@@ -23,8 +24,8 @@ class GameState {
     public pickupSound: HTMLAudioElement;
     public fightSound: HTMLAudioElement;
     private look: Look;
-    private playerElement: HTMLElement | null = null;
-    private layerImages: HTMLImageElement[] = [];
+    /** The one code that touches the board's DOM: patched tiles and gliding sprites. */
+    private board: Board = new Board();
     private preloadedUrls: Set<string> = new Set();
     private spriteInterval: ReturnType<typeof setInterval> | null = null;
     private clockInterval: ReturnType<typeof setInterval> | null = null;
@@ -33,7 +34,7 @@ class GameState {
     private countdownTimers: ReturnType<typeof setTimeout>[] | null = null;
     /** Every timeout the shell scheduled, so dispose() can leave nothing that may fire. */
     private timeouts: Set<ReturnType<typeof setTimeout>> = new Set();
-    /** The wall-grid tile size in whole pixels, set by sizeBoard and used to place the blob. */
+    /** The wall-grid tile size in whole pixels, set by sizeBoard and handed to the board. */
     private cellSize: number = 4;
     /** True while M has silenced every sound the shell owns. */
     private muted: boolean = false;
@@ -66,6 +67,7 @@ class GameState {
         this.fightSound.playbackRate = 2;
         this.look = this.lookFromPlayer();
         this.preloadLook();
+        this.mountBoard();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
@@ -120,34 +122,19 @@ class GameState {
         }
     }
 
-    /** Build the stacked layer images of the player element at the current frame. */
-    private attachSprite(playerElement: HTMLElement): void {
-        this.playerElement = playerElement;
-        this.layerImages = [];
-        for (const url of spriteLayers(this.look, frameAt(Date.now()))) {
-            const layerImage = document.createElement('img');
-            layerImage.className = 'player-layer';
-            layerImage.src = url;
-            layerImage.alt = '';
-            playerElement.appendChild(layerImage);
-            this.layerImages.push(layerImage);
-        }
+    /** Build the board's layers once and draw the level that waits behind the title. */
+    private mountBoard(): void {
+        const mazeElement = document.getElementById('maze');
+        if (!mazeElement) return;
+        this.board.mount(mazeElement);
+        this.sizeBoard(this.run.maze.width);
+        this.board.setLevel(this.run, this.cellSize);
+        this.refreshSprite();
     }
 
-    /** Point the current player element's layers at the frames for the current instant. */
+    /** Point the one persistent player element's layers at the frames for the current instant. */
     private refreshSprite(): void {
-        if (!this.playerElement) return;
-        const urls = spriteLayers(this.look, frameAt(Date.now()));
-        if (urls.length !== this.layerImages.length) {
-            // The look changed while the element existed: rebuild the stack.
-            this.layerImages.forEach((image) => image.remove());
-            this.attachSprite(this.playerElement);
-            return;
-        }
-        urls.forEach((url, index) => {
-            const image = this.layerImages[index];
-            if (image.getAttribute('src') !== url) image.setAttribute('src', url);
-        });
+        this.board.setSprite(spriteLayers(this.look, frameAt(Date.now())));
     }
 
     /**
@@ -205,7 +192,7 @@ class GameState {
     movePlayer(dx: number, dy: number): void {
         this.run.move(dx, dy);
         this.handleEvents();
-        this.renderMaze();
+        this.board.update(this.run);
         this.updateStatus();
     }
 
@@ -329,7 +316,8 @@ class GameState {
                 case 'levelStart':
                     this.sizeBoard(event.size);
                     this.sound.playbackRate = BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL;
-                    this.renderMaze();
+                    this.board.setLevel(this.run, this.cellSize);
+                    this.refreshSprite();
                     this.updateStatus();
                     break;
                 case 'dead':
@@ -357,77 +345,6 @@ class GameState {
         document.documentElement.style.setProperty('--cell-size', `${cell}px`);
         document.documentElement.style.setProperty('--item-size', `${cell}px`);
         document.documentElement.style.setProperty('--grid-size', `${tiles}`);
-    }
-
-    renderMaze(): void {
-        const mazeElement = document.getElementById('maze');
-        if (!mazeElement) return;
-        mazeElement.innerHTML = '';
-        this.playerElement = null;
-        this.layerImages = [];
-
-        const run = this.run;
-
-        for (let y = 0; y < run.maze.height * 2 + 1; y++) {
-            for (let x = 0; x < run.maze.width * 2 + 1; x++) {
-                const cell = document.createElement('div');
-                cell.className = 'cell';
-
-                const wallImage = document.createElement('img');
-                wallImage.src = `images/${run.maze.wallGrid[y][x]}.png`;
-                wallImage.className = 'wall-image';
-                cell.appendChild(wallImage);
-
-                // Add player, exit, items, and enemies
-                if (y % 2 === 1 && x % 2 === 1) {
-                    const cellX = (x - 1) / 2;
-                    const cellY = (y - 1) / 2;
-                    if (cellX === run.player.x && cellY === run.player.y) {
-                        const playerElement = document.createElement('div');
-                        playerElement.className = `player${run.player.facingLeft ? ' flip-horizontal' : ''}`;
-                        this.attachSprite(playerElement);
-                        cell.appendChild(playerElement);
-                    } else if (cellX === run.exit.x && cellY === run.exit.y) {
-                        const exitElement = document.createElement('div');
-                        exitElement.className = 'exit';
-                        cell.appendChild(exitElement);
-                    } else {
-                        const item = run.items.find((p) => p.x === cellX && p.y === cellY);
-                        if (item) {
-                            const itemElement = document.createElement('div');
-                            itemElement.className = `powerup item_${item.type}`;
-                            cell.appendChild(itemElement);
-                        }
-                        const enemy = run.enemies.find((p) => p.x === cellX && p.y === cellY);
-                        if (enemy) {
-                            const enemyElement = document.createElement('div');
-                            enemyElement.className = `enemy`;
-                            cell.appendChild(enemyElement);
-                        }
-                    }
-                }
-
-                mazeElement.appendChild(cell);
-            }
-        }
-        // Add the overlay
-        this.placeOverlay();
-    }
-
-    /** Place (or re-place) the fade overlay centred on the origin tile at the current cell size. */
-    private placeOverlay(): void {
-        const mazeElement = document.getElementById('maze');
-        if (!mazeElement) return;
-
-        mazeElement.querySelectorAll('.fade-overlay').forEach((old) => old.remove());
-        const { left, top, size } = blobRect(this.run.maze.origin, this.cellSize);
-        const overlay = document.createElement('div');
-        overlay.className = 'fade-overlay';
-        overlay.style.width = `${size}px`;
-        overlay.style.height = `${size}px`;
-        overlay.style.left = `${left}px`;
-        overlay.style.top = `${top}px`;
-        mazeElement.appendChild(overlay);
     }
 
     updateStatus(): void {
@@ -472,26 +389,13 @@ class GameState {
         }
     }
 
-    /** Float the message an event carries above the player, if any. */
+    /** Float the message an event carries above the cell it happened on, if any. */
     private floatMessage(event: GameEvent): void {
         const message = eventMessage(event);
-        if (message) this.after(0, () => this.displayMessage(message));
-    }
-
-    displayMessage(message: string): void {
-        const playerElement = document.querySelector('.player');
-        if (!playerElement) return;
-
-        const messageElement = document.createElement('div');
-
-        messageElement.className = 'message';
-        messageElement.textContent = message;
-        playerElement.parentElement?.appendChild(messageElement);
-
-        // Remove the message after the animation completes
-        this.after(2500, () => {
-            messageElement.remove();
-        });
+        if (message === null) return;
+        if (event.type === 'pickup' || event.type === 'fight') {
+            this.board.float(message, event.x, event.y);
+        }
     }
 
     triggerLevelCompleteAnimation(callback: { (): void; }) {
@@ -540,9 +444,9 @@ class GameState {
     handleResize() {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        // Same sizing path as the level start, then the blob follows the new cell size.
+        // Same sizing path as the level start, then every sprite follows the new cell size.
         this.sizeBoard(this.run.maze.width);
-        this.placeOverlay();
+        this.board.resize(this.cellSize);
     }
 }
 
