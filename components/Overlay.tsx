@@ -46,8 +46,9 @@ const Overlay: React.FC<OverlayProps> = ({ gameState }) => {
         <div className="game-over-message" role="dialog" aria-modal="true" aria-label={model.finished ? 'Run finished' : 'Game over'}>
             <p className="overlay-title">{model.finished ? 'Run complete' : 'Game over'}</p>
             <div className="summary">
-                {(model.summary ?? []).map((line: SummaryLine) => (
-                    <div className="summary-line" key={line.label}>
+                {(model.summary ?? []).map((line: SummaryLine, index: number) => (
+                    // Two "New feat" rows can share a label, so the key is the row.
+                    <div className="summary-line" key={`${line.label}-${index}`}>
                         <span className="summary-label">{line.label}</span>
                         <span className="summary-value">{line.value}</span>
                     </div>

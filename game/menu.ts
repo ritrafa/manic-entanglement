@@ -2,6 +2,8 @@
 // menu has, how the focus moves over them, and what the how-to explains.
 // Pure: no DOM, no images loaded — the components render from these.
 
+import { FEATS } from "./feats";
+
 /** One entry of the title menu. */
 export interface MenuItem {
     id: string;
@@ -11,12 +13,17 @@ export interface MenuItem {
 /**
  * The title menu's entries, top to bottom. The first is always Play, so the
  * menu opens focused on starting a run; later cards add entries after these.
+ * The Feats entry carries the collection count the caller passes (from
+ * featProgress in game/feats.ts); without one it reads 0 of all the feats.
  */
-export function menuItems(): MenuItem[] {
+export function menuItems(progress: { have: number; of: number } = { have: 0, of: FEATS.length }): MenuItem[] {
+    const of = Math.max(0, Math.floor(Number.isFinite(progress?.of) ? progress.of : FEATS.length));
+    const have = Math.min(of, Math.max(0, Math.floor(Number.isFinite(progress?.have) ? progress.have : 0)));
     return [
         { id: "play", label: "Play" },
         { id: "howto", label: "How to play" },
         { id: "settings", label: "Settings" },
+        { id: "feats", label: `Feats (${have}/${of})` },
     ];
 }
 

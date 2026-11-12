@@ -75,3 +75,24 @@ describe("HOWTO", () => {
         }
     });
 });
+
+describe("menuItems: the feats entry", () => {
+    it("ends with a Feats entry counting the collection", () => {
+        const items = menuItems({ have: 3, of: 12 });
+        expect(items[items.length - 1].id).toBe("feats");
+        expect(items[items.length - 1].label).toBe("Feats (3/12)");
+    });
+
+    it("without a progress it reads 0 of all the feats", () => {
+        const items = menuItems();
+        const feats = items.find((item) => item.id === "feats");
+        expect(feats).toBeDefined();
+        expect(feats!.label).toMatch(/^Feats \(0\/\d+\)$/);
+    });
+
+    it("clamps a silly progress into the list", () => {
+        expect(menuItems({ have: 20, of: 12 }).at(-1)!.label).toBe("Feats (12/12)");
+        expect(menuItems({ have: -3, of: 12 }).at(-1)!.label).toBe("Feats (0/12)");
+        expect(menuItems({ have: Number.NaN, of: Number.NaN }).at(-1)!.label).toBe("Feats (0/12)");
+    });
+});

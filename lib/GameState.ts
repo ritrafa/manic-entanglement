@@ -17,6 +17,7 @@ import { formatTenths, nextScreen, sameSummary, summaryLines, type Screen, type 
 import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules } from '@/game/modes';
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { MODIFIER_INFO } from '@/game/modifiers';
+import { evaluateFeats, featById, updateTotals } from '@/game/feats';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -57,6 +58,13 @@ export interface GameSnapshot extends HudModel {
     modeBestText: string;
     /** True when the last run finished by clearing its last level, not by dying. */
     finished: boolean;
+    /** The feat ids earned so far (game/feats.ts); the feats screen marks them. */
+    feats: string[];
+}
+
+/** True when two feat lists hold the same ids in the same order. */
+function sameFeats(a: string[], b: string[]): boolean {
+    return a.length === b.length && a.every((id, index) => id === b[index]);
 }
 
 /** True when two tool charge records show the same counts. */
@@ -144,6 +152,8 @@ class GameState {
     private modeId: ModeId = 'descent';
     /** True once the live run emitted "finished"; decides the summary's wording. */
     private lastFinished: boolean = false;
+    /** Names of the feats the last finished run earned; the summary prints them. */
+    private lastFeatNames: string[] = [];
 
     constructor() {
         // The save is read once, here: private windows, blocked site data and the
@@ -160,7 +170,7 @@ class GameState {
         // never sees the bank at all (game/modes.ts).
         this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats] };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -537,6 +547,7 @@ class GameState {
 
         if (next === 'countdown') {
             this.summary = null;
+            this.lastFeatNames = [];
             // A restart abandons whatever run was live; from the title the
             // countdown starts one on its own. A refused start leaves no half
             // countdown behind.
@@ -549,6 +560,10 @@ class GameState {
             this.quitToTitle();
         } else if (next === 'over') {
             this.syncMusic();
+            // The run is over: its numbers join the lifetime totals, new feats
+            // are earned once and written to the save, and their names join
+            // the summary rows the panel shows.
+            this.lastFeatNames = this.settleRun();
             this.summary = summaryLines({
                 tally: this.run.tally,
                 score: this.run.score,
@@ -561,6 +576,7 @@ class GameState {
                 lost: this.runLost,
                 mode: this.modeId,
                 finished: this.lastFinished,
+                feats: this.lastFeatNames,
             });
         }
         this.publishHud();
@@ -689,6 +705,33 @@ class GameState {
         this.highScore = value;
         this.save = { ...this.save, best: { ...this.save.best, [this.modeId]: value } };
         writeSave(this.storage, this.save);
+    }
+
+    /**
+     * Settle a finished run into the save (game/feats.ts): the totals grow by
+     * what the run did, the feats it earns on top of the ones already kept are
+     * appended, and the save is written once. Returns the new feats' names, in
+     * list order, for the summary. Called once per run, when the screen moves
+     * to "over" — dying and finishing both land there.
+     */
+    private settleRun(): string[] {
+        const tally = this.run.tally;
+        const totals = updateTotals(this.save.totals, tally);
+        const freshIds = evaluateFeats(this.save.feats, tally, totals);
+        this.save = { ...this.save, totals, feats: [...this.save.feats, ...freshIds] };
+        writeSave(this.storage, this.save);
+        return freshIds.map((id) => featById(id)?.name ?? id);
+    }
+
+    /** The title menu's Feats entry: opens the list of feats and their state. */
+    openFeats(): void {
+        if (this.screen !== 'title') return;
+        this.dispatch('feats');
+    }
+
+    /** The feats panel's Back button: Esc and the button both close it. */
+    closeFeats(): void {
+        this.dispatch('back');
     }
 
     /** M: every sound the shell owns goes quiet together, and back. */
@@ -981,6 +1024,7 @@ class GameState {
             modeBlurb: this.modeRules.blurb,
             modeBestText: this.modeBestText(),
             finished: this.lastFinished,
+            feats: [...this.save.feats],
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -997,7 +1041,8 @@ class GameState {
             && this.hudSnapshot.modeName === next.modeName
             && this.hudSnapshot.modeBlurb === next.modeBlurb
             && this.hudSnapshot.modeBestText === next.modeBestText
-            && this.hudSnapshot.finished === next.finished) {
+            && this.hudSnapshot.finished === next.finished
+            && sameFeats(this.hudSnapshot.feats, next.feats)) {
             return;
         }
         this.hudSnapshot = next;

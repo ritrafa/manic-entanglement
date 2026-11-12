@@ -2,6 +2,29 @@
 
 ## Queue log
 
+- Gave the game a feats collection: `game/run.ts` extended the `Tally` with
+  `minExitEnergy` (lowest energy on arriving at an exit, null before the first),
+  `wardens` (Wardens beaten), `toolsUsed` (a per-tool-id count raised only by
+  successful `useTool` calls), `darkCleared` (Blackout levels cleared), `banked`
+  (pieces kept at exits, 0 in a no-gear mode) and the run's `mode`; the new pure
+  `game/feats.ts` holds `Feat = { id, name, text, test(tally, totals) }` with
+  `FEATS` — first-exit, depth-5, depth-10, photo-finish, no-toll, toll-road,
+  warden, collector, toolbox, in-the-dark, sprinter and still-water — plus
+  `featById`, `updateTotals` (lifetime `runs`, `kills`, `cleared`, `banked` and a
+  never-decreasing `deepest`, keeping every other totals key and never mutating
+  its input), `evaluateFeats` (new ids in list order, unknown earned ids
+  ignored) and `featProgress`; `lib/GameState.ts` settles each finished run once
+  (`updateTotals` then `evaluateFeats` on the totals as they just became, new ids
+  appended to `save.feats`, one write), prints a `New feat` row per earned name
+  in the summary (`summaryLines` gained the `feats` input), exposes the earned
+  ids in the snapshot and opens the new `feats` screen from the title
+  (`game/screens.ts`, back to the title); `game/menu.ts` appends the
+  `Feats (have/of)` entry and `components/Feats.tsx` lists every feat with its
+  name, text and the word "Earned" or "Locked" (a word, not a colour); covered
+  by `game/feats.test.ts` (uniqueness, the 80-character texts, each feat's
+  boundary numbers, totals purity and kept keys, unknown-id tolerance) plus the
+  new tally, screen and menu cases.
+
 - Made the keys remappable: `game/keys.ts` gained `KeyMap = Record<Action, string[]>`
   (at most two codes per action), `rebind(keys, action, slot, code)` (a pure swap:
   a code held by another action trades places with the slot's old code, an empty

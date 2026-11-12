@@ -16,7 +16,7 @@ import { fightCost } from "./combat";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "./score";
 import type { DeathCause, GameEvent, ItemType, PickupType } from "./events";
 import { TOOL_INFO, TOOL_IDS, isToolType, type ToolId } from "./tools";
-import { MODES, type ModeRules } from "./modes";
+import { MODES, type ModeId, type ModeRules } from "./modes";
 import {
     addGear,
     countGear,
@@ -82,11 +82,30 @@ export interface Tally {
     cleared: number;
     /** Total energy paid to enemies in fights. */
     lostToFights: number;
+    /**
+     * The lowest energy seen on arriving at an exit, or null when the run never
+     * reached one (the feats read it as the photo-finish number).
+     */
+    minExitEnergy: number | null;
+    /** Wardens (game/enemies.ts) defeated this run. */
+    wardens: number;
+    /** Successful uses per tool id (game/tools.ts); always a full record. */
+    toolsUsed: Record<ToolId, number>;
+    /** Levels cleared while a Blackout (game/modifiers.ts) was on. */
+    darkCleared: number;
+    /** Pieces of gear banked at exits this run. */
+    banked: number;
+    /** Which of the four ways to play this run was. */
+    mode: ModeId;
 }
 
-/** A fresh tally: nothing done yet, standing on level 1. */
-function freshTally(): Tally {
-    return { moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0 };
+/** A fresh tally for a mode: nothing done yet, standing on level 1. */
+function freshTally(mode: ModeId): Tally {
+    return {
+        moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0,
+        minExitEnergy: null, wardens: 0, toolsUsed: { anchor: 0, twist: 0, cut: 0 },
+        darkCleared: 0, banked: 0, mode,
+    };
 }
 
 export interface RunOptions {
@@ -114,7 +133,7 @@ export class Run {
     level = 1;
     score = 0;
     /** What this run did, kept through death and reset by start(). */
-    tally: Tally = freshTally();
+    tally: Tally = freshTally(MODES.descent.id);
     energy: number;
     /**
      * Gear kept for good: raised at every exit (game/gear.ts), kept through
@@ -179,6 +198,7 @@ export class Run {
     constructor(options: RunOptions) {
         const { seed, gear, mode = MODES.descent } = options;
         this.mode = mode;
+        this.tally = freshTally(mode.id);
         this.rng = createRng(seed);
         this.modifiersEnabled = options.modifiers !== false;
         this.shiftsOverride = Number.isFinite(options.shiftsOverride ?? Number.NaN)
@@ -212,7 +232,7 @@ export class Run {
         this.carried = noGear();
         this.level = 1;
         this.score = 0;
-        this.tally = freshTally();
+        this.tally = freshTally(this.mode.id);
         this.tools = { anchor: 0, twist: 0, cut: 0 };
         this.anchored = 0;
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
@@ -276,6 +296,7 @@ export class Run {
             this.enemies.splice(enemyIndex, 1);
             this.score += KILL_SCORE;
             this.tally.kills += 1;
+            if (enemy.kind === "warden") this.tally.wardens += 1;
             this.tally.lostToFights += cost;
             fought = true;
             this.push({ type: "fight", cost, kind: enemy.kind, x: enemy.x, y: enemy.y });
@@ -290,6 +311,12 @@ export class Run {
         }
 
         if (this.player.x === this.exit.x && this.player.y === this.exit.y) {
+            // The feats read the arrival: the energy on reaching the exit, the
+            // twist the cleared level carried, and what the exit banked.
+            this.tally.minExitEnergy = this.tally.minExitEnergy === null
+                ? this.energy
+                : Math.min(this.tally.minExitEnergy, this.energy);
+            if (this.modifier === "blackout") this.tally.darkCleared += 1;
             const gained = levelScore({ level: this.level, energyLeft: this.energy });
             this.score += gained;
             this.tally.cleared += 1;
@@ -298,6 +325,7 @@ export class Run {
             // The exit keeps what the level carried: it joins the bank for good.
             // A no-gear mode banks nothing: there was never anything to keep.
             const count = this.mode.gear ? countGear(this.carried) : 0;
+            this.tally.banked += count;
             if (count > 0) {
                 this.banked = addGear(this.banked, this.carried);
                 this.push({ type: "banked", count });
@@ -419,6 +447,7 @@ export class Run {
             if (nx < 0 || nx >= this.maze.width || ny < 0 || ny >= this.maze.height) return false;
             if (this.maze.canMove(this.player.x, this.player.y, delta.x, delta.y)) return false;
             this.tools[id] -= 1;
+            this.tally.toolsUsed[id] += 1;
             this.maze.reroot(this.player.x, this.player.y);
             this.maze.step(dir);
             this.rollForecast();
@@ -426,6 +455,7 @@ export class Run {
             return true;
         }
         this.tools[id] -= 1;
+        this.tally.toolsUsed[id] += 1;
         this.push({ type: "tool", id });
         if (id === "anchor") this.anchored = CONFIG.anchorMoves;
         this.rollForecast();
@@ -531,6 +561,7 @@ export class Run {
         if (index !== -1) this.enemies.splice(index, 1);
         this.score += KILL_SCORE;
         this.tally.kills += 1;
+        if (enemy.kind === "warden") this.tally.wardens += 1;
         this.tally.lostToFights += cost;
         this.push({ type: "fight", cost, kind: enemy.kind, x: enemy.x, y: enemy.y, by: "stalker" });
         if (this.energy <= 0) this.die("fight");

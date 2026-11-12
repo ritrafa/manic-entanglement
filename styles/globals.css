@@ -1224,7 +1224,8 @@ body {
 [data-contrast="true"] .stat,
 [data-contrast="true"] .wallet-actions,
 [data-contrast="true"] .game-over-message,
-[data-contrast="true"] .settings-panel {
+[data-contrast="true"] .settings-panel,
+[data-contrast="true"] .feats-panel {
   background-color: #000000;
   color: #ffffff;
 }
@@ -1315,6 +1316,84 @@ body {
 }
 .settings-panel .overlay-buttons button:hover,
 .settings-panel .overlay-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+/* The feats screen (components/Feats.tsx): a panel in the same family as the
+   settings sheet, one row per feat with its name, its line and the word
+   "Earned" or "Locked" — the state reads by word, the gold only repeats it. */
+.feats-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  background-color: rgba(8, 10, 16, 0.94);
+  color: white;
+  text-align: center;
+  z-index: 3;
+  overflow-y: auto;
+  padding: 16px;
+  font-size: calc(1em * var(--ui-scale, 1));
+}
+.feats-panel p {
+  margin: 0;
+}
+.feats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(320px, 84%);
+  max-width: 84%;
+  text-align: left;
+}
+.feats-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: calc(15px * var(--ui-scale, 1));
+}
+.feats-row.earned {
+  border-color: rgba(255, 215, 0, 0.7);
+}
+.feats-name {
+  min-width: 8em;
+  font-weight: 700;
+}
+.feats-text {
+  flex: 1;
+  opacity: 0.85;
+}
+.feats-state {
+  min-width: 4.5em;
+  text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: calc(12px * var(--ui-scale, 1));
+}
+.feats-row.earned .feats-state {
+  color: #ffd700;
+}
+.feats-panel .overlay-buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.feats-panel .overlay-buttons button:hover,
+.feats-panel .overlay-buttons button:focus-visible {
   background-color: rgba(255, 255, 255, 0.25);
   outline: 2px solid rgba(255, 255, 255, 0.7);
 }

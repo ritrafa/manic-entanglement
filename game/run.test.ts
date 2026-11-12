@@ -645,6 +645,8 @@ describe("Score and tally", () => {
     expect(run.score).toBe(0);
     expect(run.tally).toEqual({
       moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0,
+      minExitEnergy: null, wardens: 0, toolsUsed: { anchor: 0, twist: 0, cut: 0 },
+      darkCleared: 0, banked: 0, mode: "descent",
     });
   });
 
@@ -1475,5 +1477,73 @@ describe("Run modifiers", () => {
     }
     expect(taken.size).toBeLessThanOrEqual(5 * 5 - 2);
     expect(spawned.items.length).toBeLessThanOrEqual(plan.items[1]);
+  });
+});
+
+describe("Feats tally fields", () => {
+  it("minExitEnergy is null until an exit, then the lowest energy on arrival", () => {
+    const run = startedRun(1201);
+    expect(run.tally.minExitEnergy).toBeNull();
+    reachClear(run);
+    expect(run.tally.minExitEnergy).toBe(run.energy);
+    const first = run.tally.minExitEnergy as number;
+    run.nextLevel();
+    run.energy = 7; // arrive at the next exit almost empty
+    reachClear(run);
+    expect(run.tally.minExitEnergy).toBe(Math.min(first, 7 - run.stats.consumption * 1));
+  });
+
+  it("beating a Warden raises wardens and kills together", () => {
+    const run = startedRun(1202);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    run.enemies = [enemyAt(1210, run.player.x + step.dx, run.player.y + step.dy, "warden")];
+    run.move(step.dx, step.dy);
+    expect(run.tally.kills).toBe(1);
+    expect(run.tally.wardens).toBe(1);
+  });
+
+  it("toolsUsed counts each successful use per tool, and refuses cost nothing", () => {
+    const run = startedRun(1203);
+    expect(run.tally.toolsUsed).toEqual({ anchor: 0, twist: 0, cut: 0 });
+    expect(run.useTool("anchor")).toBe(false); // no charge: refused, not counted
+    run.tools.anchor = 2;
+    run.tools.twist = 1;
+    expect(run.useTool("anchor")).toBe(true);
+    expect(run.tally.toolsUsed.anchor).toBe(1);
+    expect(run.useTool("twist")).toBe(false); // refused while the Anchor holds
+    expect(run.tally.toolsUsed.twist).toBe(0);
+  });
+
+  it("darkCleared rises only when a Blackout level is cleared", () => {
+    const run = startedRun(1204);
+    reachClear(run);
+    expect(run.tally.darkCleared).toBe(0);
+    run.nextLevel();
+    run.modifier = "blackout";
+    reachClear(run);
+    expect(run.tally.darkCleared).toBe(1);
+  });
+
+  it("banked counts the pieces the exits kept, and stays 0 without gear", () => {
+    const run = startedRun(1205);
+    run.carried = addGear(noGear(), { ...noGear(), boots: 1 });
+    reachClear(run);
+    expect(run.tally.banked).toBe(1);
+    const plain = new Run({ seed: 1206, mode: MODES.sprint });
+    plain.start();
+    plain.carried = addGear(noGear(), { ...noGear(), boots: 1, gloves: 1 });
+    reachClear(plain);
+    expect(plain.tally.banked).toBe(0); // a no-gear mode banks nothing
+  });
+
+  it("the tally carries the run's mode, before and after start", () => {
+    const run = new Run({ seed: 1207, mode: MODES.zen });
+    expect(run.tally.mode).toBe("zen");
+    run.start();
+    expect(run.tally.mode).toBe("zen");
+    const plain = new Run({ seed: 1208 });
+    expect(plain.tally.mode).toBe("descent");
   });
 });

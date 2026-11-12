@@ -12,7 +12,11 @@ import { Run, type Tally } from "@/game/run";
 
 /** A tally with patches on top of a fresh run's numbers. */
 function tallyAt(over: Partial<Tally> = {}): Tally {
-    return { moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0, ...over };
+    return {
+        moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0,
+        minExitEnergy: null, wardens: 0, toolsUsed: { anchor: 0, twist: 0, cut: 0 },
+        darkCleared: 0, banked: 0, mode: "descent", ...over,
+    };
 }
 
 describe("nextScreen", () => {
@@ -188,6 +192,23 @@ describe("nextScreen", () => {
     });
 });
 
+describe("nextScreen: the feats screen", () => {
+    it("the title opens it and back or Esc returns to the title", () => {
+        expect(nextScreen("title", "feats")).toBe("feats");
+        expect(nextScreen("feats", "back")).toBe("title");
+        expect(nextScreen("feats", "pause")).toBe("title");
+    });
+
+    it("nothing else moves it, and other screens do not take the feats action", () => {
+        expect(nextScreen("feats", "hide")).toBe("feats");
+        expect(nextScreen("feats", "confirm")).toBe("feats");
+        expect(nextScreen("feats", "restart")).toBe("feats");
+        expect(nextScreen("playing", "feats")).toBe("playing");
+        expect(nextScreen("paused", "feats")).toBe("paused");
+        expect(nextScreen("over", "feats")).toBe("over");
+    });
+});
+
 describe("summaryLines", () => {
     const base = {
         tally: tallyAt({ ms: 75400, kills: 4, pickups: 9, depth: 3 }),
@@ -343,5 +364,22 @@ describe("formatTenths", () => {
         expect(formatTenths(600_000)).toBe("10:00.0");
         expect(formatTenths(-5)).toBe("0:00.0");
         expect(formatTenths(NaN)).toBe("0:00.0");
+    });
+});
+
+describe("summaryLines: new feat lines", () => {
+    const base = {
+        tally: tallyAt(), score: 300, best: 300, newBest: false, cause: "time" as const,
+    };
+
+    it("adds one New feat row per name, in order, at the end", () => {
+        const lines = summaryLines({ ...base, feats: ["First Exit", "Warden Breaker"] });
+        expect(lines.filter((entry) => entry.label === "New feat").map((entry) => entry.value))
+            .toEqual(["First Exit", "Warden Breaker"]);
+    });
+
+    it("no feats means no New feat rows, and an empty list changes nothing", () => {
+        expect(summaryLines(base).some((entry) => entry.label === "New feat")).toBe(false);
+        expect(sameSummary(summaryLines(base), summaryLines({ ...base, feats: [] }))).toBe(true);
     });
 });

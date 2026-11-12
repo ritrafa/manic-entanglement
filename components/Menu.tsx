@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import GameState, { type GameSnapshot } from '@/lib/GameState';
 import { menuItems, moveFocus } from '@/game/menu';
+import { featProgress } from '@/game/feats';
 import { cycleMode } from '@/game/modes';
 
 interface MenuProps {
@@ -40,7 +41,7 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
  */
 const Menu: React.FC<MenuProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
-    const items = menuItems();
+    const items = menuItems(featProgress(model.feats));
     // One extra slot behind the buttons belongs to the mode row.
     const slots = items.length + 1;
     const modeSlot = items.length;
@@ -125,6 +126,7 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                             onClick={() => {
                                 if (item.id === 'play') gameState.play();
                                 else if (item.id === 'settings') gameState.openSettings();
+                                else if (item.id === 'feats') gameState.openFeats();
                                 else gameState.openHowTo();
                             }}
                         >

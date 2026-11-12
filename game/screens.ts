@@ -7,7 +7,7 @@ import type { Tally } from "./run";
 import { MODES, type ModeId } from "./modes";
 
 /** Everything the shell can show. */
-export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "keys" | "clear" | "over";
+export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "keys" | "clear" | "over" | "feats";
 
 /** Everything that can move the shell between screens. */
 export type ScreenAction =
@@ -38,7 +38,9 @@ export type ScreenAction =
     /** The run died. */
     | "died"
     /** The last level of a limited mode was cleared: the run finished. */
-    | "finished";
+    | "finished"
+    /** The title menu's Feats entry: opens the feats list. */
+    | "feats";
 
 /** One label/value row of the end-of-run summary. */
 export interface SummaryLine {
@@ -81,6 +83,7 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
             if (action === "confirm") return "countdown";
             if (action === "howto") return "howto";
             if (action === "settings") return "settings";
+            if (action === "feats") return "feats";
             return screen;
         case "howto":
             // Back, confirm or Esc closes it: to the countdown when the first
@@ -134,6 +137,17 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
                     return "settings";
                 default:
                     // "hide" (and anything else) keeps the Controls open.
+                    return screen;
+            }
+        case "feats":
+            switch (action) {
+                // Back or Esc closes the list and returns to the title; the
+                // feats screen only ever opens from there.
+                case "back":
+                case "pause":
+                    return "title";
+                default:
+                    // "hide" (and anything else) keeps the list open.
                     return screen;
             }
         case "settings":
@@ -224,13 +238,15 @@ export interface SummaryInput {
     mode?: ModeId;
     /** True when the run finished by clearing its last level rather than dying. */
     finished?: boolean;
+    /** Names of the feats this run earned, in list order; none when left out. */
+    feats?: string[];
 }
 
 /**
  * The end-of-run summary as label/value rows: how the run ended, how deep it
  * got, what it scored against the best, and what it did on the way down.
  */
-export function summaryLines({ tally, score, best, newBest, cause, banked = 0, lost = 0, mode = "descent", finished = false }: SummaryInput): SummaryLine[] {
+export function summaryLines({ tally, score, best, newBest, cause, banked = 0, lost = 0, mode = "descent", finished = false, feats = [] }: SummaryInput): SummaryLine[] {
     const rules = MODES[mode] ?? MODES.descent;
     return [
         { label: "Mode", value: rules.name },
@@ -249,6 +265,8 @@ export function summaryLines({ tally, score, best, newBest, cause, banked = 0, l
         { label: "Pickups", value: String(Math.max(0, Math.round(tally.pickups))) },
         { label: "Gear banked", value: String(Math.max(0, Math.round(banked))) },
         { label: "Gear lost", value: String(Math.max(0, Math.round(lost))) },
+        // One line per feat the run just earned, name last so it reads out loud.
+        ...(Array.isArray(feats) ? feats.map((name) => ({ label: "New feat", value: name })) : []),
     ];
 }
 
