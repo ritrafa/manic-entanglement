@@ -6,7 +6,8 @@
 import type { Rng } from "./rng";
 import type { ItemType } from "./events";
 import { toolsFor, type ToolId } from "./tools";
-import { enemyFor, type EnemyKind } from "./enemies";
+import { ENEMY_KINDS, enemyFor, type EnemyKind } from "./enemies";
+import { CONFIG } from "./config";
 
 /** The six pickup kinds. */
 export const ITEM_TYPES: readonly ItemType[] = ["energy", "boots", "gloves", "shield", "speed", "backpack"];
@@ -150,6 +151,47 @@ export function spawnLevel(
         } else {
             const [swap] = left.splice(swapIndex, 1);
             enemies.push({ x: swap.x, y: swap.y, kind });
+        }
+    }
+
+    // Stalkers (game/enemies.ts, game/run.ts): from the stalker's depth one of the
+    // level's enemies hunts the player, from CONFIG.stalkerPairDepth two. A stalker
+    // replaces an enemy, never adds to the count, and prefers a wisp. It must start
+    // at least CONFIG.stalkerMinDist (|dx| + |dy|) from the start: an enemy dealt a
+    // nearer cell is moved to a free farther one, and when no such cell is free it
+    // becomes a wisp instead. No rng is drawn here, so the items' placement is
+    // untouched by the stalkers.
+    const stalkerWant = depth >= CONFIG.stalkerPairDepth
+        ? 2
+        : depth >= ENEMY_KINDS.stalker.fromDepth
+            ? 1
+            : 0;
+    if (stalkerWant > 0) {
+        const farEnough = (cell: { x: number; y: number }): boolean =>
+            Math.abs(cell.x - start.x) + Math.abs(cell.y - start.y) >= CONFIG.stalkerMinDist;
+        const candidates = [
+            ...enemies.filter((enemy) => enemy.kind === "wisp"),
+            ...enemies.filter((enemy) => enemy.kind !== "wisp"),
+        ];
+        let made = 0;
+        for (const enemy of candidates) {
+            if (made >= stalkerWant) break;
+            if (enemy.kind === "stalker") continue;
+            if (farEnough(enemy)) {
+                enemy.kind = "stalker";
+                made += 1;
+                continue;
+            }
+            const swapIndex = left.findIndex(farEnough);
+            if (swapIndex !== -1) {
+                const [cell] = left.splice(swapIndex, 1);
+                enemy.x = cell.x;
+                enemy.y = cell.y;
+                enemy.kind = "stalker";
+                made += 1;
+            } else if (enemy.kind !== "wisp") {
+                enemy.kind = "wisp";
+            }
         }
     }
 

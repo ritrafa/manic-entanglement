@@ -468,6 +468,21 @@ export class Board {
             element.style.height = `${this.cell}px`;
             marks.push(element);
         }
+        // A stalker's intent (game/run.ts): a small chevron on the cell it means
+        // to step to, pointing from the stalker toward that cell.
+        for (const enemy of run.enemies) {
+            if (enemy.kind !== 'stalker' || enemy.intent === null) continue;
+            const dx = enemy.intent.x - enemy.x;
+            const dy = enemy.intent.y - enemy.y;
+            const dir = dx === 1 ? 'e' : dx === -1 ? 'w' : dy === 1 ? 's' : 'n';
+            const element = document.createElement('div');
+            element.className = `mark mark-intent mark-intent-${dir}`;
+            element.style.left = `${(2 * enemy.intent.x + 1) * this.cell}px`;
+            element.style.top = `${(2 * enemy.intent.y + 1) * this.cell}px`;
+            element.style.width = `${this.cell}px`;
+            element.style.height = `${this.cell}px`;
+            marks.push(element);
+        }
         this.marksLayer.replaceChildren(...marks);
     }
 }

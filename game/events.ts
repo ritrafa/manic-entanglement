@@ -17,7 +17,10 @@ export type GameEvent =
     | { type: "blocked"; dx: number; dy: number }
     | { type: "pickup"; item: PickupType; text: string; x: number; y: number }
     | { type: "tool"; id: ToolId; dx?: number; dy?: number }
-    | { type: "fight"; cost: number; kind: EnemyKind; x: number; y: number }
+    /** `by: "stalker"` when a stalker stepped onto the player; absent when the player walked into it. */
+    | { type: "fight"; cost: number; kind: EnemyKind; x: number; y: number; by?: "stalker" }
+    /** A stalker (game/enemies.ts, game/run.ts) took its step to this cell. */
+    | { type: "stalker"; id: number; x: number; y: number }
     | { type: "levelClear"; level: number; gained: number }
     /** Carried gear became permanent at the exit: `count` pieces joined the bank. */
     | { type: "banked"; count: number }

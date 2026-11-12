@@ -222,3 +222,35 @@
   cases in `game/run.test.ts` and `game/screens.test.ts` cover the rules, the
   bot's five-level Sprint, the gearless runs, the daily determinism and the
   summaries.
+
+- Added the Stalker, the enemy that hunts the player down: `game/config.ts`
+  gained `enemyKinds.stalker` (hp 3, power 6, `fromDepth: 4`, the wisp's toll
+  and no drops) plus `stalkerEvery: 2`, `stalkerMinDist: 4` and
+  `stalkerPairDepth: 8`; `game/enemies.ts` knows the fourth kind
+  (`ENEMY_KINDS`, `ENEMY_KIND_LIST`) while `enemyFor` still draws only wisp,
+  brute and warden; `game/spawn.ts` assigns the kind itself — one stalker from
+  depth 4, two from depth 8, replacing enemies rather than adding to the
+  count, preferring wisps, always keeping at least `stalkerMinDist`
+  (|dx| + |dy|) from the start by moving to a free farther cell, and falling
+  back to a wisp when none is free, all without drawing the rng; `game/run.ts`
+  counts the successful moves of each level and, every `stalkerEvery`-th one
+  once that move's pickups, fights and maze shift are done, lets each stalker
+  take one step along `routeCells` toward the player as the maze stands then —
+  it waits instead of stepping onto the exit or another enemy's cell, and
+  waits when no route exists; a step onto the player pays the toll at once (a
+  `fight` event with `by: "stalker"`, death cause `fight` when the energy
+  cannot cover it) and every stalker move emits a `stalker { id, x, y }`
+  event (new in `game/events.ts`); each stalker also carries `enemy.intent`,
+  the neighbour it means to step to next, recomputed from the current maze
+  after every successful player move and null when no route exists, and
+  stalkers keep walking while an Anchor holds the maze still;
+  `RunOptions.shiftsOverride` lets tests pin the shifts per move;
+  `lib/board.ts` draws the intent as a `.mark-intent` chevron pointing from
+  the stalker toward that cell and `styles/globals.css` gives the stalker a
+  red pointed marker and a faster bob on the one enemy GIF, with a quiet low
+  note for `stalker` events in `game/audio/sfx.ts`; `lib/GameState.ts` floats
+  "Something is following you" at the start of the first stalker level; new
+  `game/stalker.test.ts` covers the depth rules, the every-second-move walk,
+  the wall/board/exit/shared-cell invariants over 20 seeded shifting runs,
+  the intent, both fight directions and determinism, and the
+  `game/forecast.test.ts` baseline was re-captured for the new events.

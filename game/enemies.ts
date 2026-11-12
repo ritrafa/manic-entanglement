@@ -1,4 +1,4 @@
-// The three enemy kinds: their numbers, the depth each first appears at and the
+// The four enemy kinds: their numbers, the depth each first appears at and the
 // seeded draw enemyFor. Pure data and one seeded choice: no DOM, no clocks, no
 // global randomness. The energy a fight really costs is fightCost(stats, enemy) in
 // game/combat.ts; the baseCost below is what that formula gives at the default
@@ -6,7 +6,7 @@
 import { CONFIG } from "./config";
 import type { Rng } from "./rng";
 
-export type EnemyKind = "wisp" | "brute" | "warden";
+export type EnemyKind = "wisp" | "brute" | "warden" | "stalker";
 
 export interface EnemyDef {
     /** Hit points on the enemy's side of the cost formula. */
@@ -26,10 +26,11 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyDef> = {
     wisp: { ...CONFIG.enemyKinds.wisp },
     brute: { ...CONFIG.enemyKinds.brute },
     warden: { ...CONFIG.enemyKinds.warden },
+    stalker: { ...CONFIG.enemyKinds.stalker },
 };
 
 /** The kinds in table order. */
-export const ENEMY_KIND_LIST: readonly EnemyKind[] = ["wisp", "brute", "warden"];
+export const ENEMY_KIND_LIST: readonly EnemyKind[] = ["wisp", "brute", "warden", "stalker"];
 
 /** The kinds that are not the cheap one: these pay gear and stay off the opening route. */
 export function isHeavy(kind: EnemyKind): boolean {
@@ -37,7 +38,9 @@ export function isHeavy(kind: EnemyKind): boolean {
 }
 
 /**
- * The kind of one enemy at this depth, drawn from the rng:
+ * The kind of one enemy at this depth, drawn from the rng. The stalker is never
+ * drawn here: the spawner assigns that kind to one or two of the level's enemies
+ * (game/spawn.ts), so this draw stays the wisp / brute / warden table.
  * below brute.fromDepth always "wisp"; between brute.fromDepth and warden.fromDepth
  * 70% wisp / 30% brute; from warden.fromDepth 50% wisp / 35% brute / 15% warden.
  * A depth below 1 (or not a number) counts as 1. Only depths that can draw more

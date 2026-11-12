@@ -4,7 +4,7 @@ import { CONFIG } from "@/game/config";
 import { levelPlan } from "@/game/plan";
 import type { GameEvent, ItemType } from "@/game/events";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "@/game/score";
-import { ENEMY_KINDS, type EnemyKind } from "@/game/enemies";
+import { ENEMY_KINDS, isHeavy, type EnemyKind } from "@/game/enemies";
 import { fightCost } from "@/game/combat";
 import { GEAR_TYPES } from "@/game/spawn";
 import { playBot, routeCells } from "@/game/bot";
@@ -56,7 +56,7 @@ function eventsOf(run: Run, type: string): GameEvent[] {
 
 /** A standing enemy of the given kind, with the numbers its kind carries. */
 function enemyAt(id: number, x: number, y: number, kind: EnemyKind = "wisp") {
-  return { id, x, y, kind, hp: ENEMY_KINDS[kind].hp, power: ENEMY_KINDS[kind].power };
+  return { id, x, y, kind, hp: ENEMY_KINDS[kind].hp, power: ENEMY_KINDS[kind].power, intent: null };
 }
 
 /** The stats a gear pickup of this type must leave, given the levels held before it. */
@@ -759,7 +759,7 @@ describe("Enemy kinds and tolls", () => {
         if (level >= 3) {
           const route = routeCells(run.maze, { x: run.player.x, y: run.player.y }, run.exit) ?? [];
           for (const enemy of run.enemies) {
-            if (enemy.kind === "wisp") continue;
+            if (!isHeavy(enemy.kind)) continue; // only the heavy kinds stay off the route
             const onRoute = route.some((cell) => cell.x === enemy.x && cell.y === enemy.y);
             expect(onRoute, `seed ${seed} level ${level}: ${enemy.kind} on the route`).toBe(false);
           }

@@ -14,6 +14,8 @@ const EVERY_EVENT: GameEvent[] = [
     { type: "blocked", dx: 0, dy: 1 },
     { type: "pickup", item: "energy", text: "+25 Energy", x: 2, y: 5 },
     { type: "fight", cost: 12, kind: "wisp", x: 6, y: 1 },
+    { type: "fight", cost: 15, kind: "stalker", x: 6, y: 1, by: "stalker" },
+    { type: "stalker", id: 4, x: 3, y: 3 },
     { type: "levelClear", level: 2, gained: 137 },
     { type: "dead", cause: "time", score: 42, level: 2 , lost: 0 },
 ];

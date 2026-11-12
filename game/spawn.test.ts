@@ -3,7 +3,7 @@ import { createRng } from "@/game/rng";
 import { ITEM_TYPES, GEAR_TYPES, spawnLevel, startCell, exitCell } from "@/game/spawn";
 import { Maze } from "@/game/maze";
 import { routeCells } from "@/game/bot";
-import { ENEMY_KINDS } from "@/game/enemies";
+import { ENEMY_KINDS, isHeavy } from "@/game/enemies";
 
 const SEEDS = Array.from({ length: 200 }, (_, i) => i * 7919 + 13);
 const SIZES = [3, 5, 9];
@@ -185,7 +185,9 @@ describe("spawnLevel enemy kinds", () => {
         const route = routeCells(maze, startCell(size), exitCell(size)) ?? [];
         const spawned = spawnLevel(rng, size, { items: 4, enemies: 5 }, 0.4, { depth, route });
         for (const enemy of spawned.enemies) {
-          if (enemy.kind === "wisp") continue;
+          // Only the heavy kinds stay off the route; the wisp and the stalker (which
+          // replaces wisps and drops nothing, game/enemies.ts) may stand on it.
+          if (!isHeavy(enemy.kind)) continue;
           heaviesSeen += 1;
           expect(onRouteOf(route, enemy), `depth ${depth} seed ${seed}: ${enemy.kind} on the route`).toBe(false);
           // The usual rules still hold for a moved enemy.

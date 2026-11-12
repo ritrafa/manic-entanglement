@@ -12,6 +12,7 @@ describe("ENEMY_KINDS", () => {
     expect(ENEMY_KINDS.wisp).toEqual({ hp: 3, power: 6, fromDepth: 1, drops: 0, baseCost: 15 });
     expect(ENEMY_KINDS.brute).toEqual({ hp: 6, power: 6, fromDepth: 3, drops: 1, baseCost: 30 });
     expect(ENEMY_KINDS.warden).toEqual({ hp: 9, power: 7, fromDepth: 6, drops: 2, baseCost: 54 });
+    expect(ENEMY_KINDS.stalker).toEqual({ hp: 3, power: 6, fromDepth: 4, drops: 0, baseCost: 15 });
   });
 
   it("the base cost is what fightCost gives at the default stats", () => {
@@ -22,6 +23,7 @@ describe("ENEMY_KINDS", () => {
 
   it("only the two heavy kinds are heavy", () => {
     expect(isHeavy("wisp")).toBe(false);
+    expect(isHeavy("stalker")).toBe(false);
     expect(isHeavy("brute")).toBe(true);
     expect(isHeavy("warden")).toBe(true);
   });
@@ -51,13 +53,19 @@ describe("enemyFor", () => {
     expect(seen).toEqual(new Set(["wisp", "brute"]));
   });
 
-  it("depth 8 draws all three kinds within 10 points of the table", () => {
+  it("depth 8 draws the three table kinds within 10 points and never the stalker", () => {
+    const drawn = ["wisp", "brute", "warden"] as const;
+    type DrawnKind = (typeof drawn)[number];
     const rng = createRng(9);
     const draws = 3000;
-    const counts: Record<EnemyKind, number> = { wisp: 0, brute: 0, warden: 0 };
-    for (let i = 0; i < draws; i++) counts[enemyFor(8, rng)] += 1;
-    const table: Record<EnemyKind, number> = { wisp: 0.5, brute: 0.35, warden: 0.15 };
-    for (const kind of ENEMY_KIND_LIST) {
+    const counts: Record<DrawnKind, number> = { wisp: 0, brute: 0, warden: 0 };
+    for (let i = 0; i < draws; i++) {
+      const kind = enemyFor(8, rng);
+      expect(kind, "enemyFor never draws the stalker").not.toBe("stalker");
+      counts[kind as DrawnKind] += 1;
+    }
+    const table: Record<DrawnKind, number> = { wisp: 0.5, brute: 0.35, warden: 0.15 };
+    for (const kind of drawn) {
       expect(counts[kind], `${kind} never appeared`).toBeGreaterThan(0);
       const share = counts[kind] / draws;
       expect(Math.abs(share - table[kind]), `${kind} share ${share}`).toBeLessThan(0.1);

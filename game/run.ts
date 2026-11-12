@@ -52,6 +52,15 @@ export interface RunEnemy {
     hp: number;
     /** Power for the cost formula: the kind's number at spawn. */
     power: number;
+    /**
+     * A stalker's hint (game/enemies.ts, game/run.ts): the cell it would step to
+     * next, the first step of the shortest route to the player through the maze as
+     * it stood after the last player move. Null when there is no route, and always
+     * a neighbour of the stalker otherwise. The shift before the actual step may
+     * still change the route, so it is a hint, not a promise. Always null for the
+     * other kinds.
+     */
+    intent: { x: number; y: number } | null;
 }
 
 /** What happened during one run, for the summary screen and later for feats. */
@@ -85,6 +94,12 @@ export interface RunOptions {
     gear?: GearLevels;
     /** Which of the four ways to play (game/modes.ts); Descent when left out. */
     mode?: ModeRules;
+    /**
+     * Overrides the plan's shifts per move (game/plan.ts) for the whole run;
+     * 0 keeps the maze still. Tests use it to watch the stalkers without the
+     * shift; leaving it out takes each level's planned number.
+     */
+    shiftsOverride?: number;
 }
 
 export class Run {
@@ -135,10 +150,18 @@ export class Run {
     private events: GameEvent[] = [];
     private nextId = 1;
     private pendingMs = 0;
+    /** Successful moves since this level started; a stalker steps every CONFIG.stalkerEvery of them. */
+    private movesOnLevel = 0;
+    /** The RunOptions.shiftsOverride in force, or null when the plan decides the shifts. */
+    private shiftsOverride: number | null;
 
-    constructor({ seed, gear, mode = MODES.descent }: RunOptions) {
+    constructor(options: RunOptions) {
+        const { seed, gear, mode = MODES.descent } = options;
         this.mode = mode;
         this.rng = createRng(seed);
+        this.shiftsOverride = Number.isFinite(options.shiftsOverride ?? Number.NaN)
+            ? Math.max(0, Math.floor(options.shiftsOverride as number))
+            : null;
         // A no-gear mode keeps the bank out of the run entirely: base stats for
         // the whole run, and gear pickups give energy instead (applyItem).
         this.banked = mode.gear ? sanitizeGear(gear) : noGear();
@@ -274,6 +297,16 @@ export class Run {
 
         if (this.energy <= 0) {
             this.die(fought ? "fight" : "move");
+        }
+        if (this.phase === "playing") {
+            // Stalkers (game/enemies.ts): the pickups, fights and the maze shift
+            // of this move are done, so every CONFIG.stalkerEvery-th successful
+            // move of the level lets each stalker step once toward the player.
+            // Their intent is a hint recomputed from the maze as it is now, after
+            // every successful move; the Anchor does not stop them.
+            this.movesOnLevel += 1;
+            if (this.movesOnLevel % CONFIG.stalkerEvery === 0) this.stepStalkers();
+            this.refreshIntents();
         }
         if (this.phase === "playing") {
             // A successful move spends one anchored move; when the last one is
@@ -437,6 +470,69 @@ export class Run {
         return `+1 ${TOOL_INFO[id].name}`;
     }
 
+    /**
+     * One step for every stalker of the level, in list order: the first step of
+     * the shortest route to the player through the maze as it is at this moment.
+     * A stalker whose first step is the exit or another enemy's cell waits, and so
+     * does one with no route. A step onto the player's cell fights at once, as if
+     * the player had stepped onto the stalker.
+     */
+    private stepStalkers(): void {
+        for (const enemy of [...this.enemies]) {
+            if (this.phase !== "playing") return;
+            if (enemy.kind !== "stalker") continue;
+            const path = routeCells(
+                this.maze,
+                { x: enemy.x, y: enemy.y },
+                { x: this.player.x, y: this.player.y },
+            );
+            if (path === null || path.length < 2) continue; // no route: it waits
+            const next = path[1];
+            if (next.x === this.exit.x && next.y === this.exit.y) continue; // the exit stays free
+            if (this.enemies.some((other) => other !== enemy && other.x === next.x && other.y === next.y)) {
+                continue; // another enemy holds the cell: it waits
+            }
+            enemy.x = next.x;
+            enemy.y = next.y;
+            this.push({ type: "stalker", id: enemy.id, x: enemy.x, y: enemy.y });
+            if (enemy.x === this.player.x && enemy.y === this.player.y) this.fightStalker(enemy);
+        }
+    }
+
+    /** The fight when a stalker steps onto the player: the same toll as stepping onto it. */
+    private fightStalker(enemy: RunEnemy): void {
+        const cost = this.tollOf(enemy);
+        this.energy -= cost;
+        const index = this.enemies.indexOf(enemy);
+        if (index !== -1) this.enemies.splice(index, 1);
+        this.score += KILL_SCORE;
+        this.tally.kills += 1;
+        this.tally.lostToFights += cost;
+        this.push({ type: "fight", cost, kind: enemy.kind, x: enemy.x, y: enemy.y, by: "stalker" });
+        if (this.energy <= 0) this.die("fight");
+    }
+
+    /**
+     * Recompute every enemy's intent from the maze as it is now: the first step of
+     * the shortest route to the player for a stalker, null when there is no route
+     * (and always a neighbour of the stalker otherwise). The other kinds carry no
+     * intent. Called after each successful player move, once its shift is applied.
+     */
+    private refreshIntents(): void {
+        for (const enemy of this.enemies) {
+            if (enemy.kind !== "stalker") {
+                enemy.intent = null;
+                continue;
+            }
+            const path = routeCells(
+                this.maze,
+                { x: enemy.x, y: enemy.y },
+                { x: this.player.x, y: this.player.y },
+            );
+            enemy.intent = path !== null && path.length >= 2 ? { x: path[1].x, y: path[1].y } : null;
+        }
+    }
+
     /** Build the maze, start, exit, pickups and enemies for the current level from its plan. */
     private buildLevel(): void {
         const plan = levelPlan(this.level);
@@ -461,7 +557,11 @@ export class Run {
             ...enemy,
             hp: ENEMY_KINDS[enemy.kind].hp,
             power: ENEMY_KINDS[enemy.kind].power,
+            intent: null,
         }));
+        // The stalker step counts the successful moves made on this level.
+        this.movesOnLevel = 0;
+        this.refreshIntents();
     }
 
     /**
@@ -476,7 +576,8 @@ export class Run {
             this.forecast = { walk: [], opens: [], closes: [] };
             return;
         }
-        this.forecastDirs = rollWalk(this.maze, this.rng, levelPlan(this.level).shifts);
+        const shifts = this.shiftsOverride ?? levelPlan(this.level).shifts;
+        this.forecastDirs = rollWalk(this.maze, this.rng, shifts);
         this.forecast = forecastOf(this.maze, this.forecastDirs);
     }
 }

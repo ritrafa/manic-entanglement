@@ -354,7 +354,7 @@ body {
   background-size: cover;
 }
 
-/* The three kinds share the one GIF and differ by shape only: the heavy ones
+/* The kinds share the one GIF and differ by shape only: the heavy ones
    carry rings and are drawn larger. `scale` (not `transform`) grows the sprite
    so the position transform from lib/board.ts stays untouched. */
 .enemy-wisp {
@@ -371,6 +371,43 @@ body {
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.85),
     0 0 0 5px rgba(255, 200, 60, 0.85);
+}
+
+/* The stalker (game/enemies.ts) is the same GIF with a distinct shape cue:
+   a pointed red marker above it (over the toll badge) and a faster bob, so
+   the one that follows you reads at a glance. `translate` bobs the sprite so
+   the position transform from lib/board.ts stays untouched. */
+.enemy-stalker {
+  animation: stalker-bob 0.5s ease-in-out infinite;
+}
+
+.enemy-stalker::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 13px);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 7px solid #ff3b30;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
+  pointer-events: none;
+}
+
+@keyframes stalker-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -2px;
+  }
+}
+
+[data-motion="reduced"] .enemy-stalker {
+  animation: none;
 }
 
 /* The toll badge: the energy this enemy costs right now, floating above it and
@@ -530,6 +567,45 @@ body {
     rgba(255, 255, 255, 0) 2px,
     rgba(255, 255, 255, 0) 6px
   );
+}
+
+/* The stalker's intent (game/run.ts, lib/board.ts): a small chevron on the
+   cell it means to step to next, pointing from the stalker toward that cell.
+   The direction classes turn the corner of a square into the arrow head. */
+.mark-intent::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -5px 0 0 -3px;
+  border-top: 2px solid rgba(255, 59, 48, 0.95);
+  border-right: 2px solid rgba(255, 59, 48, 0.95);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
+}
+
+.mark-intent-n::after {
+  transform: rotate(-45deg);
+}
+
+.mark-intent-e::after {
+  transform: rotate(45deg);
+}
+
+.mark-intent-s::after {
+  transform: rotate(135deg);
+}
+
+.mark-intent-w::after {
+  transform: rotate(225deg);
+}
+
+[data-contrast="true"] .mark-intent::after {
+  border-top-color: #ffffff;
+  border-right-color: #ffffff;
+  width: 10px;
+  height: 10px;
 }
 
 .message{

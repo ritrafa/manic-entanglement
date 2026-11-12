@@ -106,6 +106,9 @@ export function sfxFor(event: GameEvent, ctx: SfxContext): Voice[] {
                 dur: 0.07,
                 gain: 0.22,
             }));
+        case "stalker":
+            // A quiet low note: something took a step closer.
+            return [{ wave: "sine", freq: 98, at: 0, dur: 0.18, gain: 0.08 }];
         case "levelStart":
             // One soft low note under the new maze.
             return [{ wave: "sine", freq: 110, at: 0, dur: 0.3, gain: 0.12 }];

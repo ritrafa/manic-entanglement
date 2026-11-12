@@ -6,6 +6,7 @@ import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
 import { CONFIG, FX } from '@/game/config';
+import { ENEMY_KINDS } from '@/game/enemies';
 import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
@@ -1069,6 +1070,11 @@ class GameState {
                     this.sizeBoard(event.size);
                     this.board.setLevel(this.run, this.cellSize);
                     this.refreshSprite();
+                    // The level the stalkers join (game/enemies.ts): the maze
+                    // says so once, in its own words.
+                    if (event.level === ENEMY_KINDS.stalker.fromDepth) {
+                        this.board.float('Something is following you', this.run.player.x, this.run.player.y);
+                    }
                     break;
                 case 'dead':
                     this.stopClock();
