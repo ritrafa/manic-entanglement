@@ -49,6 +49,7 @@ const Page: React.FC = () => {
 
         return () => {
             window.removeEventListener('keydown', handleKeyPress);
+            newGameState.dispose();
         };
     }, []);
 

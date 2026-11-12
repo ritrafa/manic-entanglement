@@ -3,6 +3,7 @@ import { Run } from '@/game/run';
 import type { GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
+import { clampDt } from '@/game/clock';
 
 const SPRITE_FRAME_MS = 150;
 const CLOCK_TICK_MS = 50;
@@ -26,7 +27,16 @@ class GameState {
     private spriteInterval: ReturnType<typeof setInterval> | null = null;
     private clockInterval: ReturnType<typeof setInterval> | null = null;
     private lastTickAt: number = 0;
-    private starting: boolean = false;
+    private countdownTimers: ReturnType<typeof setTimeout>[] = [];
+    private countdownElement: HTMLParagraphElement | null = null;
+    private timers: Set<ReturnType<typeof setTimeout>> = new Set();
+    private listeners: { target: EventTarget; type: string; handler: EventListenerOrEventListenerObject }[] = [];
+    private disposed: boolean = false;
+
+    /** Returning from a throttled tab: re-anchor the clock at now, never bank the sleep. */
+    private handleVisibilityChange = (): void => {
+        if (!document.hidden) this.lastTickAt = Date.now();
+    };
 
     constructor() {
         this.player = new Player();
@@ -55,11 +65,47 @@ class GameState {
         this.look = this.lookFromPlayer();
         this.preloadLook();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
+        this.addShellListener(document, 'visibilitychange', this.handleVisibilityChange);
     }
 
-    /** True while the run accepts steps: the page uses it for the tap-to-start gesture. */
+    /** Schedule a shell callback that dispose() can still cancel and that never runs after it. */
+    private later(fn: () => void, ms: number): void {
+        const id = setTimeout(() => {
+            this.timers.delete(id);
+            if (this.disposed) return;
+            fn();
+        }, ms);
+        this.timers.add(id);
+    }
+
+    /** Add a listener the shell owns, so dispose() can remove it again. */
+    private addShellListener(target: EventTarget, type: string, handler: EventListenerOrEventListenerObject): void {
+        target.addEventListener(type, handler);
+        this.listeners.push({ target, type, handler });
+    }
+
+    /** Release everything the shell scheduled or listened to; safe to call twice. */
+    dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.stopClock();
+        if (this.spriteInterval !== null) {
+            clearInterval(this.spriteInterval);
+            this.spriteInterval = null;
+        }
+        this.cancelCountdown();
+        this.timers.forEach((id) => clearTimeout(id));
+        this.timers.clear();
+        [this.sound, this.lost, this.levelup, this.countdown, this.pickupSound, this.fightSound].forEach(
+            (audio) => audio.pause(),
+        );
+        this.listeners.forEach(({ target, type, handler }) => target.removeEventListener(type, handler));
+        this.listeners.length = 0;
+    }
+
+    /** True while the run is live (playing, or clear with its animation pending). */
     get active(): boolean {
-        return this.run.phase === 'playing';
+        return this.run.phase === 'playing' || this.run.phase === 'clear';
     }
 
     /** The look starts from the Player's five trait fields, sanitized. */
@@ -152,36 +198,49 @@ class GameState {
         this.updateStatus();
     }
 
+    /** Begin a run: ignored unless ready/dead and no countdown is already running. */
     startGame(): void {
-        if (this.starting) return;
+        if (this.disposed) return;
         if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return;
+        if (this.countdownTimers.length > 0) return; // exactly one countdown at a time
         const mazeContainerElement = document.getElementById('maze-container');
         const titleElement = document.getElementById('title-screen');
         if (!titleElement) return;
-        this.starting = true;
         titleElement.style.opacity = '0.5';
         const countdownElement = document.createElement('p');
         countdownElement.className = 'title-screen-countdown';
         countdownElement.textContent = '3';
         mazeContainerElement?.appendChild(countdownElement);
+        this.countdownElement = countdownElement;
         this.countdown.play();
 
-        setTimeout(() => {
+        const schedule = (fn: () => void, ms: number): void => {
+            this.countdownTimers.push(setTimeout(fn, ms));
+        };
+
+        schedule(() => {
             countdownElement.textContent = '2';
             this.countdown.play();
         }, 1000);
 
-        setTimeout(() => {
+        schedule(() => {
             countdownElement.textContent = '1';
             this.countdown.play();
         }, 2000);
 
-        setTimeout(() => {
-            countdownElement.remove();
+        schedule(() => {
+            this.cancelCountdown();
             titleElement.style.display = 'none';
-            this.starting = false;
             this.beginRun();
         }, 3000);
+    }
+
+    /** Cancel a running countdown: its timers die and its digit leaves the page. */
+    private cancelCountdown(): void {
+        this.countdownTimers.forEach((id) => clearTimeout(id));
+        this.countdownTimers = [];
+        this.countdownElement?.remove();
+        this.countdownElement = null;
     }
 
     /** Start (or restart) the run at level 1 and set the clock going. */
@@ -198,8 +257,14 @@ class GameState {
         if (this.clockInterval !== null) return;
         this.lastTickAt = Date.now();
         this.clockInterval = setInterval(() => {
+            if (this.disposed) return;
             const now = Date.now();
-            const elapsedMs = now - this.lastTickAt;
+            if (document.hidden) {
+                // A hidden tab is throttled or suspended: never bank that time.
+                this.lastTickAt = now;
+                return;
+            }
+            const elapsedMs = clampDt(now - this.lastTickAt);
             this.lastTickAt = now;
             this.run.tick(elapsedMs);
             this.handleEvents();
@@ -383,7 +448,7 @@ class GameState {
     /** Float the message an event carries above the player, if any. */
     private floatMessage(event: GameEvent): void {
         const message = eventMessage(event);
-        if (message) setTimeout(() => this.displayMessage(message), 0);
+        if (message) this.later(() => this.displayMessage(message), 0);
     }
 
     displayMessage(message: string): void {
@@ -397,7 +462,7 @@ class GameState {
         playerElement.parentElement?.appendChild(messageElement);
 
         // Remove the message after the animation completes
-        setTimeout(() => {
+        this.later(() => {
             messageElement.remove();
         }, 2500);
     }
@@ -408,10 +473,11 @@ class GameState {
         animationOverlay.style.opacity = '1';
         animationOverlay.style.transform = 'scale(20)';
 
-        setTimeout(() => {
+        this.later(() => {
             animationOverlay.style.opacity = '0';
             animationOverlay.style.transform = 'scale(1)';
-            setTimeout(callback, 100); // Wait for the animation to complete before starting the new level
+            // Wait for the animation to complete before starting the new level
+            this.later(callback, 100);
         }, 300);
     }
 
@@ -432,7 +498,7 @@ class GameState {
         gameOverMessage.appendChild(gameOverMessageText2);
         mazeElement.appendChild(gameOverMessage);
 
-        gameOverMessage.addEventListener('click', () => {
+        this.addShellListener(gameOverMessage, 'click', () => {
             gameOverMessage.remove();
             mazeElement.style.backgroundColor = '';
             this.beginRun();
