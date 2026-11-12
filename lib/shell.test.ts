@@ -17,7 +17,7 @@ describe("eventMessage", () => {
     expect(eventMessage({ type: "levelStart", level: 2, size: 7 })).toBeNull();
     expect(eventMessage({ type: "move", x: 1, y: 1, dx: 0, dy: -1 })).toBeNull();
     expect(eventMessage({ type: "blocked", dx: 1, dy: 0 })).toBeNull();
-    expect(eventMessage({ type: "levelClear", level: 1 })).toBeNull();
+    expect(eventMessage({ type: "levelClear", level: 1, gained: 137 })).toBeNull();
     expect(eventMessage({ type: "dead", cause: "time", score: 3, level: 1 })).toBeNull();
   });
 });

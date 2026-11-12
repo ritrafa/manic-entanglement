@@ -3,6 +3,7 @@ import { Run } from "@/game/run";
 import { CONFIG } from "@/game/config";
 import { levelPlan } from "@/game/plan";
 import type { GameEvent, ItemType } from "@/game/events";
+import { KILL_SCORE, PICKUP_SCORE, levelScore } from "@/game/score";
 
 const STEPS = [
   { dx: 0, dy: -1 },
@@ -165,7 +166,7 @@ describe("Moves", () => {
     expect(run.takeEvents()).toEqual([{ type: "blocked", dx: 0, dy: 1 }]);
   });
 
-  it("a successful move costs consumption, scores and moves the player", () => {
+  it("a successful move costs consumption, counts the move and moves the player", () => {
     const run = startedRun(12);
     run.items = [];
     run.enemies = [];
@@ -174,7 +175,8 @@ describe("Moves", () => {
     expect(run.player.x).toBe(Math.floor(CONFIG.startSize / 2) + step.dx);
     expect(run.player.y).toBe(CONFIG.startSize - 1 + step.dy);
     expect(run.energy).toBe(100 - 1 * run.stats.consumption);
-    expect(run.score).toBe(1);
+    expect(run.score).toBe(0); // steps score nothing
+    expect(run.tally.moves).toBe(1);
     expect(run.takeEvents()).toEqual([
       { type: "move", x: run.player.x, y: run.player.y, dx: step.dx, dy: step.dy },
     ]);
@@ -346,12 +348,17 @@ describe("Levels", () => {
     expect(run.energy).toBe(energy);
     expect(run.move(0, 1)).toBe(false);
     const events = run.takeEvents();
-    expect(events).toContainEqual({ type: "levelClear", level: 1 });
+    expect(events).toContainEqual({
+      type: "levelClear",
+      level: 1,
+      gained: levelScore({ level: 1, energyLeft: run.energy }),
+    });
   });
 
   it("nextLevel builds from levelPlan and keeps the start and exit free", () => {
     const run = startedRun(20);
     reachClear(run);
+    const gained = levelScore({ level: 1, energyLeft: run.energy });
     run.takeEvents();
     run.nextLevel();
     expect(run.phase).toBe("playing");
@@ -359,7 +366,7 @@ describe("Levels", () => {
     // The size steps only every two levels, so level 2 is still startSize x startSize.
     expect(run.maze.width).toBe(levelPlan(2).size);
     expect(run.maze.height).toBe(levelPlan(2).size);
-    expect(run.score).toBe(1); // score carries over between levels
+    expect(run.score).toBe(gained); // the level-1 award carries over between levels
     expect(run.takeEvents()).toEqual([{ type: "levelStart", level: 2, size: levelPlan(2).size }]);
 
     const forbidden = [
@@ -496,6 +503,127 @@ describe("Determinism", () => {
     const dead = events.filter((event) => event.type === "dead");
     expect(dead).toHaveLength(1);
     expect(dead[0]).toMatchObject({ type: "dead", level: run.level, score: run.score });
-    expect(run.score).toBeGreaterThan(0);
+    expect(run.tally.moves).toBeGreaterThan(0);
+  });
+});
+
+describe("Score and tally", () => {
+  it("twenty moves without touching anything score nothing but count as moves", () => {
+    const run = startedRun(31);
+    run.items = [];
+    run.enemies = [];
+    for (let i = 0; i < 20; i++) {
+      const step = openStep(run);
+      expect(run.move(step.dx, step.dy)).toBe(true);
+    }
+    expect(run.score).toBe(0);
+    expect(run.tally.moves).toBe(20);
+    expect(run.tally.kills).toBe(0);
+    expect(run.tally.pickups).toBe(0);
+    expect(run.tally.bumps).toBe(0);
+  });
+
+  it("a blocked move raises tally.bumps only", () => {
+    const run = startedRun(32);
+    run.items = [];
+    run.enemies = [];
+    expect(run.move(0, 1)).toBe(false); // the bottom edge is always a wall
+    expect(run.tally.bumps).toBe(1);
+    expect(run.tally.moves).toBe(0);
+    expect(run.score).toBe(0);
+  });
+
+  it("picking up one item gives +10 and tally.pickups 1", () => {
+    const run = startedRun(33);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    run.items = [{ id: 920, x: run.player.x + step.dx, y: run.player.y + step.dy, type: "boots" }];
+    run.move(step.dx, step.dy);
+    expect(run.score).toBe(PICKUP_SCORE);
+    expect(run.tally.pickups).toBe(1);
+  });
+
+  it("defeating one enemy gives +25, tally.kills 1 and lostToFights the cost", () => {
+    const run = startedRun(34);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    run.enemies = [{ id: 921, x: run.player.x + step.dx, y: run.player.y + step.dy }];
+    const cost = run.fightCostAt(run.player.x + step.dx, run.player.y + step.dy)!;
+    run.move(step.dx, step.dy);
+    expect(run.score).toBe(KILL_SCORE);
+    expect(run.tally.kills).toBe(1);
+    expect(run.tally.lostToFights).toBe(cost);
+    expect(cost).toBe(15); // default stats
+  });
+
+  it("clearing level 1 with 37.2 energy adds 137, clears one and reaches depth 2", () => {
+    const run = startedRun(35);
+    run.items = [];
+    run.enemies = [];
+    run.energy = 38.2; // the step into the exit costs 1, leaving 37.2
+    reachClear(run);
+    expect(run.score).toBe(137);
+    expect(run.tally.cleared).toBe(1);
+    expect(run.tally.depth).toBe(2);
+    const clear = eventsOf(run, "levelClear");
+    expect(clear).toEqual([{ type: "levelClear", level: 1, gained: 137 }]);
+  });
+
+  it("tally.ms grows only while playing", () => {
+    const ready = new Run({ seed: 36 });
+    ready.tick(1000);
+    expect(ready.tally.ms).toBe(0);
+
+    const run = startedRun(36);
+    expect(run.tally.ms).toBe(0);
+    run.tick(500);
+    expect(run.tally.ms).toBe(500);
+
+    reachClear(run); // now "clear"
+    run.tick(500);
+    expect(run.tally.ms).toBe(500);
+
+    run.nextLevel();
+    run.tick(300);
+    expect(run.tally.ms).toBe(800);
+
+    run.tick(999999); // dies on the clock
+    expect(run.phase).toBe("dead");
+    const atDeath = run.tally.ms;
+    run.tick(500);
+    expect(run.tally.ms).toBe(atDeath);
+  });
+
+  it("start() after death resets the tally and the score, and the tally survives death", () => {
+    const run = startedRun(37);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    run.enemies = [{ id: 922, x: run.player.x + step.dx, y: run.player.y + step.dy }];
+    run.move(step.dx, step.dy);
+    run.tick(999999);
+    expect(run.phase).toBe("dead");
+    // Readable after death, still holding what the run did.
+    expect(run.tally.kills).toBe(1);
+    expect(run.tally.lostToFights).toBe(15);
+    expect(run.tally.moves).toBe(1);
+    expect(run.score).toBe(KILL_SCORE);
+
+    run.start();
+    expect(run.score).toBe(0);
+    expect(run.tally).toEqual({
+      moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0,
+    });
+  });
+
+  it("the tally starts at depth 1 and survives nextLevel", () => {
+    const run = startedRun(38);
+    expect(run.tally.depth).toBe(1);
+    reachClear(run);
+    run.nextLevel();
+    expect(run.tally.depth).toBe(2);
+    expect(run.tally.cleared).toBe(1);
   });
 });

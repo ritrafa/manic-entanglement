@@ -50,3 +50,13 @@ export const CONFIG = {
     /** Fight maths: cost = round(hp / max(0.1, attack) * max(1, power - defense)) clamped to 1..999 (game/combat.ts). */
     enemy: { hp: 3, power: 6 },
 } as const;
+
+// --- Score rules (game/score.ts, owner decision Q9) -----------------------------------
+// Steps earn nothing: the score comes from depth, leftover energy, kills and pickups.
+
+/** Points per level of depth in levelScore's `100 * level` term. */
+export const LEVEL_SCORE_BASE = 100;
+/** Points for defeating one enemy. */
+export const KILL_SCORE = 25;
+/** Points for collecting one pickup. */
+export const PICKUP_SCORE = 10;

@@ -10,6 +10,7 @@ import { spawnLevel } from "./spawn";
 import { levelPlan } from "./plan";
 import { CONFIG } from "./config";
 import { fightCost } from "./combat";
+import { KILL_SCORE, PICKUP_SCORE, levelScore } from "./score";
 import type { DeathCause, GameEvent, ItemType } from "./events";
 
 export type RunPhase = "ready" | "playing" | "clear" | "dead";
@@ -35,6 +36,31 @@ export interface RunEnemy {
     y: number;
 }
 
+/** What happened during one run, for the summary screen and later for feats. */
+export interface Tally {
+    /** Successful moves. */
+    moves: number;
+    /** Milliseconds spent in the "playing" phase (from tick). */
+    ms: number;
+    /** Enemies defeated. */
+    kills: number;
+    /** Pickups collected. */
+    pickups: number;
+    /** Moves blocked by a wall or the edge. */
+    bumps: number;
+    /** Deepest level reached, starting at 1. */
+    depth: number;
+    /** Levels cleared. */
+    cleared: number;
+    /** Total energy paid to enemies in fights. */
+    lostToFights: number;
+}
+
+/** A fresh tally: nothing done yet, standing on level 1. */
+function freshTally(): Tally {
+    return { moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0 };
+}
+
 export interface RunOptions {
     seed: number;
     stats?: Partial<RunStats>;
@@ -46,6 +72,8 @@ export class Run {
     phase: RunPhase = "ready";
     level = 1;
     score = 0;
+    /** What this run did, kept through death and reset by start(). */
+    tally: Tally = freshTally();
     energy: number;
     stats: RunStats;
     maze: Maze;
@@ -84,6 +112,7 @@ export class Run {
         this.push({ type: "start" });
         this.level = 1;
         this.score = 0;
+        this.tally = freshTally();
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.buildLevel();
         this.rollForecast();
@@ -95,6 +124,7 @@ export class Run {
     move(dx: number, dy: number): boolean {
         if (this.phase !== "playing") return false;
         if (!this.maze.canMove(this.player.x, this.player.y, dx, dy)) {
+            this.tally.bumps += 1;
             this.push({ type: "blocked", dx, dy });
             return false;
         }
@@ -105,7 +135,7 @@ export class Run {
         this.player.x += dx;
         this.player.y += dy;
         this.energy -= 1 * this.stats.consumption;
-        this.score += 1;
+        this.tally.moves += 1;
         this.push({ type: "move", x: this.player.x, y: this.player.y, dx, dy });
 
         // Apply exactly the walk the forecast promised; the next one is rolled at
@@ -117,6 +147,8 @@ export class Run {
             const item = this.items[itemIndex];
             const text = this.applyItem(item.type);
             this.items.splice(itemIndex, 1);
+            this.score += PICKUP_SCORE;
+            this.tally.pickups += 1;
             this.push({ type: "pickup", item: item.type, text, x: item.x, y: item.y });
         }
 
@@ -127,13 +159,20 @@ export class Run {
             const cost = fightCost(this.stats, CONFIG.enemy);
             this.energy -= cost;
             this.enemies.splice(enemyIndex, 1);
+            this.score += KILL_SCORE;
+            this.tally.kills += 1;
+            this.tally.lostToFights += cost;
             fought = true;
             this.push({ type: "fight", cost, x: enemy.x, y: enemy.y });
         }
 
         if (this.player.x === this.exit.x && this.player.y === this.exit.y) {
             this.phase = "clear";
-            this.push({ type: "levelClear", level: this.level });
+            const gained = levelScore({ level: this.level, energyLeft: this.energy });
+            this.score += gained;
+            this.tally.cleared += 1;
+            this.tally.depth = Math.max(this.tally.depth, this.level + 1);
+            this.push({ type: "levelClear", level: this.level, gained });
             return true;
         }
 
@@ -148,6 +187,7 @@ export class Run {
     tick(ms: number): void {
         if (this.phase !== "playing") return;
         if (!(ms > 0)) return;
+        this.tally.ms += ms;
         this.pendingMs += ms;
         while (this.pendingMs >= CONFIG.drainMs * this.stats.speed) {
             // The current speed is used, so a "speed" pickup takes effect at once.
@@ -166,6 +206,7 @@ export class Run {
         if (this.phase !== "clear") return;
         this.energy = Math.min(this.stats.storage, this.energy + levelPlan(this.level).exitBonus);
         this.level += 1;
+        this.tally.depth = Math.max(this.tally.depth, this.level);
         this.buildLevel();
         this.rollForecast();
         this.phase = "playing";

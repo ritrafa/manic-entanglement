@@ -11,5 +11,5 @@ export type GameEvent =
     | { type: "blocked"; dx: number; dy: number }
     | { type: "pickup"; item: ItemType; text: string; x: number; y: number }
     | { type: "fight"; cost: number; x: number; y: number }
-    | { type: "levelClear"; level: number }
+    | { type: "levelClear"; level: number; gained: number }
     | { type: "dead"; cause: DeathCause; score: number; level: number };

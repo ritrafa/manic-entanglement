@@ -378,6 +378,7 @@ class GameState {
                 case 'levelClear':
                     this.levelup.play();
                     this.stopClock();
+                    this.board.float(`+${event.gained}`, this.run.player.x, this.run.player.y);
                     this.highScore = Math.max(this.run.score, this.highScore);
                     this.triggerLevelCompleteAnimation(() => {
                         this.run.nextLevel();
