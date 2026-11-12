@@ -3,6 +3,8 @@ import { Run } from '@/game/run';
 import type { GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
+import { loadSave, writeSave } from '@/game/save';
+import type { SaveData, StorageLike } from '@/game/save';
 
 const SPRITE_FRAME_MS = 150;
 const CLOCK_TICK_MS = 50;
@@ -12,7 +14,8 @@ const PLAYBACK_RATE_PER_LEVEL = 0.03;
 class GameState {
     public run: Run;
     public player: Player;
-    public highScore: number = 0;
+    private storage: StorageLike;
+    private save: SaveData;
     public sound: HTMLAudioElement;
     public lost: HTMLAudioElement;
     public levelup: HTMLAudioElement;
@@ -29,6 +32,12 @@ class GameState {
     private starting: boolean = false;
 
     constructor() {
+        try {
+            this.storage = window.localStorage;
+        } catch {
+            this.storage = null; // private windows, blocked site data, server render
+        }
+        this.save = loadSave(this.storage);
         this.player = new Player();
         this.run = new Run({
             seed: Date.now(),
@@ -60,6 +69,18 @@ class GameState {
     /** True while the run accepts steps: the page uses it for the tap-to-start gesture. */
     get active(): boolean {
         return this.run.phase === 'playing';
+    }
+
+    /** The best score, read from the save so the bars and texts always show the saved best. */
+    get highScore(): number {
+        return this.save.best.descent ?? 0;
+    }
+
+    /** Keep a strictly better score and persist it; writing never throws. */
+    private recordBest(score: number): void {
+        if (!(score > this.highScore)) return;
+        this.save.best = { ...this.save.best, descent: score };
+        writeSave(this.storage, this.save);
     }
 
     /** The look starts from the Player's five trait fields, sanitized. */
@@ -230,7 +251,7 @@ class GameState {
                 case 'levelClear':
                     this.levelup.play();
                     this.stopClock();
-                    this.highScore = Math.max(this.run.score, this.highScore);
+                    this.recordBest(this.run.score);
                     this.triggerLevelCompleteAnimation(() => {
                         this.run.nextLevel();
                         this.handleEvents();
@@ -245,7 +266,7 @@ class GameState {
                     break;
                 case 'dead':
                     this.stopClock();
-                    this.highScore = Math.max(this.run.score, this.highScore);
+                    this.recordBest(this.run.score);
                     this.gameOver();
                     break;
             }
