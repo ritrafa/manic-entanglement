@@ -3,6 +3,7 @@
 // the HUD announcements that matter. Pure: no DOM, no matchMedia, no storage —
 // lib/GameState.ts loads these through sanitizeSettings and applies them.
 
+import { DEFAULT_KEYS, sanitizeKeys, type KeyMap } from "./keys";
 import type { HudModel } from "./hud";
 import type { Screen } from "./screens";
 
@@ -25,6 +26,8 @@ export interface Settings {
     textScale: 1 | 1.25 | 1.5;
     /** True lets the board shake. */
     shake: boolean;
+    /** The keyboard mapping the Controls screen edits (game/keys.ts). */
+    keys: KeyMap;
 }
 
 /** The starting point: heard but gentle, calm by default, shake on. */
@@ -36,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
     contrast: false,
     textScale: 1,
     shake: true,
+    keys: DEFAULT_KEYS,
 };
 
 /** The accepted motion settings, in the order the screen offers them. */
@@ -85,8 +89,9 @@ export function sanitizeSettings(value: unknown): Settings {
             ? (source.textScale as 1 | 1.25 | 1.5)
             : DEFAULT_SETTINGS.textScale,
         shake: readBoolean(source.shake, DEFAULT_SETTINGS.shake),
+        keys: sanitizeKeys(source.keys),
     };
-    // The extras first, the seven checked fields over them: unknown keys survive.
+    // The extras first, the checked fields over them: unknown keys survive.
     return { ...source, ...checked } as Settings;
 }
 

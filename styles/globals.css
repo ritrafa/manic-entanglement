@@ -1067,3 +1067,28 @@ body {
   white-space: nowrap;
   border: 0;
 }
+
+/* The Controls screen (components/Controls.tsx): the settings-panel family,
+   with one row per action — its label and the two key buttons beside it. */
+.controls-rows {
+  gap: 8px;
+}
+.controls-row .controls-label {
+  flex: 1;
+  min-width: 120px;
+}
+.controls-key {
+  min-width: 96px;
+  padding: 6px 10px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.controls-key:hover,
+.controls-key:focus-visible {
+  background-color: rgba(255, 255, 255, 0.22);
+  outline: 2px solid #ffd34d;
+}

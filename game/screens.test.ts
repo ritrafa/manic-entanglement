@@ -136,14 +136,33 @@ describe("nextScreen", () => {
     });
 
     it("only the title and the pause open the settings", () => {
-        for (const screen of ["countdown", "playing", "clear", "over"] as Screen[]) {
+        for (const screen of ["countdown", "playing", "clear", "over", "keys"] as Screen[]) {
             expect(nextScreen(screen, "settings")).toBe(screen);
         }
     });
 
+    it("the Controls screen opens from the settings and returns to it", () => {
+        const settings = nextScreen("title", "settings");
+        expect(nextScreen(settings, "keys")).toBe("keys");
+        // Back or Esc returns to the settings panel, not past it.
+        expect(nextScreen("keys", "back", { settingsFrom: "title" })).toBe("settings");
+        expect(nextScreen("keys", "pause", { settingsFrom: "paused" })).toBe("settings");
+        // Nothing else moves it: no accidental resume, start or close.
+        for (const action of ["confirm", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died", "settings", "howto"] as ScreenAction[]) {
+            expect(nextScreen("keys", action, { settingsFrom: "paused" })).toBe("keys");
+        }
+        // Only the settings screen opens it.
+        for (const screen of ["title", "howto", "countdown", "playing", "paused", "clear", "over"] as Screen[]) {
+            expect(nextScreen(screen, "keys")).toBe(screen);
+        }
+        // And the settings visit still ends where it started, even after a
+        // round trip through the Controls screen.
+        expect(nextScreen("settings", "back", { settingsFrom: "paused" })).toBe("paused");
+    });
+
     it("unknown pairs keep the screen", () => {
-        const screens: Screen[] = ["title", "howto", "countdown", "playing", "paused", "settings", "clear", "over"];
-        const actions: ScreenAction[] = ["confirm", "howto", "settings", "back", "pause", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"];
+        const screens: Screen[] = ["title", "howto", "countdown", "playing", "paused", "settings", "keys", "clear", "over"];
+        const actions: ScreenAction[] = ["confirm", "howto", "settings", "keys", "back", "pause", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"];
         for (const screen of screens) {
             for (const action of actions) {
                 const next = nextScreen(screen, action);

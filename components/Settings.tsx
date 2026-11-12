@@ -102,6 +102,7 @@ const SettingsPanel: React.FC<SettingsProps> = ({ gameState }) => {
                 })}
             </div>
             <div className="overlay-buttons">
+                <button onClick={() => gameState.openControls()}>Controls</button>
                 <button onClick={() => gameState.closeSettings()}>Back</button>
             </div>
         </div>

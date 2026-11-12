@@ -5,7 +5,7 @@ import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
-import { actionFor, dirOf } from '@/game/keys';
+import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
 import { CONFIG, FX } from '@/game/config';
 import { FxLimiter, fxFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
@@ -84,6 +84,8 @@ class GameState {
     private cellSize: number = 4;
     /** The player's settings, sanitized from the save; every change re-applies them. */
     private settings: Settings = sanitizeSettings(undefined);
+    /** True while the Controls screen waits for a key: the global handler stands down. */
+    private capturingKey: boolean = false;
     /** The screen the shell is showing; every change routes through nextScreen(). */
     private screen: Screen = 'title';
     /** The summary rows shown on "over"; null everywhere else. */
@@ -149,7 +151,8 @@ class GameState {
     get active(): boolean {
         const running = this.run.phase === 'playing' || this.run.phase === 'clear';
         // A paused or dead run never accepts a step, whatever phase the Run is in.
-        return running && this.screen !== 'paused' && this.screen !== 'settings' && this.screen !== 'over';
+        return running && this.screen !== 'paused' && this.screen !== 'settings'
+            && this.screen !== 'keys' && this.screen !== 'over';
     }
 
     /**
@@ -245,6 +248,9 @@ class GameState {
      */
     handleKeyPress(event: KeyboardEvent): void {
         if (event.repeat) return;
+        // While the Controls screen waits for a key, that screen owns the
+        // keyboard alone: the game must not act on the key being bound.
+        if (this.capturingKey) return;
         const target = event.target as Element | null;
         const action = actionFor({
             code: event.code,
@@ -252,7 +258,7 @@ class GameState {
             altKey: event.altKey,
             metaKey: event.metaKey,
             targetTag: typeof target?.tagName === 'string' ? target.tagName : undefined,
-        });
+        }, this.keysMap);
         if (action === null) return;
         event.preventDefault();
         const dir = dirOf(action);
@@ -272,6 +278,7 @@ class GameState {
 
     /** The keyup partner of handleKeyPress: a released direction stops repeating. */
     handleKeyRelease(event: KeyboardEvent): void {
+        if (this.capturingKey) return;
         const target = event.target as Element | null;
         const action = actionFor({
             code: event.code,
@@ -279,9 +286,43 @@ class GameState {
             altKey: event.altKey,
             metaKey: event.metaKey,
             targetTag: typeof target?.tagName === 'string' ? target.tagName : undefined,
-        });
+        }, this.keysMap);
         if (action === null) return;
         if (dirOf(action)) this.stepper.release(action as Dir);
+    }
+
+    /** The mapping in force: the player's saved one, ready for actionFor. */
+    private get keysMap(): KeyMap {
+        return this.settings.keys;
+    }
+
+    /**
+     * The Controls screen asks for a key: from now until endKeyCapture() the
+     * global keydown/keyup handler ignores every event, so the key being bound
+     * never pauses, moves or mutes anything on the way.
+     */
+    beginKeyCapture(): void {
+        this.capturingKey = true;
+    }
+
+    /** The Controls screen got its key (or cancelled): the game hears keys again. */
+    endKeyCapture(): void {
+        this.capturingKey = false;
+    }
+
+    /**
+     * One Controls button was answered: the pure rebind swaps or replaces as
+     * it must, the new map lands in the settings and the save at once, so the
+     * rebinding works immediately and after a reload. A refused binding (Escape,
+     * emptying an action) leaves the map — and the save — untouched.
+     */
+    setKey(action: Action, slot: 0 | 1, code: string): void {
+        this.setSetting('keys', rebind(this.settings.keys, action, slot, code));
+    }
+
+    /** The Controls screen's Reset to defaults: every action back to its first binding. */
+    resetKeys(): void {
+        this.setSetting('keys', DEFAULT_KEYS);
     }
 
     /**
@@ -360,6 +401,17 @@ class GameState {
         this.dispatch('back');
     }
 
+    /** The settings panel's Controls entry: opens the key rebinding screen. */
+    openControls(): void {
+        if (this.screen !== 'settings') return;
+        this.dispatch('keys');
+    }
+
+    /** The Controls panel's Back button: Esc and the button both return to settings. */
+    closeControls(): void {
+        this.dispatch('back');
+    }
+
     /** The pause panel's Resume: the same toggle Esc/P uses. */
     resume(): void {
         this.dispatch('pause');
@@ -403,7 +455,9 @@ class GameState {
         } else if (next === 'settings') {
             // Wherever it came from, the game stands still behind the panel:
             // clock stopped and music quiet, and Back returns to the caller.
-            this.settingsFrom = prev;
+            // Coming back from the Controls screen keeps the original origin:
+            // the settings visit still ends where it started.
+            if (prev !== 'keys') this.settingsFrom = prev;
             this.stopClock();
             this.syncMusic();
         } else if (prev === 'paused') {

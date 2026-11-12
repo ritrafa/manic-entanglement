@@ -68,15 +68,24 @@ describe("sanitizeSettings", () => {
             contrast: true,
             textScale: 1.5,
             shake: false,
+            keys: { ...DEFAULT_SETTINGS.keys, up: ["KeyI", "ArrowUp"] },
         };
         expect(sanitizeSettings(good)).toEqual(good);
     });
 
     it("unknown extra fields survive sanitizing", () => {
-        const kept = sanitizeSettings({ keys: { up: "KeyW" }, musicVol: 0.25 });
+        const kept = sanitizeSettings({ theme: "midnight", musicVol: 0.25 });
         expect(kept.musicVol).toBe(0.25);
-        expect((kept as unknown as Record<string, unknown>).keys).toEqual({ up: "KeyW" });
-        expect(kept).toEqual({ ...DEFAULT_SETTINGS, musicVol: 0.25, keys: { up: "KeyW" } });
+        expect((kept as unknown as Record<string, unknown>).theme).toBe("midnight");
+        expect(kept).toEqual({ ...DEFAULT_SETTINGS, musicVol: 0.25, theme: "midnight" });
+    });
+
+    it("the keys field goes through sanitizeKeys: broken maps fall back to the defaults", () => {
+        expect(sanitizeSettings({ keys: null }).keys).toEqual(DEFAULT_SETTINGS.keys);
+        expect(sanitizeSettings({ keys: { up: ["KeyW"] } }).keys).toEqual(DEFAULT_SETTINGS.keys);
+        // A whole, valid custom map is kept as it is.
+        const custom = { ...DEFAULT_SETTINGS.keys, mute: ["KeyN"] };
+        expect(sanitizeSettings({ keys: custom }).keys).toEqual(custom);
     });
 });
 

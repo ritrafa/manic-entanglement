@@ -2,6 +2,32 @@
 
 ## Queue log
 
+- Made the keys remappable: `game/keys.ts` gained `KeyMap = Record<Action, string[]>`
+  (at most two codes per action), `rebind(keys, action, slot, code)` (a pure swap:
+  a code held by another action trades places with the slot's old code, an empty
+  slot just takes the code unless that would leave the other action with nothing,
+  binding a code to the slot it already sits in changes nothing, and `Escape` is
+  reserved — never assignable, never removable from `pause`), `sanitizeKeys(value)`
+  (the whole map or `DEFAULT_KEYS`, never a repaired half: seven actions, one or
+  two unique non-empty string codes each, `pause` holding `Escape`), `keyLabel(code)`
+  (`KeyW` to `W`, `Digit1` to `1`, `ArrowUp` to "Up arrow", `Space` to "Space") and
+  `ACTION_LABELS`; `game/settings.ts` added the `keys: KeyMap` field, sanitized with
+  `sanitizeKeys`; `game/screens.ts` added the `keys` screen with a `keys` action from
+  `settings` and `back`/`pause` returning to it; `lib/GameState.ts` now hands the
+  saved map to `actionFor`, exposes `setKey(action, slot, code)` and `resetKeys()`
+  (both through `setSetting`, so the save is written at once), `openControls()` /
+  `closeControls()`, and a `capturingKey` flag that makes the global keydown/keyup
+  handler ignore every event while the Controls screen waits for a key; the new
+  `components/Controls.tsx` shows one row per action with its label and two key
+  buttons (`-` for an empty slot) — activating one reads "Press a key" and binds
+  the next keydown's code, Escape cancels — plus Reset to defaults and Back, and
+  `components/Settings.tsx` gained the Controls entry; covered by the new `rebind`
+  (swap, refusal, no-mutation, a 200-rebind seeded fuzz holding every invariant),
+  `sanitizeKeys`, `keyLabel` and `ACTION_LABELS` cases in `game/keys.test.ts`, the
+  `keys` screen cases in `game/screens.test.ts` and the `keys` field cases in
+  `game/settings.test.ts`; `styles/globals.css` adds `.controls-rows`,
+  `.controls-row .controls-label` and `.controls-key` in the settings-panel family.
+
 - Made the best score survive closing the tab: rewrote `game/save.ts` as the one
   versioned save object — `SAVE_KEY = "manic-entanglement.save"`, `SaveData` at
   `v: 1` with `best`, `settings`, `gear`, `totals`, `feats`, `look` and `seen`

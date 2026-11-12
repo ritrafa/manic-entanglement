@@ -9,6 +9,7 @@ import Overlay from '../components/Overlay';
 import Menu from '../components/Menu';
 import HowTo from '../components/HowTo';
 import SettingsPanel from '../components/Settings';
+import ControlsPanel from '../components/Controls';
 import '../styles/globals.css';
 import { Analytics } from "@vercel/analytics/react"
 
@@ -69,6 +70,7 @@ const Page: React.FC = () => {
                 {gameState && <Menu gameState={gameState} />}
                 {gameState && <HowTo gameState={gameState} />}
                 {gameState && <SettingsPanel gameState={gameState} />}
+                {gameState && <ControlsPanel gameState={gameState} />}
                 {gameState && <Overlay gameState={gameState} />}
             </div>
             

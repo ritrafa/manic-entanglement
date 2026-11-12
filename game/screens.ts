@@ -6,7 +6,7 @@ import type { DeathCause } from "./events";
 import type { Tally } from "./run";
 
 /** Everything the shell can show. */
-export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "clear" | "over";
+export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "keys" | "clear" | "over";
 
 /** Everything that can move the shell between screens. */
 export type ScreenAction =
@@ -20,6 +20,8 @@ export type ScreenAction =
     | "pause"
     /** The title menu's or the pause panel's Settings entry. */
     | "settings"
+    /** The settings screen's Controls entry. */
+    | "keys"
     /** The tab became hidden. */
     | "hide"
     /** Start a fresh run through the countdown. */
@@ -118,8 +120,23 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
                     // tab must never resume the game by itself.
                     return screen;
             }
+        case "keys":
+            switch (action) {
+                // Back or Esc returns to the settings panel, which stays open
+                // exactly where the visit left it; the game is paused behind
+                // both panels, so nothing here may resume anything.
+                case "back":
+                case "pause":
+                    return "settings";
+                default:
+                    // "hide" (and anything else) keeps the Controls open.
+                    return screen;
+            }
         case "settings":
             switch (action) {
+                // The Controls entry opens the key rebinding screen on top.
+                case "keys":
+                    return "keys";
                 // Back, Esc or the panel's Back button returns where the visit
                 // started; a pause taken from the game comes back to the pause,
                 // so the clock never runs behind the settings panel.
