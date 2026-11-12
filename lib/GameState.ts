@@ -13,6 +13,8 @@ import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } fro
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
 import { Sound } from './sound';
+import { AudioEngine } from './audioEngine';
+import { beepVoices, sfxFor, warnVoices } from '@/game/audio/sfx';
 
 /**
  * The one snapshot React reads: every HUD field, plus the screen the shell is on
@@ -32,6 +34,12 @@ export interface GameSnapshot extends HudModel {
 const SPRITE_FRAME_MS = 150;
 const BASE_PLAYBACK_RATE = 0.7;
 const PLAYBACK_RATE_PER_LEVEL = 0.03;
+/** The effects bus volume the save carries when it stores none. */
+const DEFAULT_SFX_VOL = 0.7;
+/** Below this energy percentage the low-energy pulse starts. */
+const LOW_ENERGY_PCT = 25;
+/** Milliseconds between two low-energy pulses. */
+const WARN_EVERY_MS = 1000;
 
 class GameState {
     public run: Run;
@@ -42,8 +50,14 @@ class GameState {
     private save: SaveData = defaultSave();
     /** window.localStorage where it works, null where storage is missing or throws. */
     private storage: StorageLike = null;
-    /** Every sound the game makes: lazy elements, unlocked by the first gesture. */
+    /** The music loop: a lazy element, unlocked by the first gesture. */
     private audio: Sound = new Sound((src) => new Audio(src));
+    /** The synthesized effects: oscillators only, from the injected context factory. */
+    private sfxEngine: AudioEngine = new AudioEngine(() => new AudioContext());
+    /** Pickups taken since the level started; the pickup sound climbs with it. */
+    private pickupStreak: number = 0;
+    /** performance.now() of the last low-energy pulse, so it plays about once a second. */
+    private lastWarnAt: number = 0;
     private look: Look;
     /** The one code that touches the board's DOM: patched tiles and gliding sprites. */
     private board: Board = new Board();
@@ -106,6 +120,8 @@ class GameState {
         this.muted = this.save.settings.muted === true;
         this.audio.setMuted(this.muted);
         this.audio.setHidden(document.hidden);
+        // The saved effects volume waits in the engine until its first unlock.
+        this.sfxEngine.setVolume('sfx', GameState.readSfxVol(this.save));
         this.look = this.lookFromPlayer();
         this.preloadLook();
         this.mountBoard();
@@ -147,6 +163,7 @@ class GameState {
     /** The player's first keydown/pointerdown/touchstart: sound is allowed from now on. */
     private handleFirstGesture = (): void => {
         this.audio.unlock();
+        this.sfxEngine.unlock();
     };
 
     /** Losing the window mid-run must not leave a key stuck down. */
@@ -373,7 +390,6 @@ class GameState {
             this.quitToTitle();
         } else if (next === 'over') {
             this.audio.stopMusic();
-            this.audio.play('lost');
             this.summary = summaryLines({
                 tally: this.run.tally,
                 score: this.run.score,
@@ -448,10 +464,11 @@ class GameState {
         this.setMuted(!this.muted);
     }
 
-    /** Silence or unsilence the sound box and remember the choice in the save. */
+    /** Silence or unsilence music and effects, and remember the choice in the save. */
     private setMuted(muted: boolean): void {
         this.muted = muted;
         this.audio.setMuted(muted);
+        this.sfxEngine.setMuted(muted);
         this.save = { ...this.save, settings: { ...this.save.settings, muted } };
         writeSave(this.storage, this.save);
     }
@@ -477,22 +494,23 @@ class GameState {
         countdownElement.className = 'game-countdown';
         countdownElement.textContent = '3';
         mazeContainerElement?.appendChild(countdownElement);
-        this.audio.play('beep');
+        this.sfxEngine.play(beepVoices(3), 'sfx');
 
         const timers: ReturnType<typeof setTimeout>[] = [];
         timers.push(setTimeout(() => {
             countdownElement.textContent = '2';
-            this.audio.play('beep');
+            this.sfxEngine.play(beepVoices(2), 'sfx');
         }, 1000));
 
         timers.push(setTimeout(() => {
             countdownElement.textContent = '1';
-            this.audio.play('beep');
+            this.sfxEngine.play(beepVoices(1), 'sfx');
         }, 2000));
 
         timers.push(setTimeout(() => {
             this.countdownTimers = null;
             countdownElement.remove();
+            this.sfxEngine.play(beepVoices(0), 'sfx'); // the higher "go" beep
             this.beginRun();
         }, 3000));
 
@@ -512,6 +530,8 @@ class GameState {
     private beginRun(): void {
         this.stopClock();
         this.pendingNextLevel = false;
+        this.pickupStreak = 0;
+        this.lastWarnAt = 0;
         // The bar and the "new high score" claim measure this run against the best it started with.
         this.bestBeforeRun = this.highScore;
         this.run.start();
@@ -544,6 +564,7 @@ class GameState {
             this.lastTickAt = now;
             this.run.tick(elapsedMs);
             this.handleEvents();
+            this.maybeWarnLowEnergy(now);
             this.publishHud();
             const dir = this.stepper.poll(now);
             if (dir !== null) {
@@ -619,21 +640,21 @@ class GameState {
     /** Turn the run's queued events into sound, drawing and messages, oldest first. */
     private handleEvents(): void {
         for (const event of this.run.takeEvents()) {
+            this.playEventSfx(event);
             switch (event.type) {
                 case 'start':
                     // The countdown finished and the run is live.
                     this.dispatch('started');
                     break;
                 case 'pickup':
-                    this.audio.play('pickup');
+                    // The sound just played rode the streak's degree; count it now.
+                    this.pickupStreak += 1;
                     this.floatMessage(event);
                     break;
                 case 'fight':
-                    this.audio.play('fight');
                     this.floatMessage(event);
                     break;
                 case 'levelClear':
-                    this.audio.play('levelup');
                     this.stopClock();
                     this.dispatch('cleared');
                     this.board.float(`+${event.gained}`, this.run.player.x, this.run.player.y);
@@ -651,6 +672,7 @@ class GameState {
                     });
                     break;
                 case 'levelStart':
+                    this.pickupStreak = 0;
                     this.dispatch('levelStarted');
                     this.sizeBoard(event.size);
                     this.audio.setMusicRate(BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL);
@@ -667,6 +689,44 @@ class GameState {
         }
         // A phase change (clear, dead, next level) is a HUD change too.
         this.publishHud();
+    }
+
+    /** The energy as a percentage of storage, 0 to 100, for the sound context. */
+    private energyPct(): number {
+        const storage = this.run.stats.storage;
+        if (!Number.isFinite(storage) || storage <= 0) return 0;
+        const pct = (this.run.energy / storage) * 100;
+        if (!Number.isFinite(pct)) return 0;
+        return Math.min(100, Math.max(0, pct));
+    }
+
+    /** One run event through the sound design and the audio engine. */
+    private playEventSfx(event: GameEvent): void {
+        const voices = sfxFor(event, {
+            streak: this.pickupStreak,
+            energyPct: this.energyPct(),
+            depth: this.run.level,
+        });
+        if (voices.length > 0) this.sfxEngine.play(voices, 'sfx');
+    }
+
+    /** While playing with low energy, a soft pulse about once a second. */
+    private maybeWarnLowEnergy(now: number): void {
+        if (this.run.phase !== 'playing' || this.screen !== 'playing') return;
+        if (this.energyPct() >= LOW_ENERGY_PCT) {
+            this.lastWarnAt = 0;
+            return;
+        }
+        if (this.lastWarnAt !== 0 && now - this.lastWarnAt < WARN_EVERY_MS) return;
+        this.lastWarnAt = now;
+        this.sfxEngine.play(warnVoices(), 'sfx');
+    }
+
+    /** The effects bus volume from the save; anything odd gives the default. */
+    private static readSfxVol(save: SaveData): number {
+        const stored = save.settings.sfxVol;
+        if (typeof stored !== 'number' || !Number.isFinite(stored)) return DEFAULT_SFX_VOL;
+        return Math.min(1, Math.max(0, stored));
     }
 
     /** Size the maze, the HUD and the CSS grid for a maze of the given cell side. */

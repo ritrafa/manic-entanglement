@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Sound, type AudioLike, type SoundName } from "./sound";
+import { Sound, type AudioLike } from "./sound";
 
 /** A fake element: counts plays and pauses and can misbehave on play(). */
 class FakeAudio implements AudioLike {
@@ -42,29 +42,18 @@ function harness(playMode: "ok" | "reject" | "throw" = "ok") {
     return { sound, made, forSrc };
 }
 
+/** The music element's plays so far; 0 when it never got to make noise. */
+function musicPlays(forSrc: (src: string) => FakeAudio[]): number {
+    return forSrc("/standoff-loop.mp3").reduce((plays, fake) => plays + fake.plays, 0);
+}
+
 /** Let any rejected promise settle so an unhandled one would surface. */
 async function settle(): Promise<void> {
     for (let i = 0; i < 5; i++) await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-const SAMPLE_SRCS: Record<SoundName, string> = {
-    pickup: "/pickup.wav",
-    fight: "/fight.wav",
-    levelup: "/levelup.wav",
-    beep: "/beep.mp3",
-    lost: "/lost.mp3",
-};
-
 describe("Sound before unlock", () => {
-    it("play() before unlock() creates nothing and calls no element's play", () => {
-        const { sound, made } = harness();
-        sound.play("pickup");
-        sound.play("fight");
-        sound.play("lost");
-        expect(made).toHaveLength(0);
-    });
-
     it("startMusic() before unlock() creates nothing and plays nothing", () => {
         const { sound, made } = harness();
         sound.startMusic();
@@ -86,29 +75,18 @@ describe("Sound before unlock", () => {
     });
 });
 
-describe("Sound elements are one per sample", () => {
-    it("ten plays of one sample after unlock() create exactly one element", () => {
-        const { sound, forSrc } = harness();
-        sound.unlock();
-        for (let i = 0; i < 10; i++) sound.play("pickup");
-        const pickups = forSrc("/pickup.wav");
-        expect(pickups).toHaveLength(1);
-        expect(pickups[0].plays).toBe(10);
-        expect(pickups[0].currentTime).toBe(0); // every play rewound it
-    });
-
-    it("each sample maps to its own url and rate", () => {
+describe("Sound music element is one", () => {
+    it("ten start/stop cycles create exactly one element", () => {
         const { sound, made, forSrc } = harness();
         sound.unlock();
-        for (const name of Object.keys(SAMPLE_SRCS) as SoundName[]) sound.play(name);
-        for (const [name, src] of Object.entries(SAMPLE_SRCS)) {
-            expect(forSrc(src)).toHaveLength(1);
-            expect(made.some((fake) => fake.src === src)).toBe(true);
-            void name;
+        for (let i = 0; i < 10; i++) {
+            sound.startMusic();
+            sound.stopMusic();
         }
-        expect(forSrc("/fight.wav")[0].playbackRate).toBe(2);
-        expect(forSrc("/beep.mp3")[0].playbackRate).toBe(1.5);
-        expect(forSrc("/pickup.wav")[0].playbackRate).toBe(1);
+        expect(made).toHaveLength(1);
+        expect(forSrc("/standoff-loop.mp3")).toHaveLength(1);
+        expect(forSrc("/standoff-loop.mp3")[0].plays).toBe(10);
+        expect(forSrc("/standoff-loop.mp3")[0].currentTime).toBe(0); // every start rewound it
     });
 });
 
@@ -116,28 +94,25 @@ describe("Sound swallows rejected and thrown play()", () => {
     it("a play() returning a rejected promise neither throws nor goes unhandled", async () => {
         const { sound, forSrc } = harness("reject");
         sound.unlock();
-        expect(() => sound.play("pickup")).not.toThrow();
         expect(() => sound.startMusic()).not.toThrow();
         await settle(); // an unhandled rejection would surface here
-        expect(forSrc("/pickup.wav")[0].plays).toBe(1);
+        expect(forSrc("/standoff-loop.mp3")[0].plays).toBe(1);
     });
 
     it("a play() that throws is swallowed", () => {
         const { sound, forSrc } = harness("throw");
         sound.unlock();
-        expect(() => sound.play("fight")).not.toThrow();
         expect(() => sound.startMusic()).not.toThrow();
-        expect(forSrc("/fight.wav")[0].plays).toBe(1);
+        expect(forSrc("/standoff-loop.mp3")[0].plays).toBe(1);
     });
 });
 
 describe("Sound mute", () => {
-    it("while muted, play() and startMusic() call no element's play", () => {
+    it("while muted, startMusic() calls no element's play", () => {
         const { sound, made } = harness();
         sound.unlock();
         sound.setMuted(true);
         expect(sound.muted).toBe(true);
-        sound.play("pickup");
         sound.startMusic();
         expect(made.every((fake) => fake.plays === 0)).toBe(true);
     });
@@ -198,16 +173,12 @@ describe("Sound hidden tab", () => {
         sound.unlock();
         sound.setHidden(true);
         sound.startMusic();
-        expect(musicOrNothing(forSrc)).toBe(0);
+        expect(musicPlays(forSrc)).toBe(0);
 
         sound.setHidden(false);
-        expect(musicOrNothing(forSrc)).toBe(1);
+        expect(musicPlays(forSrc)).toBe(1);
     });
 });
-
-function musicOrNothing(forSrc: (src: string) => FakeAudio[]): number {
-    return forSrc("/standoff-loop.mp3").reduce((plays, fake) => plays + fake.plays, 0);
-}
 
 describe("Sound music rate", () => {
     it("setMusicRate(0.79) sets the playing element's playbackRate", () => {
@@ -228,10 +199,9 @@ describe("Sound music rate", () => {
 });
 
 describe("Sound stopAll", () => {
-    it("pauses and rewinds every created element and forgets a wanted music", () => {
+    it("pauses and rewinds the created element and forgets a wanted music", () => {
         const { sound, made, forSrc } = harness();
         sound.unlock();
-        sound.play("pickup");
         sound.startMusic();
         sound.stopAll();
         expect(made.every((fake) => fake.pauses === 1 && fake.currentTime === 0)).toBe(true);

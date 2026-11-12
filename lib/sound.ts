@@ -1,8 +1,9 @@
-// Every sound the game makes runs through one Sound object: one lazily created
-// element per sample, nothing played before the player's first gesture unlocks
-// it, and a rejected or thrown play() that never escapes. The element factory
-// comes in through the constructor, so this file never reaches for a browser
-// global itself and its tests run in plain node.
+// The music loop: one lazily created element, nothing played before the
+// player's first gesture unlocks it, and a rejected or thrown play() that
+// never escapes. The element factory comes in through the constructor, so
+// this file never reaches for a browser global itself and its tests run in
+// plain node. The sound effects are synthesized elsewhere (game/audio/sfx.ts
+// through lib/audioEngine.ts); no effect samples are loaded any more.
 
 /** The small part of an HTML audio element this module uses. */
 export interface AudioLike {
@@ -18,34 +19,16 @@ export interface AudioLike {
 /** Builds the element for one sample url; the shell passes its own audio maker. */
 export type AudioFactory = (src: string) => AudioLike;
 
-/** The one-shot samples the game plays, each with its url and fixed rate. */
-export type SoundName = 'pickup' | 'fight' | 'levelup' | 'beep' | 'lost';
-
-interface Sample {
-    src: string;
-    playbackRate: number;
-}
-
-const SAMPLES: Record<SoundName, Sample> = {
-    pickup: { src: '/pickup.wav', playbackRate: 1 },
-    fight: { src: '/fight.wav', playbackRate: 2 },
-    levelup: { src: '/levelup.wav', playbackRate: 1 },
-    beep: { src: '/beep.mp3', playbackRate: 1.5 },
-    lost: { src: '/lost.mp3', playbackRate: 1 },
-};
-
 /** The looping music track, played at a rate the shell sets per level. */
 const MUSIC_SRC = '/standoff-loop.mp3';
 
 /**
- * The game's one sound box. Elements are made lazily through the injected
- * factory on first use, so constructing a Sound creates nothing; play() and
- * the music stay silent until unlock() says the player has gestured.
+ * The game's one music box. The element is made lazily through the injected
+ * factory on first use, so constructing a Sound creates nothing; the music
+ * stays silent until unlock() says the player has gestured.
  */
 export class Sound {
     private readonly factory: AudioFactory;
-    /** The one element per sample, made on first use. */
-    private elements: Partial<Record<SoundName, AudioLike>> = {};
     /** The one music element, made the first time the music should actually play. */
     private musicElement: AudioLike | null = null;
     /** False until the player's first gesture; nothing plays before it. */
@@ -68,12 +51,6 @@ export class Sound {
         if (this.allowed) return;
         this.allowed = true;
         this.refreshMusic();
-    }
-
-    /** Rewind and play the one element of a sample; a rejection or throw stays swallowed. */
-    play(name: SoundName): void {
-        if (!this.allowed || this.isMuted) return;
-        this.start(this.element(name));
     }
 
     /** The music should be playing; it starts at once when allowed, visible and unmuted. */
@@ -117,9 +94,9 @@ export class Sound {
     stopAll(): void {
         this.musicWanted = false;
         this.musicPlaying = false;
-        for (const element of this.allElements()) {
-            element.pause();
-            element.currentTime = 0;
+        if (this.musicElement !== null) {
+            this.musicElement.pause();
+            this.musicElement.currentTime = 0;
         }
     }
 
@@ -153,16 +130,6 @@ export class Sound {
         }
     }
 
-    private element(name: SoundName): AudioLike {
-        let element = this.elements[name];
-        if (element === undefined) {
-            element = this.createElement(SAMPLES[name].src);
-            element.playbackRate = SAMPLES[name].playbackRate;
-            this.elements[name] = element;
-        }
-        return element;
-    }
-
     private music(): AudioLike {
         if (this.musicElement === null) {
             const element = this.createElement(MUSIC_SRC);
@@ -178,15 +145,5 @@ export class Sound {
         // A fresh element obeys the mute the game already carries.
         element.muted = this.isMuted;
         return element;
-    }
-
-    private allElements(): AudioLike[] {
-        const elements: AudioLike[] = [];
-        for (const name of Object.keys(SAMPLES) as SoundName[]) {
-            const element = this.elements[name];
-            if (element !== undefined) elements.push(element);
-        }
-        if (this.musicElement !== null) elements.push(this.musicElement);
-        return elements;
     }
 }
