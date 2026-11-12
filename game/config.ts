@@ -8,6 +8,10 @@ export const CONFIG = {
     sizeStep: 2,
     /** Origin shifts applied to the maze after each successful move. */
     shiftsPerMove: 15,
+    /** Milliseconds between steps while a direction is held (game/stepper.ts). */
+    stepMs: 110,
+    /** Milliseconds from the first step to the second while a key stays down. */
+    firstRepeatMs: 170,
     /** Milliseconds per 1 energy of the idle clock (multiplied by stats.speed). */
     drainMs: 150,
     /** Energy at the start of every level (also the floor, storage may raise it). */

@@ -6,10 +6,11 @@ import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf } from '@/game/keys';
+import { CONFIG } from '@/game/config';
+import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
 
 const SPRITE_FRAME_MS = 150;
-const CLOCK_TICK_MS = 50;
 const BASE_PLAYBACK_RATE = 0.7;
 const PLAYBACK_RATE_PER_LEVEL = 0.03;
 
@@ -28,7 +29,10 @@ class GameState {
     private board: Board = new Board();
     private preloadedUrls: Set<string> = new Set();
     private spriteInterval: ReturnType<typeof setInterval> | null = null;
-    private clockInterval: ReturnType<typeof setInterval> | null = null;
+    /** The one rAF handle while the frame loop runs; null when it is stopped. */
+    private rafId: number | null = null;
+    /** The movement cadence: held keys, the remembered press and when steps are due. */
+    private stepper: Stepper = new Stepper();
     private lastTickAt: number = 0;
     /** The pending 3-2-1 timers while a countdown runs; null when no countdown is running. */
     private countdownTimers: ReturnType<typeof setTimeout>[] | null = null;
@@ -70,6 +74,9 @@ class GameState {
         this.mountBoard();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
+        window.addEventListener('blur', this.handleBlur);
+        // The player's glide lasts exactly one step, so CSS and Stepper cannot drift apart.
+        document.documentElement.style.setProperty('--step-ms', `${CONFIG.stepMs}ms`);
     }
 
     /** True while the run accepts steps: the page uses it for the tap-to-start gesture. */
@@ -79,7 +86,12 @@ class GameState {
 
     /** A hidden tab must not drain the run: ticking stops, and the measurement restarts on return. */
     private handleVisibilityChange = (): void => {
-        if (!document.hidden) this.lastTickAt = Date.now();
+        if (!document.hidden) this.lastTickAt = performance.now();
+    };
+
+    /** Losing the window mid-run must not leave a key stuck down. */
+    private handleBlur = (): void => {
+        this.stepper.clear();
     };
 
     /** Schedule a timeout the shell can still cancel after dispose(). */
@@ -141,8 +153,11 @@ class GameState {
      * One keydown entry point: the pure mapping turns the event into an action,
      * any action the game owns gets preventDefault() so arrows and Space never
      * scroll the page. Browser chords and typing in fields are left alone.
+     * The operating system's own repeat is ignored (`event.repeat`): the Stepper
+     * sets the pace, not the OS.
      */
     handleKeyPress(event: KeyboardEvent): void {
+        if (event.repeat) return;
         const target = event.target as Element | null;
         const action = actionFor({
             code: event.code,
@@ -155,7 +170,8 @@ class GameState {
         event.preventDefault();
         const dir = dirOf(action);
         if (dir) {
-            if (this.active) this.movePlayer(dir.dx, dir.dy);
+            // The frame loop turns the press into steps at the game's own cadence.
+            if (this.active) this.stepper.press(action as Dir, performance.now());
             return;
         }
         if (action === 'confirm') {
@@ -164,6 +180,43 @@ class GameState {
             this.toggleMute();
         }
         // 'pause' is consumed here; the pause screen itself arrives in a later card.
+    }
+
+    /** The keyup partner of handleKeyPress: a released direction stops repeating. */
+    handleKeyRelease(event: KeyboardEvent): void {
+        const target = event.target as Element | null;
+        const action = actionFor({
+            code: event.code,
+            ctrlKey: event.ctrlKey,
+            altKey: event.altKey,
+            metaKey: event.metaKey,
+            targetTag: typeof target?.tagName === 'string' ? target.tagName : undefined,
+        });
+        if (action === null) return;
+        if (dirOf(action)) this.stepper.release(action as Dir);
+    }
+
+    /**
+     * One recognised swipe: a press followed straight by a release, so touches
+     * share the keyboard's cadence (exactly one step, and a swipe pressed during
+     * a wait is remembered like a tap).
+     */
+    tapMove(dx: number, dy: number): void {
+        if (!this.active) return;
+        const dir = GameState.dirName(dx, dy);
+        if (dir === null) return;
+        const now = performance.now();
+        this.stepper.press(dir, now);
+        this.stepper.release(dir);
+    }
+
+    /** The Stepper's name for a movement, or null when it is not one of the four. */
+    private static dirName(dx: number, dy: number): Dir | null {
+        if (dy === -1) return 'up';
+        if (dy === 1) return 'down';
+        if (dx === -1) return 'left';
+        if (dx === 1) return 'right';
+        return null;
     }
 
     /**
@@ -249,28 +302,46 @@ class GameState {
         this.startClock();
     }
 
-    /** One interval drives the energy clock with the real elapsed time. */
+    /**
+     * One requestAnimationFrame loop drives both the energy clock (with the real
+     * elapsed time, clamped) and the movement cadence while the run is playing.
+     */
     private startClock(): void {
-        if (this.clockInterval !== null) return;
-        this.lastTickAt = Date.now();
-        this.clockInterval = setInterval(() => {
+        if (this.rafId !== null) return;
+        this.lastTickAt = performance.now();
+        const frame = () => {
+            this.rafId = requestAnimationFrame(frame);
+            const now = performance.now();
             // A throttled or suspended hidden tab must never hand the run one huge step.
-            if (document.hidden) return;
-            const now = Date.now();
+            if (document.hidden) {
+                this.lastTickAt = now;
+                return;
+            }
+            if (this.run.phase !== 'playing') {
+                this.stopClock();
+                return;
+            }
             const elapsedMs = clampDt(now - this.lastTickAt);
             this.lastTickAt = now;
             this.run.tick(elapsedMs);
             this.handleEvents();
             this.updateStatus();
-            if (this.run.phase !== 'playing') this.stopClock();
-        }, CLOCK_TICK_MS);
+            const dir = this.stepper.poll(now);
+            if (dir !== null) {
+                const delta = dirOf(dir);
+                if (delta) this.movePlayer(delta.dx, delta.dy);
+            }
+        };
+        this.rafId = requestAnimationFrame(frame);
     }
 
+    /** Stop the loop; leaving the playing phase forgets every held key. */
     private stopClock(): void {
-        if (this.clockInterval !== null) {
-            clearInterval(this.clockInterval);
-            this.clockInterval = null;
+        if (this.rafId !== null) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
         }
+        this.stepper.clear();
     }
 
     /** Release everything the shell scheduled: after dispose() nothing it owns may fire. */
@@ -284,6 +355,7 @@ class GameState {
         this.timeouts.forEach(clearTimeout);
         this.timeouts.clear();
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        window.removeEventListener('blur', this.handleBlur);
         [this.sound, this.lost, this.levelup, this.countdown, this.pickupSound, this.fightSound]
             .forEach((audio) => {
                 audio.pause();

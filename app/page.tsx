@@ -12,11 +12,12 @@ const Page: React.FC = () => {
     const [player, setPlayer] = useState<Player | null>(null);
     const [gameState, setGameState] = useState<GameState | null>(null);
 
-    // One recognised swipe is one move; taps never come here — the browser's
-    // own click drives the title and the game-over panel.
+    // One recognised swipe is one step, pressed and released at once so touches
+    // share the keyboard's cadence; taps never come here — the browser's own
+    // click drives the title and the game-over panel.
     const handleSwipe = useCallback((dx: -1 | 0 | 1, dy: -1 | 0 | 1) => {
         if (!gameState) return;
-        gameState.movePlayer(dx, dy);
+        gameState.tapMove(dx, dy);
     }, [gameState]);
 
     useEffect(() => {
@@ -25,10 +26,13 @@ const Page: React.FC = () => {
         setPlayer(newGameState.player);
 
         const handleKeyPress = (event: KeyboardEvent) => newGameState.handleKeyPress(event);
+        const handleKeyRelease = (event: KeyboardEvent) => newGameState.handleKeyRelease(event);
         window.addEventListener('keydown', handleKeyPress);
+        window.addEventListener('keyup', handleKeyRelease);
 
         return () => {
             window.removeEventListener('keydown', handleKeyPress);
+            window.removeEventListener('keyup', handleKeyRelease);
             // Release every timer, listener and sound the shell owns.
             newGameState.dispose();
         };

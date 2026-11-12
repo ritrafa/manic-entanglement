@@ -109,8 +109,10 @@ body {
 
 .player {
   /* The outer element's transform carries the position; the glide is the
-     transition between the cells. */
-  transition: transform 90ms linear;
+     transition between the cells. The duration is the shell's step length
+     (--step-ms, set from CONFIG.stepMs in lib/GameState.ts) so the glide and
+     the cadence cannot drift apart. */
+  transition: transform var(--step-ms, 110ms) linear;
 }
 
 /* The inner wrapper holds the stacked <img class="player-layer"> elements
