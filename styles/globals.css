@@ -330,24 +330,66 @@ body {
   }
 }
 
+/* The pause and game-over panels (components/Overlay.tsx): a dark sheet over the
+   board, not the old solid red one — the run stays visible behind the panel. */
 .game-over-message {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(214, 2, 2, 0.8);
-  color: white;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  text-align: center;
-  cursor: pointer;
-  z-index: 2;
   flex-direction: column;
+  gap: 14px;
+  background-color: rgba(8, 10, 16, 0.88);
+  color: white;
+  text-align: center;
+  z-index: 3;
 }
 .game-over-message p {
-  margin: 5%;
+  margin: 0;
+}
+.overlay-title {
+  font-size: 28px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 220px;
+  max-width: 80%;
+}
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  font-size: 16px;
+}
+.summary-label {
+  opacity: 0.75;
+}
+.summary-value {
+  font-weight: bold;
+}
+.overlay-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.overlay-buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.overlay-buttons button:hover,
+.overlay-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
 }
 
 #hud {

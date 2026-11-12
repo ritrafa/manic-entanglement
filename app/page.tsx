@@ -5,6 +5,7 @@ import Player from '../lib/player';
 import GameState from '../lib/GameState';
 import Hud from '../components/Hud';
 import TouchLayer from '../components/TouchLayer';
+import Overlay from '../components/Overlay';
 import '../styles/globals.css';
 import { Analytics } from "@vercel/analytics/react"
 
@@ -67,6 +68,7 @@ const Page: React.FC = () => {
                     onClick={() => gameState?.confirm()}
                 />
                 <div id="level-complete-animation"></div>
+                {gameState && <Overlay gameState={gameState} />}
             </div>
             
             {gameState && (<Hud player={player} gameState={gameState} />)}

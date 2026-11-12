@@ -1,0 +1,213 @@
+import { describe, expect, it } from "vitest";
+import {
+    nextScreen,
+    sameSummary,
+    summaryLines,
+    type Screen,
+    type ScreenAction,
+} from "@/game/screens";
+import { Run, type Tally } from "@/game/run";
+
+/** A tally with patches on top of a fresh run's numbers. */
+function tallyAt(over: Partial<Tally> = {}): Tally {
+    return { moves: 0, ms: 0, kills: 0, pickups: 0, bumps: 0, depth: 1, cleared: 0, lostToFights: 0, ...over };
+}
+
+describe("nextScreen", () => {
+    it("starts the countdown from the title and pauses nothing else there", () => {
+        expect(nextScreen("title", "confirm")).toBe("countdown");
+        expect(nextScreen("title", "pause")).toBe("title");
+        expect(nextScreen("title", "hide")).toBe("title");
+        expect(nextScreen("title", "restart")).toBe("title");
+    });
+
+    it("the countdown only leaves on the run starting", () => {
+        expect(nextScreen("countdown", "started")).toBe("playing");
+        expect(nextScreen("countdown", "pause")).toBe("countdown");
+        expect(nextScreen("countdown", "confirm")).toBe("countdown");
+        expect(nextScreen("countdown", "hide")).toBe("countdown");
+    });
+
+    it("pause and hide stop a live game", () => {
+        expect(nextScreen("playing", "pause")).toBe("paused");
+        expect(nextScreen("playing", "hide")).toBe("paused");
+    });
+
+    it("resume goes back to playing from either toggle", () => {
+        expect(nextScreen("paused", "pause")).toBe("playing");
+        expect(nextScreen("paused", "confirm")).toBe("playing");
+    });
+
+    it("a hidden tab comes back paused: hide while paused stays paused", () => {
+        expect(nextScreen("paused", "hide")).toBe("paused");
+        // And nothing about returning to the tab is an action at all; unknown
+        // pairs keep the screen, so only an explicit resume leaves the pause.
+        for (const action of ["started", "cleared", "levelStarted", "died"] as ScreenAction[]) {
+            expect(nextScreen("paused", action)).toBe("paused");
+        }
+    });
+
+    it("paused can restart or quit", () => {
+        expect(nextScreen("paused", "restart")).toBe("countdown");
+        expect(nextScreen("paused", "quit")).toBe("title");
+        expect(nextScreen("playing", "restart")).toBe("countdown");
+        expect(nextScreen("playing", "quit")).toBe("title");
+    });
+
+    it("the run drives playing -> clear -> playing", () => {
+        expect(nextScreen("playing", "cleared")).toBe("clear");
+        expect(nextScreen("clear", "levelStarted")).toBe("playing");
+    });
+
+    it("pausing on the clear screen resumes to clear, and only the level start plays", () => {
+        const paused = nextScreen("clear", "pause");
+        expect(paused).toBe("paused");
+        // Resuming waits for the level: back to "clear", not straight to playing.
+        expect(nextScreen(paused, "confirm", { pausedFrom: "clear" })).toBe("clear");
+        expect(nextScreen(paused, "pause", { pausedFrom: "clear" })).toBe("clear");
+        expect(nextScreen("clear", "levelStarted")).toBe("playing");
+        // Without the context the resume assumes a plain playing pause.
+        expect(nextScreen(paused, "confirm")).toBe("playing");
+    });
+
+    it("the clear screen can also pause by hiding, restart or quit", () => {
+        expect(nextScreen("clear", "hide")).toBe("paused");
+        expect(nextScreen("clear", "restart")).toBe("countdown");
+        expect(nextScreen("clear", "quit")).toBe("title");
+    });
+
+    it("death opens the summary, which restarts or quits", () => {
+        expect(nextScreen("playing", "died")).toBe("over");
+        expect(nextScreen("clear", "died")).toBe("over");
+        expect(nextScreen("over", "confirm")).toBe("countdown");
+        expect(nextScreen("over", "restart")).toBe("countdown");
+        expect(nextScreen("over", "quit")).toBe("title");
+        expect(nextScreen("over", "pause")).toBe("over");
+        expect(nextScreen("over", "hide")).toBe("over");
+    });
+
+    it("unknown pairs keep the screen", () => {
+        const screens: Screen[] = ["title", "countdown", "playing", "paused", "clear", "over"];
+        const actions: ScreenAction[] = ["confirm", "pause", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"];
+        for (const screen of screens) {
+            for (const action of actions) {
+                const next = nextScreen(screen, action);
+                expect(next).oneOf([...screens]);
+            }
+        }
+        expect(nextScreen("playing", "levelStarted")).toBe("playing");
+        expect(nextScreen("playing", "started")).toBe("playing");
+        expect(nextScreen("title", "died")).toBe("title");
+        expect(nextScreen("title", "cleared")).toBe("title");
+    });
+});
+
+describe("summaryLines", () => {
+    const base = {
+        tally: tallyAt({ ms: 75400, kills: 4, pickups: 9, depth: 3 }),
+        score: 420,
+        best: 300,
+        newBest: false,
+        cause: "time" as const,
+    };
+
+    function line(lines: { label: string; value: string }[], label: string): string {
+        const found = lines.find((entry) => entry.label === label);
+        expect(found, `line ${label}`).toBeDefined();
+        return found!.value;
+    }
+
+    it("shows the run's rows in order", () => {
+        expect(summaryLines(base).map((entry) => entry.label)).toEqual([
+            "Cause",
+            "Depth reached",
+            "Score",
+            "Best",
+            "Time",
+            "Enemies beaten",
+            "Pickups",
+        ]);
+    });
+
+    it("formats 75,400 ms as 1:15", () => {
+        expect(line(summaryLines(base), "Time")).toBe("1:15");
+        expect(line(summaryLines({ ...base, tally: tallyAt({ ms: 0 }) }), "Time")).toBe("0:00");
+        expect(line(summaryLines({ ...base, tally: tallyAt({ ms: 59_999 }) }), "Time")).toBe("0:59");
+        expect(line(summaryLines({ ...base, tally: tallyAt({ ms: 65_000 }) }), "Time")).toBe("1:05");
+        expect(line(summaryLines({ ...base, tally: tallyAt({ ms: 600_000 }) }), "Time")).toBe("10:00");
+    });
+
+    it("shows New best! only when newBest", () => {
+        expect(line(summaryLines(base), "Best")).toBe("300");
+        expect(line(summaryLines({ ...base, newBest: true }), "Best")).toBe("New best!");
+    });
+
+    it("names all three causes", () => {
+        expect(line(summaryLines({ ...base, cause: "time" }), "Cause")).toBe("Out of time");
+        expect(line(summaryLines({ ...base, cause: "move" }), "Cause")).toBe("Out of energy");
+        expect(line(summaryLines({ ...base, cause: "fight" }), "Cause")).toBe("Lost a fight");
+    });
+
+    it("prints the tally's depth, kills and pickups", () => {
+        const lines = summaryLines(base);
+        expect(line(lines, "Depth reached")).toBe("3");
+        expect(line(lines, "Score")).toBe("420");
+        expect(line(lines, "Enemies beaten")).toBe("4");
+        expect(line(lines, "Pickups")).toBe("9");
+    });
+});
+
+describe("sameSummary", () => {
+    it("compares rows by content and null against rows", () => {
+        const a = summaryLines({ tally: tallyAt(), score: 0, best: 0, newBest: false, cause: "time" });
+        const b = summaryLines({ tally: tallyAt(), score: 0, best: 0, newBest: false, cause: "time" });
+        expect(sameSummary(a, b)).toBe(true);
+        expect(sameSummary(a, null)).toBe(false);
+        expect(sameSummary(null, null)).toBe(true);
+        const c = summaryLines({ tally: tallyAt(), score: 1, best: 0, newBest: false, cause: "time" });
+        expect(sameSummary(a, c)).toBe(false);
+    });
+});
+
+describe("a paused Run", () => {
+    it("10 s spent paused (no tick calls) costs no energy", () => {
+        const run = new Run({ seed: 7 });
+        run.start();
+        run.takeEvents();
+        run.tick(1000); // some real play first, so energy is not at its start value
+        const energyBeforePause = run.energy;
+        // Paused for ten seconds: the shell stops ticking, so nothing happens.
+        expect(run.energy).toBe(energyBeforePause);
+        expect(run.energy).toBe(energyBeforePause);
+        // Resuming drains again: the pause itself cost nothing.
+        run.tick(1000);
+        expect(run.energy).toBeLessThan(energyBeforePause);
+    });
+
+    it("abandon returns a live run to ready so a new one can start", () => {
+        const run = new Run({ seed: 11 });
+        run.start();
+        run.takeEvents();
+        run.tick(500);
+        run.abandon();
+        expect(run.phase).toBe("ready");
+        run.tick(10_000); // an abandoned run never ticks
+        run.start();
+        expect(run.phase).toBe("playing");
+        expect(run.level).toBe(1);
+        expect(run.score).toBe(0);
+        expect(run.tally.moves).toBe(0);
+    });
+
+    it("abandon on a dead or ready run changes nothing", () => {
+        const run = new Run({ seed: 3 });
+        run.abandon(); // ready already
+        expect(run.phase).toBe("ready");
+        run.start();
+        run.energy = 0;
+        run.tick(1000);
+        expect(run.phase).toBe("dead");
+        run.abandon();
+        expect(run.phase).toBe("ready");
+    });
+});

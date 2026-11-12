@@ -128,6 +128,17 @@ export class Run {
         this.push({ type: "levelStart", level: this.level, size: this.maze.width });
     }
 
+    /**
+     * Walk away from a live run: "ready" again so `start()` can begin a fresh one,
+     * with no "dead" event — quitting is not dying. The tally stays until the next
+     * start, and nothing ticks in this phase.
+     */
+    abandon(): void {
+        if (this.phase === "ready") return;
+        this.phase = "ready";
+        this.pendingMs = 0;
+    }
+
     /** One cardinal step. False (and no change) unless playing; a wall or the edge only costs a "blocked" event. */
     move(dx: number, dy: number): boolean {
         if (this.phase !== "playing") return false;

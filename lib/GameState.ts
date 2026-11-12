@@ -11,7 +11,19 @@ import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
 import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
+import { nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
 import { Sound } from './sound';
+
+/**
+ * The one snapshot React reads: every HUD field, plus the screen the shell is on
+ * and, while "over", the end-of-run summary rows (null on every other screen).
+ */
+export interface GameSnapshot extends HudModel {
+    /** The screen the shell is showing; drives the pause and game-over panels. */
+    screen: Screen;
+    /** The summary rows, built once when the run dies and shown on "over". */
+    summary: SummaryLine[] | null;
+}
 
 const SPRITE_FRAME_MS = 150;
 const BASE_PLAYBACK_RATE = 0.7;
@@ -46,12 +58,21 @@ class GameState {
     private cellSize: number = 4;
     /** True while M has silenced every sound the shell owns. */
     private muted: boolean = false;
-    /** The visible game-over panel, so confirm() can take it away on a restart. */
-    private gameOverElement: HTMLElement | null = null;
+    /** The screen the shell is showing; every change routes through nextScreen(). */
+    private screen: Screen = 'title';
+    /** The summary rows shown on "over"; null everywhere else. */
+    private summary: SummaryLine[] | null = null;
+    /** The screen the pause was taken from, so resuming knows where to go back to. */
+    private pausedFrom: Screen = 'playing';
+    /** The cause of the most recent death, kept for the summary. */
+    private lastCause: DeathCause = 'time';
+    /** True when the clear-screen animation finished while paused: the next level
+     * turns over on resume, so the clock can never run behind the pause panel. */
+    private pendingNextLevel: boolean = false;
     /** Every React listener waiting for the HUD model to change. */
     private hudListeners: Set<() => void> = new Set();
     /** The one model object React reads; replaced only when something actually changed. */
-    private hudSnapshot: HudModel;
+    private hudSnapshot: GameSnapshot;
     /** The best score from before the current run, remembered at start() for isNewBest and the bar. */
     private bestBeforeRun: number = 0;
 
@@ -73,7 +94,7 @@ class GameState {
             },
         });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = hudModel(this.run, this.bestBeforeRun);
+        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null };
         // The saved mute choice applies before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.muted = this.save.settings.muted === true;
@@ -97,13 +118,24 @@ class GameState {
 
     /** True while the run accepts steps: the page uses it for the tap-to-start gesture. */
     get active(): boolean {
-        return this.run.phase === 'playing' || this.run.phase === 'clear';
+        const running = this.run.phase === 'playing' || this.run.phase === 'clear';
+        // A paused or dead run never accepts a step, whatever phase the Run is in.
+        return running && this.screen !== 'paused' && this.screen !== 'over';
     }
 
-    /** A hidden tab must not drain the run: ticking stops, and the measurement restarts on return. */
+    /**
+     * A hidden tab must not drain the run: the 'hide' action pauses a live game
+     * (clock stopped, music quiet), and returning to the tab never resumes by
+     * itself — the player resumes through the panel. The clock measurement
+     * restarts on return so a throttled tab never hands the run one huge step.
+     */
     private handleVisibilityChange = (): void => {
         this.audio.setHidden(document.hidden);
-        if (!document.hidden) this.lastTickAt = performance.now();
+        if (document.hidden) {
+            this.dispatch('hide');
+        } else {
+            this.lastTickAt = performance.now();
+        }
     };
 
     /** The player's first keydown/pointerdown/touchstart: sound is allowed from now on. */
@@ -200,8 +232,9 @@ class GameState {
             this.confirm();
         } else if (action === 'mute') {
             this.toggleMute();
+        } else if (action === 'pause') {
+            this.dispatch('pause');
         }
-        // 'pause' is consumed here; the pause screen itself arrives in a later card.
     }
 
     /** The keyup partner of handleKeyPress: a released direction stops repeating. */
@@ -242,17 +275,113 @@ class GameState {
     }
 
     /**
-     * Enter, Space, the title image and the game-over panel all come through here:
-     * the countdown starts from the title, a dead run restarts, and while the run
-     * is live nothing happens.
+     * Enter, Space, the title image and the panel's Retry button all come through
+     * here: the countdown starts from the title, the summary restarts, a paused
+     * game resumes, and while the run is live nothing happens. A focused button
+     * keeps Enter/Space for itself (actionFor's targetTag rule), so the click and
+     * this path can never both fire for one keypress.
      */
     confirm(): void {
-        if (this.run.phase === 'dead') {
-            this.clearGameOverPanel();
-            this.beginRun();
-            return;
+        this.dispatch('confirm');
+    }
+
+    /** The pause panel's Resume: the same toggle Esc/P uses. */
+    resume(): void {
+        this.dispatch('pause');
+    }
+
+    /** The panel's Restart: abandon whatever is live and run the countdown again. */
+    restart(): void {
+        this.dispatch('restart');
+    }
+
+    /** The panel's Quit/Menu: abandon the run and go back to the title. */
+    quit(): void {
+        this.dispatch('quit');
+    }
+
+    /**
+     * The one way the screen moves: the pure nextScreen decides where an action
+     * leads, and the shell only acts on the change — pausing stops the clock and
+     * quiets the music, quitting abandons the run, restarting starts a new one.
+     */
+    private dispatch(action: ScreenAction): void {
+        const prev = this.screen;
+        const next = nextScreen(prev, action, { pausedFrom: this.pausedFrom });
+        if (next === prev) return;
+        this.screen = next;
+
+        if (next === 'paused') {
+            this.pausedFrom = prev;
+            this.enterPaused();
+        } else if (prev === 'paused') {
+            this.leavePaused(next);
         }
-        this.startGame();
+
+        if (next === 'countdown') {
+            this.summary = null;
+            // A restart abandons whatever run was live; from the title the
+            // countdown starts one on its own. A refused start leaves no half
+            // countdown behind.
+            if (prev !== 'title') this.run.abandon();
+            if (!this.startGame()) {
+                this.screen = prev;
+                return;
+            }
+        } else if (next === 'title') {
+            this.quitToTitle();
+        } else if (next === 'over') {
+            this.audio.stopMusic();
+            this.audio.play('lost');
+            this.summary = summaryLines({
+                tally: this.run.tally,
+                score: this.run.score,
+                best: this.bestBeforeRun,
+                newBest: isNewBest(this.run.score, this.bestBeforeRun),
+                cause: this.lastCause,
+            });
+        }
+        this.publishHud();
+    }
+
+    /** Entering the pause: clock stopped, held keys forgotten, music quiet. */
+    private enterPaused(): void {
+        this.stopClock();
+        this.audio.stopMusic();
+    }
+
+    /**
+     * Leaving the pause: music and clock come back only for a live game, and a
+     * level whose clear animation finished while paused turns over now — so the
+     * clock never ran behind the panel.
+     */
+    private leavePaused(next: Screen): void {
+        if (next !== 'playing' && next !== 'clear') return;
+        this.audio.startMusic();
+        if (this.pendingNextLevel) {
+            this.pendingNextLevel = false;
+            this.run.nextLevel();
+            // The levelStart event routes the screen on to "playing".
+            this.handleEvents();
+        }
+        if (this.screen === 'playing') this.startClock();
+    }
+
+    /** Quitting: the run is abandoned, the title stands ready again. */
+    private quitToTitle(): void {
+        this.cancelCountdown();
+        this.stopClock();
+        this.audio.stopMusic();
+        this.pendingNextLevel = false;
+        this.summary = null;
+        this.run.abandon();
+        const titleElement = document.getElementById('title-screen');
+        if (titleElement) {
+            titleElement.style.display = '';
+            titleElement.style.opacity = '';
+        }
+        this.board.setLevel(this.run, this.cellSize);
+        this.refreshSprite();
     }
 
     /** The browser's storage, or null where it is missing or refuses to be touched. */
@@ -296,14 +425,15 @@ class GameState {
         this.publishHud();
     }
 
-    startGame(): void {
+    /** The 3-2-1 countdown; true when it started, false when the request was refused. */
+    startGame(): boolean {
         // One countdown at a time: a second request while one runs is ignored,
         // so the page never ends up with two countdown elements or two starts.
-        if (this.countdownTimers !== null) return;
-        if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return;
+        if (this.countdownTimers !== null) return false;
+        if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return false;
         const mazeContainerElement = document.getElementById('maze-container');
         const titleElement = document.getElementById('title-screen');
-        if (!titleElement) return;
+        if (!titleElement) return false;
         titleElement.style.opacity = '0.5';
         const countdownElement = document.createElement('p');
         countdownElement.className = 'title-screen-countdown';
@@ -330,6 +460,7 @@ class GameState {
         }, 3000));
 
         this.countdownTimers = timers;
+        return true;
     }
 
     /** Cancel a running countdown, leaving no timer behind. */
@@ -343,6 +474,7 @@ class GameState {
     /** Start (or restart) the run at level 1 and set the clock going. */
     private beginRun(): void {
         this.stopClock();
+        this.pendingNextLevel = false;
         // The bar and the "new high score" claim measure this run against the best it started with.
         this.bestBeforeRun = this.highScore;
         this.run.start();
@@ -425,12 +557,20 @@ class GameState {
     };
 
     /** The current model; the same object until something changes, so React can bail out. */
-    public getSnapshot = (): HudModel => this.hudSnapshot;
+    public getSnapshot = (): GameSnapshot => this.hudSnapshot;
 
     /** Recompute the model; replace the snapshot and wake the listeners only on a real change. */
     private publishHud(): void {
-        const next = hudModel(this.run, this.bestBeforeRun);
-        if (sameHudModel(this.hudSnapshot, next)) return;
+        const next: GameSnapshot = {
+            ...hudModel(this.run, this.bestBeforeRun),
+            screen: this.screen,
+            summary: this.summary,
+        };
+        if (sameHudModel(this.hudSnapshot, next)
+            && this.hudSnapshot.screen === next.screen
+            && sameSummary(this.hudSnapshot.summary, next.summary)) {
+            return;
+        }
         this.hudSnapshot = next;
         this.hudListeners.forEach((listener) => listener());
     }
@@ -439,6 +579,10 @@ class GameState {
     private handleEvents(): void {
         for (const event of this.run.takeEvents()) {
             switch (event.type) {
+                case 'start':
+                    // The countdown finished and the run is live.
+                    this.dispatch('started');
+                    break;
                 case 'pickup':
                     this.audio.play('pickup');
                     this.floatMessage(event);
@@ -450,15 +594,23 @@ class GameState {
                 case 'levelClear':
                     this.audio.play('levelup');
                     this.stopClock();
+                    this.dispatch('cleared');
                     this.board.float(`+${event.gained}`, this.run.player.x, this.run.player.y);
                     this.recordBest(this.run.score);
                     this.triggerLevelCompleteAnimation(() => {
+                        if (this.screen === 'paused') {
+                            // The animation finished behind the pause panel: turn the
+                            // level over on resume instead, so the clock never runs paused.
+                            this.pendingNextLevel = true;
+                            return;
+                        }
                         this.run.nextLevel();
                         this.handleEvents();
                         this.startClock();
                     });
                     break;
                 case 'levelStart':
+                    this.dispatch('levelStarted');
                     this.sizeBoard(event.size);
                     this.audio.setMusicRate(BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL);
                     this.board.setLevel(this.run, this.cellSize);
@@ -467,7 +619,8 @@ class GameState {
                 case 'dead':
                     this.stopClock();
                     this.recordBest(this.run.score);
-                    this.gameOver(event.cause);
+                    this.lastCause = event.cause;
+                    this.dispatch('died');
                     break;
             }
         }
@@ -513,36 +666,6 @@ class GameState {
             animationOverlay.style.transform = 'scale(1)';
             this.after(100, callback); // Wait for the animation to complete before starting the new level
         });
-    }
-
-    gameOver(cause: DeathCause = 'time'): void {
-        const mazeElement = document.getElementById('maze');
-        if (!mazeElement) return;
-        this.audio.stopMusic();
-        this.audio.play('lost');
-        mazeElement.style.backgroundColor = 'rgba(255, 0, 0, 0.5)'; // Red overlay
-        const score = this.run.score;
-        const gameOverMessage = document.createElement('div');
-        gameOverMessage.className = 'game-over-message';
-        const gameOverMessageText = document.createElement('p');
-        gameOverMessageText.textContent = `You lost -- but the game's not over!`;
-        gameOverMessage.appendChild(gameOverMessageText);
-        const gameOverMessageText2 = document.createElement('p');
-        const reason = cause === 'fight' ? 'An enemy took your last energy' : 'You ran out of energy';
-        gameOverMessageText2.textContent = `${reason}, but you scored ${score} points${isNewBest(score, this.bestBeforeRun) ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
-        gameOverMessage.appendChild(gameOverMessageText2);
-        mazeElement.appendChild(gameOverMessage);
-        this.gameOverElement = gameOverMessage;
-
-        gameOverMessage.addEventListener('click', () => this.confirm());
-    }
-
-    /** Take the game-over panel away again, leaving no red overlay behind. */
-    private clearGameOverPanel(): void {
-        this.gameOverElement?.remove();
-        this.gameOverElement = null;
-        const mazeElement = document.getElementById('maze');
-        if (mazeElement) mazeElement.style.backgroundColor = '';
     }
 
     handleResize() {
