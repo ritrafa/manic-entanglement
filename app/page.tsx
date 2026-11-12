@@ -67,7 +67,6 @@ const Page: React.FC = () => {
                     shell's screen: the art shows on title, howto and countdown. */}
                 {gameState && <Menu gameState={gameState} />}
                 {gameState && <HowTo gameState={gameState} />}
-                <div id="level-complete-animation"></div>
                 {gameState && <Overlay gameState={gameState} />}
             </div>
             

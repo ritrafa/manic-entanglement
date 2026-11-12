@@ -220,14 +220,17 @@ body {
 }
 
 /* The inner wrapper holds the stacked <img class="player-layer"> elements
-   (from game/sprite.ts) and carries the facing flip. */
+   (from game/sprite.ts) and carries the facing flip. The flip is a variable,
+   so the bump animation can nudge the sprite without losing the facing. */
 .player-sprite {
   position: absolute;
   inset: 0;
+  --sprite-flip: 1;
+  transform: scaleX(var(--sprite-flip));
 }
 
 .player-sprite.flip-horizontal {
-  transform: scaleX(-1);
+  --sprite-flip: -1;
 }
 
 .player-layer {
@@ -409,28 +412,208 @@ body {
   }
 }
 
-#level-complete-animation {
-  position: absolute;
-  top: 2%;
-  width: 10%;
-  height: 10%;
-  background-image: url('/images/exit.gif');
-  background-size: cover;
-  background-position: center;
-  opacity: 0;
-  z-index: 3;
-  pointer-events: none;
-  transition: opacity 0.3s, transform 0.3s;
+/* --- Juice (game/fx.ts decides, play() in lib/board.ts draws) ---------------
+   The board answers the player: the bump nudges the sprite, pop and sparks
+   live on the fx layer, flash and fade veil the board, and shake and zoom
+   animate the board container itself. Durations arrive through --fx-ms. */
+
+.player-sprite.fx-bump {
+  animation: bump-nudge 180ms ease-out;
 }
 
-@keyframes expand-and-fade {
+@keyframes bump-nudge {
   0% {
-      transform: scale(1);
-      opacity: 1;
+    transform: scaleX(var(--sprite-flip, 1)) translate(0, 0);
+  }
+  35% {
+    transform: scaleX(var(--sprite-flip, 1)) translate(var(--bump-dx, 0px), var(--bump-dy, 0px));
   }
   100% {
-      transform: scale(1.5);
-      opacity: 0;
+    transform: scaleX(var(--sprite-flip, 1)) translate(0, 0);
+  }
+}
+
+/* The pickup's ring: one tile wide, opening and fading on the fx layer. */
+.fx-pop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell-size, 16px);
+  height: var(--cell-size, 16px);
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 215, 0, 0.9);
+  border-radius: 4px;
+  pointer-events: none;
+  animation: pop-ring var(--fx-ms, 350ms) ease-out forwards;
+}
+
+@keyframes pop-ring {
+  0% {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* The burst's particles: small squares thrown by --sx/--sy (lib/board.ts). */
+.spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  pointer-events: none;
+  animation: spark-fly var(--fx-ms, 600ms) ease-out forwards;
+}
+
+.spark-gold {
+  background: #ffd700;
+}
+
+.spark-red {
+  background: #ff3b30;
+}
+
+.spark-teal {
+  background: #1bbf85;
+}
+
+@keyframes spark-fly {
+  0% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--sx, 0px), var(--sy, 0px));
+    opacity: 0;
+  }
+}
+
+/* The veils: a colour wash (flash) or the dark stand-in the reduced-motion
+   run gets instead (fade). Both cover the board and end transparent. */
+.fx-veil {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  animation: veil var(--fx-ms, 200ms) ease-out forwards;
+}
+
+.fx-flash-gold {
+  background: rgba(255, 215, 0, 0.35);
+}
+
+.fx-flash-red {
+  background: rgba(255, 59, 48, 0.4);
+}
+
+.fx-flash-teal {
+  background: rgba(27, 191, 133, 0.35);
+}
+
+.fx-fade {
+  background: rgba(0, 0, 0, 0.65);
+  animation-name: veil-soft;
+}
+
+@keyframes veil {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes veil-soft {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Shake and zoom move the board container, not the page. */
+#maze.fx-shake {
+  animation: board-shake var(--fx-ms, 150ms) linear;
+}
+
+@keyframes board-shake {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(calc(var(--shake-px, 4px) * -1), var(--shake-px, 4px));
+  }
+  40% {
+    transform: translate(var(--shake-px, 4px), calc(var(--shake-px, 4px) * -1));
+  }
+  60% {
+    transform: translate(calc(var(--shake-px, 4px) * -1), 0);
+  }
+  80% {
+    transform: translate(var(--shake-px, 4px), var(--shake-px, 4px));
+  }
+}
+
+#maze.fx-zoom {
+  transform-origin: var(--zoom-origin, 50% 50%);
+  animation: board-zoom var(--fx-ms, 300ms) ease-in forwards;
+}
+
+@keyframes board-zoom {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.22);
+  }
+}
+
+/* Low energy: the screen breathes a warning. One cycle takes longer than a
+   second, so it can never flicker; the vignette and the energy bar breathe
+   together (lib/board.ts setLowEnergy puts the class on the board). */
+.low-energy .fade-overlay {
+  animation: vignette-breathe 1.6s ease-in-out infinite;
+}
+
+.low-energy #energy-bar-inner {
+  animation: energy-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes vignette-breathe {
+  0%, 100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes energy-breathe {
+  0%, 100% {
+    filter: none;
+  }
+  50% {
+    filter: brightness(1.6);
+  }
+}
+
+/* Players who ask for calm: the drifting galaxy stands still. The shell also
+   reads this ask through matchMedia and hands out only fades and pops. */
+@media (prefers-reduced-motion: reduce) {
+  #maze {
+    animation: none;
   }
 }
 

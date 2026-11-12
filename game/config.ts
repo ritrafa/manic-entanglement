@@ -77,3 +77,48 @@ export const LEVEL_SCORE_BASE = 100;
 export const KILL_SCORE = 25;
 /** Points for collecting one pickup. */
 export const PICKUP_SCORE = 10;
+
+// --- Juice (game/fx.ts decides, lib/board.ts draws) -----------------------------------
+// Every duration in milliseconds and every count of the effects bus. The shell
+// rate-limits shakes and flashes with these; lib/board.ts caps the particles.
+
+export const FX = {
+    /** Particles a pickup burst throws. */
+    pickupBurstCount: 5,
+    /** Particles a fight burst throws. */
+    fightBurstCount: 8,
+    /** Particles the level-clear burst throws at the exit. */
+    clearBurstCount: 14,
+    /** Hard cap: no burst ever throws more particles than this. */
+    maxBurstCount: 20,
+    /** At most this many .spark particles alive on the fx layer at once. */
+    maxParticles: 60,
+    /** Milliseconds a spark flies (the CSS animation's length). */
+    sparkMs: 600,
+    /** Milliseconds the pickup pop ring takes to open and fade. */
+    popMs: 350,
+    /** Milliseconds of the fight's red flash. */
+    fightFlashMs: 120,
+    /** Pixels and milliseconds of the fight's board shake. */
+    fightShakePx: 4,
+    fightShakeMs: 150,
+    /** Milliseconds of the zoom toward the exit on level clear. */
+    clearZoomMs: 300,
+    /** Milliseconds of the fade that opens a level. */
+    levelStartFadeMs: 200,
+    /** Milliseconds of the death flash. */
+    deadFlashMs: 400,
+    /** Pixels and milliseconds of the death shake. */
+    deadShakePx: 8,
+    deadShakeMs: 300,
+    /** Hard cap: no effect lasts longer than this. */
+    maxDurationMs: 500,
+    /** FxLimiter: at most this many shakes within limitWindowMs. */
+    maxShakesPerWindow: 3,
+    /** FxLimiter: at most this many flashes within limitWindowMs. */
+    maxFlashesPerWindow: 3,
+    /** FxLimiter: the sliding window every limit counts inside. */
+    limitWindowMs: 1000,
+    /** Below this fraction of storage the board breathes the low-energy pulse. */
+    lowEnergyPct: 0.25,
+} as const;

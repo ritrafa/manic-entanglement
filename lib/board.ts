@@ -4,12 +4,17 @@
 // transform. No React here; the shell (lib/GameState.ts) hands the board the Run.
 
 import type { Run } from '@/game/run';
-import { CONFIG } from '@/game/config';
+import { CONFIG, FX } from '@/game/config';
 import { blobRect } from '@/game/layout';
 import { entityPx, markTiles, tileDiff } from '@/game/view';
+import type { Fx, FxTone } from '@/game/fx';
 
 /** Tile pictures live at images/<code>.png. */
 const WALL_IMAGE_BASE = '/images/';
+
+/** Milliseconds an effect element waits past its animation before the fallback
+    timeout removes it, so a missed animationend never leaves it on the board. */
+const EFFECT_GRACE_MS = 250;
 
 function copyGrid(grid: string[][]): string[][] {
     return grid.map((row) => row.slice());
@@ -41,6 +46,10 @@ export class Board {
     /** Entity elements keyed by the stable ids run.items / run.enemies carry. */
     private itemElements: Map<number, HTMLElement> = new Map();
     private enemyElements: Map<number, HTMLElement> = new Map();
+    /** The element mount() received (#maze): shake and zoom animate this, not the page. */
+    private boardElement: HTMLElement | null = null;
+    /** The live spark particles, oldest first; playBurst() keeps the cap. */
+    private sparks: HTMLElement[] = [];
 
     /** Create the three layers inside #maze: the grid, the gliding entities and the effects. */
     mount(el: HTMLElement): void {
@@ -54,6 +63,10 @@ export class Board {
         this.marksLayer.className = 'marks';
         this.fxLayer.appendChild(this.marksLayer);
         el.replaceChildren(this.tilesLayer, this.entitiesLayer, this.fxLayer);
+
+        this.boardElement = el;
+        this.sparks = [];
+        el.classList.remove('fx-shake', 'fx-zoom', 'low-energy');
 
         this.tileImages = [];
         this.lastGrid = null;
@@ -110,6 +123,133 @@ export class Board {
         message.style.top = `${y}px`;
         message.addEventListener('animationend', () => message.remove(), { once: true });
         this.fxLayer.appendChild(message);
+    }
+
+    /**
+     * Draw one effect from the shell's effects bus (game/fx.ts fxFor): the
+     * bump nudges the player's inner element, pops, sparks and veils live on
+     * the fx layer and go when their animation ends, and shake and zoom
+     * animate the board container itself. Every element is gone soon after:
+     * nothing a play() leaves can outlive its animation by more than a grace.
+     */
+    play(fx: Fx): void {
+        if (!this.fxLayer || !this.boardElement) return;
+        switch (fx.kind) {
+            case 'bump':
+                this.playBump(fx.dx, fx.dy);
+                break;
+            case 'pop':
+                this.playPop(fx.x, fx.y);
+                break;
+            case 'burst':
+                this.playBurst(fx.x, fx.y, fx.count, fx.tone);
+                break;
+            case 'flash':
+                this.playVeil(fx.tone, fx.ms);
+                break;
+            case 'fade':
+                this.playVeil(null, fx.ms);
+                break;
+            case 'shake':
+                this.playShake(fx.px, fx.ms);
+                break;
+            case 'zoom':
+                this.playZoom(fx.x, fx.y, fx.ms);
+                break;
+        }
+    }
+
+    /** The board breathes a warning while the shell says the energy is low. */
+    setLowEnergy(on: boolean): void {
+        this.boardElement?.classList.toggle('low-energy', on);
+    }
+
+    private playBump(dx: number, dy: number): void {
+        const sprite = this.playerSprite;
+        if (!sprite) return;
+        const px = Math.max(2, Math.round(this.cell * 0.4));
+        sprite.style.setProperty('--bump-dx', `${Math.round(dx) * px}px`);
+        sprite.style.setProperty('--bump-dy', `${Math.round(dy) * px}px`);
+        this.restartAnimation(sprite, 'fx-bump');
+    }
+
+    private playPop(cellX: number, cellY: number): void {
+        const pop = document.createElement('div');
+        pop.className = 'fx-pop';
+        const { x, y } = entityPx(cellX, cellY, this.cell);
+        pop.style.left = `${x}px`;
+        pop.style.top = `${y}px`;
+        pop.style.setProperty('--fx-ms', `${FX.popMs}ms`);
+        this.spawnTemporary(pop, FX.popMs);
+    }
+
+    /** Throw count particles from the cell, oldest-first capped at FX.maxParticles. */
+    private playBurst(cellX: number, cellY: number, count: number, tone: FxTone): void {
+        const whole = Math.max(0, Math.floor(count));
+        const { x, y } = entityPx(cellX, cellY, this.cell);
+        for (let i = 0; i < whole; i++) {
+            const spark = document.createElement('div');
+            spark.className = `spark spark-${tone}`;
+            spark.style.left = `${x}px`;
+            spark.style.top = `${y}px`;
+            // Even spread, no randomness: the ring reads as thrown from the cell.
+            const angle = (i / Math.max(1, whole)) * Math.PI * 2;
+            const distance = Math.round(this.cell * (0.8 + (i % 3) * 0.35));
+            spark.style.setProperty('--sx', `${Math.round(Math.cos(angle) * distance)}px`);
+            spark.style.setProperty('--sy', `${Math.round(Math.sin(angle) * distance)}px`);
+            spark.style.setProperty('--fx-ms', `${FX.sparkMs}ms`);
+            this.spawnTemporary(spark, FX.sparkMs);
+            this.sparks.push(spark);
+        }
+        // The cap: sparks already gone leave the list, the oldest living ones go first.
+        this.sparks = this.sparks.filter((spark) => spark.isConnected);
+        while (this.sparks.length > FX.maxParticles) {
+            this.sparks.shift()?.remove();
+        }
+    }
+
+    /** A colour wash (flash) or the dark stand-in (fade) over the whole board. */
+    private playVeil(tone: FxTone | null, ms: number): void {
+        const veil = document.createElement('div');
+        veil.className = tone === null ? 'fx-veil fx-fade' : `fx-veil fx-flash fx-flash-${tone}`;
+        const whole = Math.max(1, Math.round(ms));
+        veil.style.setProperty('--fx-ms', `${whole}ms`);
+        this.spawnTemporary(veil, whole);
+    }
+
+    private playShake(px: number, ms: number): void {
+        const board = this.boardElement;
+        if (!board) return;
+        const whole = Math.max(1, Math.round(ms));
+        board.style.setProperty('--shake-px', `${Math.max(1, Math.round(px))}px`);
+        this.restartAnimation(board, 'fx-shake', whole);
+    }
+
+    private playZoom(cellX: number, cellY: number, ms: number): void {
+        const board = this.boardElement;
+        if (!board) return;
+        const whole = Math.max(1, Math.round(ms));
+        const { x, y } = entityPx(cellX, cellY, this.cell);
+        board.style.setProperty('--zoom-origin', `${x}px ${y}px`);
+        this.restartAnimation(board, 'fx-zoom', whole);
+    }
+
+    /** Put an effect element on the fx layer, gone at animationend or on the timeout. */
+    private spawnTemporary(element: HTMLElement, ms: number): void {
+        if (!this.fxLayer) return;
+        element.addEventListener('animationend', () => element.remove(), { once: true });
+        setTimeout(() => element.remove(), ms + EFFECT_GRACE_MS);
+        this.fxLayer.appendChild(element);
+    }
+
+    /** (Re)start a class-driven animation on a persistent element, even mid-run. */
+    private restartAnimation(element: HTMLElement, className: string, ms?: number): void {
+        element.classList.remove(className);
+        // Reading the layout flushes the removal, so adding the class starts fresh.
+        void element.offsetWidth;
+        if (ms !== undefined) element.style.setProperty('--fx-ms', `${ms}ms`);
+        element.classList.add(className);
+        setTimeout(() => element.classList.remove(className), (ms ?? 200) + EFFECT_GRACE_MS);
     }
 
     /**
@@ -173,6 +313,10 @@ export class Board {
         // holds the stacked layers and carries the facing flip.
         this.playerSprite = document.createElement('div');
         this.playerSprite.className = 'player-sprite';
+        // The bump class goes when its nudge ends (playBump puts it back).
+        this.playerSprite.addEventListener('animationend', (event) => {
+            if (event.animationName === 'bump-nudge') this.playerSprite?.classList.remove('fx-bump');
+        });
         this.playerElement.appendChild(this.playerSprite);
         this.entitiesLayer.appendChild(this.playerElement);
 

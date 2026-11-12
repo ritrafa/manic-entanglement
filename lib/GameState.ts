@@ -6,7 +6,8 @@ import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf } from '@/game/keys';
-import { CONFIG } from '@/game/config';
+import { CONFIG, FX } from '@/game/config';
+import { FxLimiter, fxFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
 import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
@@ -65,6 +66,8 @@ class GameState {
     private look: Look;
     /** The one code that touches the board's DOM: patched tiles and gliding sprites. */
     private board: Board = new Board();
+    /** The effects bus gate: at most three shakes and three flashes a second. */
+    private fxLimiter: FxLimiter = new FxLimiter();
     private preloadedUrls: Set<string> = new Set();
     private spriteInterval: ReturnType<typeof setInterval> | null = null;
     /** The one rAF handle while the frame loop runs; null when it is stopped. */
@@ -631,6 +634,9 @@ class GameState {
         if (this.music !== null) {
             this.music.setState({ depth: this.run.level, energyPct: this.energyPct() / 100 });
         }
+        // The board breathes the low-energy pulse while the run is live and
+        // the energy sits under the warning line (game/fx.ts lowEnergy).
+        this.board.setLowEnergy(this.run.phase === 'playing' && lowEnergy(this.energyPct() / 100));
         const next: GameSnapshot = {
             ...hudModel(this.run, this.bestBeforeRun),
             screen: this.screen,
@@ -653,6 +659,7 @@ class GameState {
     private handleEvents(): void {
         for (const event of this.run.takeEvents()) {
             this.playEventSfx(event);
+            this.playFx(event);
             switch (event.type) {
                 case 'start':
                     // The countdown finished and the run is live.
@@ -671,9 +678,12 @@ class GameState {
                     this.dispatch('cleared');
                     this.board.float(`+${event.gained}`, this.run.player.x, this.run.player.y);
                     this.recordBest(this.run.score);
-                    this.triggerLevelCompleteAnimation(() => {
+                    // The board pulls toward the exit for the zoom's length; the
+                    // next level turns over when it is done. Reduced motion gets
+                    // no zoom, so it waits not at all.
+                    this.after(this.reducedMotion() ? 0 : FX.clearZoomMs, () => {
                         if (this.screen === 'paused') {
-                            // The animation finished behind the pause panel: turn the
+                            // The zoom finished behind the pause panel: turn the
                             // level over on resume instead, so the clock never runs paused.
                             this.pendingNextLevel = true;
                             return;
@@ -709,6 +719,40 @@ class GameState {
         const pct = (this.run.energy / storage) * 100;
         if (!Number.isFinite(pct)) return 0;
         return Math.min(100, Math.max(0, pct));
+    }
+
+    /**
+     * One run event through the effects bus: game/fx.ts decides the effects,
+     * the limiter keeps flashes and shakes under three a second, and the
+     * board draws what survives. Effects never touch the rules or the score.
+     */
+    private playFx(event: GameEvent): void {
+        const motion: Motion = this.reducedMotion() ? 'reduced' : 'full';
+        const now = GameState.nowMs();
+        for (const fx of fxFor(event, { motion, exit: { ...this.run.exit } })) {
+            if ((fx.kind === 'shake' || fx.kind === 'flash') && !this.fxLimiter.allow(fx.kind, now)) {
+                continue;
+            }
+            this.board.play(fx);
+        }
+    }
+
+    /** The browser's reduced-motion ask, read fresh so a mid-run change is honoured. */
+    private reducedMotion(): boolean {
+        try {
+            return typeof window !== 'undefined'
+                && typeof window.matchMedia === 'function'
+                && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        } catch {
+            return false;
+        }
+    }
+
+    /** A wall clock in milliseconds for the limiter's sliding window. */
+    private static nowMs(): number {
+        return typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
     }
 
     /** One run event through the sound design and the audio engine. */
@@ -810,19 +854,6 @@ class GameState {
         if (event.type === 'pickup' || event.type === 'fight') {
             this.board.float(message, event.x, event.y);
         }
-    }
-
-    triggerLevelCompleteAnimation(callback: { (): void; }) {
-        const animationOverlay = document.getElementById('level-complete-animation');
-        if(!animationOverlay) return;
-        animationOverlay.style.opacity = '1';
-        animationOverlay.style.transform = 'scale(20)';
-
-        this.after(300, () => {
-            animationOverlay.style.opacity = '0';
-            animationOverlay.style.transform = 'scale(1)';
-            this.after(100, callback); // Wait for the animation to complete before starting the new level
-        });
     }
 
     handleResize() {
