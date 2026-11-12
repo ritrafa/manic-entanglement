@@ -401,3 +401,28 @@
   it is null, renders plain children, and the HUD then leaves the wallet box
   out entirely. **The wallet needs `NEXT_PUBLIC_RPC_URL` set to an
   `https://` RPC endpoint, or the wallet box stays hidden.**
+
+- Cut the first visit's weight: the wallet now arrives on demand. `app/layout.tsx`
+  no longer wraps the app in `WalletContextProvider`; the HUD shows a plain
+  **Wallet** button (`components/WalletGate.tsx`, only when `rpcUrl()` is set) that
+  pulls in the panel with `next/dynamic` (`ssr: false`) — the panel is
+  `components/WalletBox.tsx`, which now carries its own provider (and with it the
+  wallet CSS import) and renders the connect button and the reptile loader under
+  it, their hooks unchanged; the button reads "Loading..." while the chunk is in
+  flight, and with `NEXT_PUBLIC_RPC_URL` unset there is no button and the wallet
+  chunk is never requested. Added `scripts/first-load.mjs` (sums the
+  `/_next/static/...js` files the prerendered `.next/server/app/index.html`
+  references, prints the kB total and exits 1 above `--max-kb`; wired up as
+  `npm run size`) and `scripts/shrink-assets.mjs` (sharp; never enlarges, safe to
+  re-run), which re-encoded `public/images/galaxy2.jpg` from 2400 px / 1.4 MB to
+  1280 px / 124 kB at quality 72. Deleted the media nothing in `app`, `components`,
+  `lib`, `game` or `styles` references any more: `images/galaxy.jpg`,
+  `images/player.gif`, `images/sagamonke.gif`, `drum-loop.mp3`, `standoff-loop.mp3`,
+  `pickup.wav`, `fight.wav`, `levelup.wav`, `beep.mp3` and `lost.mp3`. The drifting
+  galaxy moved to a `#maze::before` layer (absolutely positioned, half a board
+  beyond every edge, behind the tiles) animated with `transform` only — translate
+  and scale — so the board is no longer repainted every frame; the reduced-motion
+  and high-contrast asks still stop or dim it, and `lib/board.ts` now preloads the
+  sixteen wall pictures once when the board mounts, so a wall that changes never
+  flashes empty. **First-load JavaScript: 1137.8 kB before, 663.7 kB after
+  (uncompressed); `public`: 8.0 MB before, 1.5 MB after.**

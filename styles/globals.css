@@ -27,14 +27,16 @@ body {
   width: 100vw;
   overflow: hidden;
 }
+/* The drifting galaxy moves by transform only (translate + scale), so the
+   compositor slides a layer instead of repainting the board every frame. The
+   picture lives on #maze::before, a layer larger than the board, so neither
+   the drift nor the scale ever exposes an edge. */
 @keyframes moveBackground {
   0% {
-    background-position: 0 0;
-    background-size: 600%;
+    transform: translate(0, 0) scale(1);
   }
-  100% { 
-    background-position: -1000px -500px; 
-    background-size: 300%;
+  100% {
+    transform: translate(-80px, -50px) scale(0.92);
   }
 }
 #maze-container {
@@ -50,8 +52,21 @@ body {
 }
 #maze {
   position: relative;
+  /* Its own stacking context, so the galaxy layer (z-index: -1) stays behind
+     the tiles but inside the board. */
+  isolation: isolate;
+}
+#maze::before {
+  content: '';
+  position: absolute;
+  /* Half the board beyond every edge: the slow drift never uncovers a side. */
+  inset: -50%;
+  z-index: -1;
+  /* One picture per board (50% of this twice-as-large layer), tiled. */
   background: url('/images/galaxy2.jpg') repeat;
+  background-size: 50% 50%;
   animation: moveBackground 45s ease-in-out infinite alternate;
+  pointer-events: none;
 }
 
 /* The board's three layers, built once by lib/board.ts: the tile grid, the
@@ -865,7 +880,8 @@ body {
 /* Players who ask for calm: the drifting galaxy stands still. The shell also
    reads this ask through matchMedia and hands out only fades and pops. */
 @media (prefers-reduced-motion: reduce) {
-  #maze {
+  #maze,
+  #maze::before {
     animation: none;
   }
 }
@@ -1033,6 +1049,9 @@ body {
   margin-top: 6px;
 }
 
+/* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
+   in the wallet panel on click. */
+.wallet-open,
 .wallet-actions {
   color: white;
   background-color: rgba(0, 0, 0, 0.8);
@@ -1044,6 +1063,7 @@ body {
   width: 120px;
 }
 
+.wallet-open:disabled,
 .wallet-actions:disabled {
   opacity: 0.6;
   cursor: default;
@@ -1146,7 +1166,10 @@ body {
     font-size: 1.3em;
   }
 
-  .wallet-actions {
+  /* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
+   in the wallet panel on click. */
+.wallet-open,
+.wallet-actions {
     width: auto;
     padding: 4px 8px;
     margin-top: 0;
@@ -1188,7 +1211,8 @@ body {
 /* Motion: the player's own ask, not only the operating system's. The drifting
    galaxy stands still, and nothing on the board may transition longer than
    150 ms (the shell also hands out only fades and pops when reduced). */
-[data-motion="reduced"] #maze {
+[data-motion="reduced"] #maze,
+[data-motion="reduced"] #maze::before {
   animation: none;
 }
 
@@ -1223,7 +1247,7 @@ body {
   );
 }
 
-[data-contrast="true"] #maze {
+[data-contrast="true"] #maze::before {
   animation: none;
   /* Multiply the galaxy by 40% grey: the background dims, the tiles on top
      keep their own brightness. */
@@ -1237,6 +1261,7 @@ body {
 }
 
 [data-contrast="true"] .stat,
+[data-contrast="true"] .wallet-open,
 [data-contrast="true"] .wallet-actions,
 [data-contrast="true"] .game-over-message,
 [data-contrast="true"] .settings-panel,

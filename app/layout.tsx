@@ -1,4 +1,3 @@
-import WalletContextProvider from "@/components/WalletContextProvider";
 import { siteUrl } from "./meta";
 
 const DESCRIPTION =
@@ -42,6 +41,9 @@ export const viewport = {
   themeColor: '#08412c',
 }
 
+// The wallet is not wrapped around the app any more: the HUD's Wallet button
+// pulls in the provider on demand (components/WalletGate.tsx), so visitors
+// who never open the wallet box never download the wallet code.
 export default function RootLayout({
   children,
 }: {
@@ -57,9 +59,7 @@ export default function RootLayout({
               Please enable it and reload.
             </p>
           </noscript>
-          <WalletContextProvider>
-            {children}
-          </WalletContextProvider>
+          {children}
         </body>
       </html>
 

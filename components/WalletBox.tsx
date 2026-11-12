@@ -5,6 +5,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { loadReptile } from '@/lib/reptile';
 import GameState from '@/lib/GameState';
+import WalletContextProvider from './WalletContextProvider';
 
 interface WalletBoxProps {
     gameState: GameState;
@@ -23,8 +24,23 @@ const STATUS_TEXT: Record<Exclude<LoadStatus, 'idle' | 'found'>, string> = {
 /** The left box of the HUD: connect, look up the reptile, show its image and
  *  a status line. It only changes the look (gameState.setLook), never stats
  *  or the high score. Rendered only when an RPC endpoint is configured, so
- *  the useWallet hook here always has its provider. */
-const WalletBox: React.FC<WalletBoxProps> = ({ gameState }) => {
+ *  the useWallet hook here always has its provider.
+ *
+ *  The wallet code lives behind components/WalletGate.tsx (next/dynamic,
+ *  ssr: false): this file brings its own provider — and with it the wallet
+ *  CSS the provider imports — so nothing from @solana/* is on the page
+ *  before the Wallet button is clicked. The connect button and the reptile
+ *  loader sit in the inner component, under the provider, so their hooks
+ *  see the live wallet context. */
+const WalletBox: React.FC<WalletBoxProps> = ({ gameState }) => (
+    <WalletContextProvider>
+        <WalletBoxContent gameState={gameState} />
+    </WalletContextProvider>
+);
+
+/** The box as it was before the lazy split, unchanged: it only ever renders
+ *  as a child of WalletContextProvider, so useWallet has its context. */
+const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
     const { publicKey } = useWallet();
     const [assetImage, setAssetImage] = useState<string | null>(null);
     const [status, setStatus] = useState<LoadStatus>('idle');

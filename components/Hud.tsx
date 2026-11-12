@@ -2,7 +2,7 @@ import React, { useSyncExternalStore } from 'react';
 import { rpcUrl } from '@/lib/reptile';
 import GameState from '@/lib/GameState';
 import ToolBar from './ToolBar';
-import WalletBox from './WalletBox';
+import WalletGate from './WalletGate';
 
 interface HudProps {
     gameState: GameState;
@@ -14,13 +14,14 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
 
     // No RPC endpoint configured: no wallet box at all (no button, no hook
-    // that would miss its context). WalletBox holds the wallet hooks so they
-    // are never called conditionally here.
+    // that would miss its context). WalletGate holds the wallet hooks behind
+    // a dynamic import so they are never called conditionally here and the
+    // wallet code stays off the first load until the button is clicked.
     const hasWallet = rpcUrl() !== null;
 
     return (
         <div id="hud">
-            {hasWallet && <WalletBox gameState={gameState} />}
+            {hasWallet && <WalletGate gameState={gameState} />}
             <div className="right-box">
                 <div className="bar-container">
                     <div id="stat-energy">{model.energyText}</div>

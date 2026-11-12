@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run build && tsc --noEmit && vitest run && npm run lint",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "size": "node scripts/first-load.mjs --max-kb 800"
   },
   "dependencies": {
     "@solana/wallet-adapter-react": "^0.15.40",

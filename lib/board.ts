@@ -13,6 +13,21 @@ import type { Fx, FxTone } from '@/game/fx';
 /** Tile pictures live at images/<code>.png. */
 const WALL_IMAGE_BASE = '/images/';
 
+/** Whether the sixteen wall pictures have already been warmed into the
+    browser cache. mount() does it once per page load, so a wall whose code
+    changes never flashes empty while its PNG is still in flight. */
+let wallImagesPreloaded = false;
+
+/** Warm the HTTP cache with all sixteen wall codes (0000.png ... 1111.png). */
+function preloadWallImages(): void {
+    if (wallImagesPreloaded) return;
+    wallImagesPreloaded = true;
+    for (let code = 0; code < 16; code += 1) {
+        const warm = new Image();
+        warm.src = `${WALL_IMAGE_BASE}${code.toString(2).padStart(4, '0')}.png`;
+    }
+}
+
 /** Milliseconds an effect element waits past its animation before the fallback
     timeout removes it, so a missed animationend never leaves it on the board. */
 const EFFECT_GRACE_MS = 250;
@@ -75,6 +90,9 @@ export class Board {
 
         this.boardElement = el;
         this.sparks = [];
+        // The wall pictures are fetched once, up front: the first time a tile
+        // changes its code the picture is already in the cache.
+        preloadWallImages();
         el.classList.remove('fx-shake', 'fx-zoom', 'low-energy');
 
         this.tileImages = [];
