@@ -11,6 +11,7 @@ import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
 import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
+import { Sound } from './sound';
 
 const SPRITE_FRAME_MS = 150;
 const BASE_PLAYBACK_RATE = 0.7;
@@ -25,12 +26,8 @@ class GameState {
     private save: SaveData = defaultSave();
     /** window.localStorage where it works, null where storage is missing or throws. */
     private storage: StorageLike = null;
-    public sound: HTMLAudioElement;
-    public lost: HTMLAudioElement;
-    public levelup: HTMLAudioElement;
-    public countdown: HTMLAudioElement;
-    public pickupSound: HTMLAudioElement;
-    public fightSound: HTMLAudioElement;
+    /** Every sound the game makes: lazy elements, unlocked by the first gesture. */
+    private audio: Sound = new Sound((src) => new Audio(src));
     private look: Look;
     /** The one code that touches the board's DOM: patched tiles and gliding sprites. */
     private board: Board = new Board();
@@ -77,24 +74,23 @@ class GameState {
         });
         this.bestBeforeRun = this.highScore;
         this.hudSnapshot = hudModel(this.run, this.bestBeforeRun);
-        this.sound = new Audio('/standoff-loop.mp3');
-        this.sound.loop = true;
-        this.sound.playbackRate = BASE_PLAYBACK_RATE;
-        this.sound.play();
-        this.lost = new Audio('/lost.mp3');
-        this.levelup = new Audio('/levelup.wav');
-        this.countdown = new Audio('/beep.mp3');
-        this.countdown.playbackRate = 1.5;
-        this.pickupSound = new Audio('/pickup.wav');
-        this.pickupSound.playbackRate = 1;
-        this.fightSound = new Audio('/fight.wav');
-        this.fightSound.playbackRate = 2;
+        // The saved mute choice applies before anything could play; the sound box
+        // itself stays silent until the player's first gesture unlocks it.
+        this.muted = this.save.settings.muted === true;
+        this.audio.setMuted(this.muted);
+        this.audio.setHidden(document.hidden);
         this.look = this.lookFromPlayer();
         this.preloadLook();
         this.mountBoard();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
         window.addEventListener('blur', this.handleBlur);
+        // The browser only lets sound start after a gesture: the first keydown,
+        // pointerdown or touch anywhere unlocks the sound box. { once: true }
+        // means the first one wins; unlock() itself is idempotent.
+        for (const gesture of ['keydown', 'pointerdown', 'touchstart'] as const) {
+            document.addEventListener(gesture, this.handleFirstGesture, { once: true });
+        }
         // The player's glide lasts exactly one step, so CSS and Stepper cannot drift apart.
         document.documentElement.style.setProperty('--step-ms', `${CONFIG.stepMs}ms`);
     }
@@ -106,7 +102,13 @@ class GameState {
 
     /** A hidden tab must not drain the run: ticking stops, and the measurement restarts on return. */
     private handleVisibilityChange = (): void => {
+        this.audio.setHidden(document.hidden);
         if (!document.hidden) this.lastTickAt = performance.now();
+    };
+
+    /** The player's first keydown/pointerdown/touchstart: sound is allowed from now on. */
+    private handleFirstGesture = (): void => {
+        this.audio.unlock();
     };
 
     /** Losing the window mid-run must not leave a key stuck down. */
@@ -275,10 +277,15 @@ class GameState {
 
     /** M: every sound the shell owns goes quiet together, and back. */
     toggleMute(): void {
-        this.muted = !this.muted;
-        for (const audio of [this.sound, this.lost, this.levelup, this.countdown, this.pickupSound, this.fightSound]) {
-            audio.muted = this.muted;
-        }
+        this.setMuted(!this.muted);
+    }
+
+    /** Silence or unsilence the sound box and remember the choice in the save. */
+    private setMuted(muted: boolean): void {
+        this.muted = muted;
+        this.audio.setMuted(muted);
+        this.save = { ...this.save, settings: { ...this.save.settings, muted } };
+        writeSave(this.storage, this.save);
     }
 
     /** One step: the run decides everything; the shell only turns its events into feedback. */
@@ -302,17 +309,17 @@ class GameState {
         countdownElement.className = 'title-screen-countdown';
         countdownElement.textContent = '3';
         mazeContainerElement?.appendChild(countdownElement);
-        this.countdown.play();
+        this.audio.play('beep');
 
         const timers: ReturnType<typeof setTimeout>[] = [];
         timers.push(setTimeout(() => {
             countdownElement.textContent = '2';
-            this.countdown.play();
+            this.audio.play('beep');
         }, 1000));
 
         timers.push(setTimeout(() => {
             countdownElement.textContent = '1';
-            this.countdown.play();
+            this.audio.play('beep');
         }, 2000));
 
         timers.push(setTimeout(() => {
@@ -341,7 +348,7 @@ class GameState {
         this.run.start();
         this.handleEvents();
         this.publishHud();
-        this.sound.play();
+        this.audio.startMusic();
         this.startClock();
     }
 
@@ -400,11 +407,10 @@ class GameState {
         this.hudListeners.clear();
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         window.removeEventListener('blur', this.handleBlur);
-        [this.sound, this.lost, this.levelup, this.countdown, this.pickupSound, this.fightSound]
-            .forEach((audio) => {
-                audio.pause();
-                audio.currentTime = 0;
-            });
+        for (const gesture of ['keydown', 'pointerdown', 'touchstart'] as const) {
+            document.removeEventListener(gesture, this.handleFirstGesture);
+        }
+        this.audio.stopAll();
     }
 
     /**
@@ -434,15 +440,15 @@ class GameState {
         for (const event of this.run.takeEvents()) {
             switch (event.type) {
                 case 'pickup':
-                    this.pickupSound.play();
+                    this.audio.play('pickup');
                     this.floatMessage(event);
                     break;
                 case 'fight':
-                    this.fightSound.play();
+                    this.audio.play('fight');
                     this.floatMessage(event);
                     break;
                 case 'levelClear':
-                    this.levelup.play();
+                    this.audio.play('levelup');
                     this.stopClock();
                     this.board.float(`+${event.gained}`, this.run.player.x, this.run.player.y);
                     this.recordBest(this.run.score);
@@ -454,7 +460,7 @@ class GameState {
                     break;
                 case 'levelStart':
                     this.sizeBoard(event.size);
-                    this.sound.playbackRate = BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL;
+                    this.audio.setMusicRate(BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL);
                     this.board.setLevel(this.run, this.cellSize);
                     this.refreshSprite();
                     break;
@@ -512,8 +518,8 @@ class GameState {
     gameOver(cause: DeathCause = 'time'): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        this.sound.pause();
-        this.lost.play();
+        this.audio.stopMusic();
+        this.audio.play('lost');
         mazeElement.style.backgroundColor = 'rgba(255, 0, 0, 0.5)'; // Red overlay
         const score = this.run.score;
         const gameOverMessage = document.createElement('div');
