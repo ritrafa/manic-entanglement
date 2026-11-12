@@ -63,14 +63,34 @@ describe("playBot", () => {
     }
   });
 
-  it("reaches level 2 or deeper in at least 34 of 40 seeds at 4 moves a second", () => {
-    let reachedDepth2 = 0;
+  it("at 4 moves a second, at least 34 of 40 seeds reach depth 3 and at least 24 depth 4", () => {
+    let reached3 = 0;
+    let reached4 = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const deepest = playBot(new Run({ seed }), 4, 20000);
+      if (deepest >= 3) reached3++;
+      if (deepest >= 4) reached4++;
+    }
+    expect(reached3).toBeGreaterThanOrEqual(34);
+    expect(reached4).toBeGreaterThanOrEqual(24);
+  });
+
+  it("at 2 moves a second, at least 32 of 40 seeds reach depth 2", () => {
+    let reached2 = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const deepest = playBot(new Run({ seed }), 2, 20000);
+      if (deepest >= 2) reached2++;
+    }
+    expect(reached2).toBeGreaterThanOrEqual(32);
+  });
+
+  it("at 8 moves a second, every one of 40 runs ends before depth 25", () => {
     for (let seed = 0; seed < 40; seed++) {
       const run = new Run({ seed });
-      const deepest = playBot(run, 4, 5000);
-      if (deepest >= 2) reachedDepth2++;
+      const deepest = playBot(run, 8, 20000);
+      expect(run.phase, `seed ${seed} never died`).toBe("dead");
+      expect(deepest, `seed ${seed} reached ${deepest}`).toBeLessThan(25);
     }
-    expect(reachedDepth2).toBeGreaterThanOrEqual(34);
   });
 
   it("starts a ready run and returns the deepest level reached", () => {

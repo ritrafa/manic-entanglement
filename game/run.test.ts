@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Run } from "@/game/run";
 import { CONFIG } from "@/game/config";
+import { levelPlan } from "@/game/plan";
 import type { GameEvent, ItemType } from "@/game/events";
 
 const STEPS = [
@@ -348,18 +349,18 @@ describe("Levels", () => {
     expect(events).toContainEqual({ type: "levelClear", level: 1 });
   });
 
-  it("nextLevel grows the maze, refills energy and keeps the start and exit free", () => {
+  it("nextLevel builds from levelPlan and keeps the start and exit free", () => {
     const run = startedRun(20);
     reachClear(run);
     run.takeEvents();
     run.nextLevel();
     expect(run.phase).toBe("playing");
     expect(run.level).toBe(2);
-    expect(run.maze.width).toBe(CONFIG.startSize + CONFIG.sizeStep);
-    expect(run.maze.height).toBe(CONFIG.startSize + CONFIG.sizeStep);
-    expect(run.energy).toBe(Math.max(CONFIG.startEnergy, run.stats.storage));
+    // The size steps only every two levels, so level 2 is still startSize x startSize.
+    expect(run.maze.width).toBe(levelPlan(2).size);
+    expect(run.maze.height).toBe(levelPlan(2).size);
     expect(run.score).toBe(1); // score carries over between levels
-    expect(run.takeEvents()).toEqual([{ type: "levelStart", level: 2, size: CONFIG.startSize + CONFIG.sizeStep }]);
+    expect(run.takeEvents()).toEqual([{ type: "levelStart", level: 2, size: levelPlan(2).size }]);
 
     const forbidden = [
       { x: run.player.x, y: run.player.y },
@@ -369,6 +370,59 @@ describe("Levels", () => {
       expect(run.items.some((item) => item.x === spot.x && item.y === spot.y)).toBe(false);
       expect(run.enemies.some((enemy) => enemy.x === spot.x && enemy.y === spot.y)).toBe(false);
     }
+  });
+
+  it("levels follow the plan: sizes 5, 5, 7, 7 and the planned placements up to the cap", () => {
+    const run = startedRun(23);
+    run.start();
+    for (let level = 1; level <= 6; level++) {
+      const plan = levelPlan(level);
+      expect(run.level).toBe(level);
+      expect(run.maze.width).toBe(plan.size);
+      expect(run.maze.height).toBe(plan.size);
+      expect(run.player).toMatchObject({ x: Math.floor(plan.size / 2), y: plan.size - 1 });
+      expect(run.exit).toEqual({ x: Math.floor(plan.size / 2), y: 0 });
+      expect(run.enemies.length).toBeLessThanOrEqual(plan.enemies);
+      expect(run.items.length).toBeLessThanOrEqual(plan.items[1]);
+      if (level === 6) break;
+      reachClear(run); // clears and stops the clock; nextLevel goes on
+      run.takeEvents();
+      run.nextLevel();
+      run.takeEvents();
+    }
+  });
+
+  it("nextLevel keeps the energy left and adds the exit bonus", () => {
+    const run = startedRun(24);
+    reachClear(run);
+    run.takeEvents();
+    run.energy = 30;
+    run.nextLevel();
+    expect(run.energy).toBe(80); // 30 kept + 50 bonus
+  });
+
+  it("the carried energy is capped at storage", () => {
+    const run = startedRun(25);
+    reachClear(run);
+    run.takeEvents();
+    run.energy = 90; // storage is 100
+    expect(run.stats.storage).toBe(100);
+    run.nextLevel();
+    expect(run.energy).toBe(100);
+  });
+
+  it("start refills to max(startEnergy, storage) whatever the last level left", () => {
+    const run = startedRun(26);
+    reachClear(run);
+    run.takeEvents();
+    run.energy = 30;
+    run.nextLevel();
+    run.takeEvents();
+    run.tick(999999); // die on the new level
+    expect(run.phase).toBe("dead");
+    run.start();
+    expect(run.level).toBe(1);
+    expect(run.energy).toBe(Math.max(CONFIG.startEnergy, run.stats.storage));
   });
 
   it("nextLevel only works from clear", () => {

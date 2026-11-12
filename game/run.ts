@@ -6,6 +6,7 @@
 import { Maze } from "./maze";
 import { createRng, type Rng } from "./rng";
 import { spawnLevel } from "./spawn";
+import { levelPlan } from "./plan";
 import { CONFIG } from "./config";
 import { fightCost } from "./combat";
 import type { DeathCause, GameEvent, ItemType } from "./events";
@@ -73,6 +74,7 @@ export class Run {
         this.push({ type: "start" });
         this.level = 1;
         this.score = 0;
+        this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.buildLevel();
         this.phase = "playing";
         this.push({ type: "levelStart", level: this.level, size: this.maze.width });
@@ -95,7 +97,8 @@ export class Run {
         this.score += 1;
         this.push({ type: "move", x: this.player.x, y: this.player.y, dx, dy });
 
-        for (let i = 0; i < CONFIG.shiftsPerMove; i++) this.maze.shift(this.rng);
+        const shifts = levelPlan(this.level).shifts;
+        for (let i = 0; i < shifts; i++) this.maze.shift(this.rng);
 
         const itemIndex = this.items.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
         if (itemIndex !== -1) {
@@ -144,9 +147,11 @@ export class Run {
         }
     }
 
-    /** From "clear" to "playing" on the next level: size +2, energy refilled, fresh placements. */
+    /** From "clear" to "playing" on the next level: energy carries over plus the plan's
+     * exit bonus (capped at storage), and the level is rebuilt from `levelPlan`. */
     nextLevel(): void {
         if (this.phase !== "clear") return;
+        this.energy = Math.min(this.stats.storage, this.energy + levelPlan(this.level).exitBonus);
         this.level += 1;
         this.buildLevel();
         this.phase = "playing";
@@ -206,16 +211,16 @@ export class Run {
         }
     }
 
-    /** Build the maze, start, exit, pickups and enemies for the current level, and refill energy. */
+    /** Build the maze, start, exit, pickups and enemies for the current level from its plan. */
     private buildLevel(): void {
-        const size = CONFIG.startSize + (this.level - 1) * CONFIG.sizeStep;
+        const plan = levelPlan(this.level);
+        const size = plan.size;
         this.maze = new Maze(size, size, this.rng);
         this.player.x = Math.floor(size / 2);
         this.player.y = size - 1;
         this.exit = { x: Math.floor(size / 2), y: 0 };
-        this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.pendingMs = 0;
-        const spawned = spawnLevel(this.rng, size, { items: CONFIG.pickupCount, enemies: CONFIG.enemyCount });
+        const spawned = spawnLevel(this.rng, size, { items: plan.items, enemies: plan.enemies }, plan.energyShare);
         this.items = spawned.items.map((item) => ({ id: this.nextId++, ...item }));
         this.enemies = spawned.enemies.map((enemy) => ({ id: this.nextId++, ...enemy }));
     }

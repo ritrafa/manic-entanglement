@@ -114,3 +114,43 @@ describe("spawnLevel counts", () => {
     }
   });
 });
+
+describe("spawnLevel energyShare", () => {
+  it("over 500 spawned pickups with energyShare 0.4, between 30% and 50% are energy", () => {
+    let energy = 0;
+    let total = 0;
+    for (const seed of SEEDS.slice(0, 100)) {
+      for (const item of spawnLevel(createRng(seed), 9, { items: 5, enemies: 1 }, 0.4).items) {
+        total++;
+        if (item.type === "energy") energy++;
+      }
+    }
+    expect(total).toBe(500);
+    const share = energy / total;
+    expect(share).toBeGreaterThanOrEqual(0.3);
+    expect(share).toBeLessThanOrEqual(0.5);
+  });
+
+  it("energyShare 1 makes every pickup energy and energyShare 0 makes none", () => {
+    for (const seed of SEEDS.slice(0, 20)) {
+      for (const item of spawnLevel(createRng(seed), 9, { items: 5, enemies: 1 }, 1).items) {
+        expect(item.type).toBe("energy");
+      }
+      for (const item of spawnLevel(createRng(seed), 9, { items: 5, enemies: 1 }, 0).items) {
+        expect(item.type).not.toBe("energy");
+      }
+    }
+  });
+
+  it("the five other types share the rest roughly evenly at energyShare 0.4", () => {
+    const counts = new Map<string, number>();
+    for (const seed of SEEDS.slice(0, 100)) {
+      for (const item of spawnLevel(createRng(seed), 9, { items: 5, enemies: 1 }, 0.4).items) {
+        counts.set(item.type, (counts.get(item.type) ?? 0) + 1);
+      }
+    }
+    for (const type of ITEM_TYPES) {
+      expect(counts.get(type) ?? 0).toBeGreaterThan(0);
+    }
+  });
+});
