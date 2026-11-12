@@ -2,6 +2,31 @@
 
 ## Queue log
 
+- Gave the game a wardrobe: the new pure `game/wardrobe.ts` holds `FREE_TRAITS`
+  (Body Green, Body Blue, Eye Regular, Eye Asleep and Head Hood — `None` is
+  always available where it exists), `UNLOCKS` (every one of the other seventeen
+  traits on exactly one feat, one or two each — first-exit: Body Pink; depth-5:
+  Eye One; depth-10: Clothes Tank; photo-finish: Head Cowboy; no-toll: Eye Zero;
+  toll-road: Back Wings; warden: Clothes Robe + Astronaut; collector: Back
+  Billhook + Head Crown; toolbox: Eye Scanner; in-the-dark: Head Cosmonaut +
+  Body Purple; sprinter: Body Gold + Back Jetpack; still-water: Body Skeleton +
+  Body Solana), plus `isUnlocked`, `availableTraits` (TRAITS order),
+  `cycleTrait` (wrap-around), `fitLook` (a trait not available falls back to the
+  layer's default) and `unlockedBy`, all tested in `game/wardrobe.test.ts`;
+  `game/screens.ts` added the "wardrobe" screen (title opens it, back or Esc
+  returns) and a `New look` summary row per trait the run's new feats unlocked,
+  `game/menu.ts` a Wardrobe entry between Settings and Feats; `lib/GameState.ts`
+  loads the look as `fitLook(sanitizeLook(save.look), save.feats)`, keeps it in
+  the snapshot and gained `setWardrobeLook` (applies, saves and redraws) beside
+  the wallet's `setLook`, which still shows an NFT look as it is and never
+  writes to the save; `components/Wardrobe.tsx` draws the panel — a ~192 px
+  pixelated preview stacked from `spriteLayers` and animated by `frameAt`, one
+  row per layer (name, previous, trait, next, arrow keys on the focused row)
+  and an "n of 22 traits unlocked" line saying feats unlock more, mounted
+  through `components/Overlay.tsx` and styled in `styles/globals.css`. Held for
+  the owner's Q12, since these traits are what the NFT collection is made of.
+
+
 - Gave the game a feats collection: `game/run.ts` extended the `Tally` with
   `minExitEnergy` (lowest energy on arriving at an exit, null before the first),
   `wardens` (Wardens beaten), `toolsUsed` (a per-tool-id count raised only by

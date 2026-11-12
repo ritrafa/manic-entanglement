@@ -23,6 +23,7 @@ export function menuItems(progress: { have: number; of: number } = { have: 0, of
         { id: "play", label: "Play" },
         { id: "howto", label: "How to play" },
         { id: "settings", label: "Settings" },
+        { id: "wardrobe", label: "Wardrobe" },
         { id: "feats", label: `Feats (${have}/${of})` },
     ];
 }

@@ -209,6 +209,23 @@ describe("nextScreen: the feats screen", () => {
     });
 });
 
+describe("nextScreen: the wardrobe screen", () => {
+    it("the title opens it and back or Esc returns to the title", () => {
+        expect(nextScreen("title", "wardrobe")).toBe("wardrobe");
+        expect(nextScreen("wardrobe", "back")).toBe("title");
+        expect(nextScreen("wardrobe", "pause")).toBe("title");
+    });
+
+    it("nothing else moves it, and other screens do not take the wardrobe action", () => {
+        expect(nextScreen("wardrobe", "hide")).toBe("wardrobe");
+        expect(nextScreen("wardrobe", "confirm")).toBe("wardrobe");
+        expect(nextScreen("wardrobe", "restart")).toBe("wardrobe");
+        expect(nextScreen("playing", "wardrobe")).toBe("playing");
+        expect(nextScreen("paused", "wardrobe")).toBe("paused");
+        expect(nextScreen("over", "wardrobe")).toBe("over");
+    });
+});
+
 describe("summaryLines", () => {
     const base = {
         tally: tallyAt({ ms: 75400, kills: 4, pickups: 9, depth: 3 }),
@@ -381,5 +398,18 @@ describe("summaryLines: new feat lines", () => {
     it("no feats means no New feat rows, and an empty list changes nothing", () => {
         expect(summaryLines(base).some((entry) => entry.label === "New feat")).toBe(false);
         expect(sameSummary(summaryLines(base), summaryLines({ ...base, feats: [] }))).toBe(true);
+    });
+
+    it("adds one New look row per unlocked trait, after the feat rows", () => {
+        const lines = summaryLines({ ...base, feats: ["Sprinter"], unlocks: ["Body Gold", "Back Jetpack"] });
+        const values = lines.filter((entry) => entry.label === "New look").map((entry) => entry.value);
+        expect(values).toEqual(["Body Gold", "Back Jetpack"]);
+        const labels = lines.map((entry) => entry.label);
+        expect(labels.lastIndexOf("New feat")).toBeLessThan(labels.indexOf("New look"));
+    });
+
+    it("no unlocks means no New look rows, and an empty list changes nothing", () => {
+        expect(summaryLines(base).some((entry) => entry.label === "New look")).toBe(false);
+        expect(sameSummary(summaryLines(base), summaryLines({ ...base, unlocks: [] }))).toBe(true);
     });
 });

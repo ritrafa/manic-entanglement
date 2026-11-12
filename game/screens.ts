@@ -7,7 +7,7 @@ import type { Tally } from "./run";
 import { MODES, type ModeId } from "./modes";
 
 /** Everything the shell can show. */
-export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "keys" | "clear" | "over" | "feats";
+export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "settings" | "keys" | "clear" | "over" | "feats" | "wardrobe";
 
 /** Everything that can move the shell between screens. */
 export type ScreenAction =
@@ -40,7 +40,9 @@ export type ScreenAction =
     /** The last level of a limited mode was cleared: the run finished. */
     | "finished"
     /** The title menu's Feats entry: opens the feats list. */
-    | "feats";
+    | "feats"
+    /** The title menu's Wardrobe entry: opens the look picker. */
+    | "wardrobe";
 
 /** One label/value row of the end-of-run summary. */
 export interface SummaryLine {
@@ -84,6 +86,7 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
             if (action === "howto") return "howto";
             if (action === "settings") return "settings";
             if (action === "feats") return "feats";
+            if (action === "wardrobe") return "wardrobe";
             return screen;
         case "howto":
             // Back, confirm or Esc closes it: to the countdown when the first
@@ -148,6 +151,17 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
                     return "title";
                 default:
                     // "hide" (and anything else) keeps the list open.
+                    return screen;
+            }
+        case "wardrobe":
+            switch (action) {
+                // Back or Esc closes the wardrobe and returns to the title;
+                // the wardrobe only ever opens from there.
+                case "back":
+                case "pause":
+                    return "title";
+                default:
+                    // "hide" (and anything else) keeps the wardrobe open.
                     return screen;
             }
         case "settings":
@@ -240,13 +254,15 @@ export interface SummaryInput {
     finished?: boolean;
     /** Names of the feats this run earned, in list order; none when left out. */
     feats?: string[];
+    /** What those feats unlocked, as "Layer Trait" texts (game/wardrobe.ts); none when left out. */
+    unlocks?: string[];
 }
 
 /**
  * The end-of-run summary as label/value rows: how the run ended, how deep it
  * got, what it scored against the best, and what it did on the way down.
  */
-export function summaryLines({ tally, score, best, newBest, cause, banked = 0, lost = 0, mode = "descent", finished = false, feats = [] }: SummaryInput): SummaryLine[] {
+export function summaryLines({ tally, score, best, newBest, cause, banked = 0, lost = 0, mode = "descent", finished = false, feats = [], unlocks = [] }: SummaryInput): SummaryLine[] {
     const rules = MODES[mode] ?? MODES.descent;
     return [
         { label: "Mode", value: rules.name },
@@ -265,8 +281,10 @@ export function summaryLines({ tally, score, best, newBest, cause, banked = 0, l
         { label: "Pickups", value: String(Math.max(0, Math.round(tally.pickups))) },
         { label: "Gear banked", value: String(Math.max(0, Math.round(banked))) },
         { label: "Gear lost", value: String(Math.max(0, Math.round(lost))) },
-        // One line per feat the run just earned, name last so it reads out loud.
+        // One line per feat the run just earned, name last so it reads out loud,
+        // then one per look those feats unlocked ("New look: Body Gold").
         ...(Array.isArray(feats) ? feats.map((name) => ({ label: "New feat", value: name })) : []),
+        ...(Array.isArray(unlocks) ? unlocks.map((trait) => ({ label: "New look", value: trait })) : []),
     ];
 }
 

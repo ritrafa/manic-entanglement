@@ -76,6 +76,15 @@ describe("HOWTO", () => {
     });
 });
 
+describe("menuItems: the wardrobe entry", () => {
+    it("holds a Wardrobe entry between Settings and Feats", () => {
+        const items = menuItems({ have: 3, of: 12 });
+        const ids = items.map((item) => item.id);
+        expect(ids).toEqual(["play", "howto", "settings", "wardrobe", "feats"]);
+        expect(items.find((item) => item.id === "wardrobe")?.label).toBe("Wardrobe");
+    });
+});
+
 describe("menuItems: the feats entry", () => {
     it("ends with a Feats entry counting the collection", () => {
         const items = menuItems({ have: 3, of: 12 });

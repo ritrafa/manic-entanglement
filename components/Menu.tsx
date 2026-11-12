@@ -127,6 +127,7 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                                 if (item.id === 'play') gameState.play();
                                 else if (item.id === 'settings') gameState.openSettings();
                                 else if (item.id === 'feats') gameState.openFeats();
+                                else if (item.id === 'wardrobe') gameState.openWardrobe();
                                 else gameState.openHowTo();
                             }}
                         >

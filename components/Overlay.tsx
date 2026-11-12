@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import GameState, { type GameSnapshot } from '@/lib/GameState';
 import type { SummaryLine } from '@/game/screens';
+import WardrobePanel from './Wardrobe';
 
 interface OverlayProps {
     gameState: GameState;
@@ -25,6 +26,10 @@ const Overlay: React.FC<OverlayProps> = ({ gameState }) => {
     useEffect(() => {
         if (open) firstButtonRef.current?.focus();
     }, [open, model.screen]);
+
+    // The wardrobe is the shell's other modal panel; it lives in its own
+    // component and comes along so the shell mounts one dialog owner.
+    if (model.screen === 'wardrobe') return <WardrobePanel gameState={gameState} />;
 
     if (!open) return null;
 

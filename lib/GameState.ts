@@ -1,7 +1,7 @@
 import { Run } from '@/game/run';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
-import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
+import { LAYER_ORDER, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
@@ -18,6 +18,7 @@ import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules }
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { MODIFIER_INFO } from '@/game/modifiers';
 import { evaluateFeats, featById, updateTotals } from '@/game/feats';
+import { UNLOCKS, fitLook } from '@/game/wardrobe';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -60,11 +61,18 @@ export interface GameSnapshot extends HudModel {
     finished: boolean;
     /** The feat ids earned so far (game/feats.ts); the feats screen marks them. */
     feats: string[];
+    /** The look the reptile wears now (game/sprite.ts); the wardrobe edits it. */
+    look: Look;
 }
 
 /** True when two feat lists hold the same ids in the same order. */
 function sameFeats(a: string[], b: string[]): boolean {
     return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** True when two looks wear the same trait on every layer. */
+function sameLook(a: Look, b: Look): boolean {
+    return (LAYER_ORDER as readonly string[]).every((layer) => a[layer as keyof Look] === b[layer as keyof Look]);
 }
 
 /** True when two tool charge records show the same counts. */
@@ -154,6 +162,8 @@ class GameState {
     private lastFinished: boolean = false;
     /** Names of the feats the last finished run earned; the summary prints them. */
     private lastFeatNames: string[] = [];
+    /** "Layer Trait" texts the last run's new feats unlocked; the summary prints them. */
+    private lastLookUnlocks: string[] = [];
 
     constructor() {
         // The save is read once, here: private windows, blocked site data and the
@@ -170,13 +180,14 @@ class GameState {
         // never sees the bank at all (game/modes.ts).
         this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats] };
+        // The look lives in the save; a fresh one is the default sprite, and a
+        // saved look never wears a trait the earned feats do not unlock.
+        this.look = fitLook(sanitizeLook(this.save.look), this.save.feats);
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look } };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
         this.applySettings();
-        // The look lives in the save; a fresh one is the default sprite.
-        this.look = sanitizeLook(this.save.look);
         this.preloadLook();
         this.mountBoard();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
@@ -238,11 +249,29 @@ class GameState {
         this.timeouts.add(id);
     }
 
-    /** Replace the current look (e.g. after loading an NFT from the wallet). */
+    /**
+     * Replace the current look (e.g. after loading an NFT from the wallet). A
+     * wallet look is worn as it is — not fitted to the earned feats — and is
+     * never written to the save.
+     */
     setLook(look: unknown): void {
         this.look = sanitizeLook(look);
         this.preloadLook();
         this.refreshSprite();
+    }
+
+    /**
+     * The wardrobe's pick: the look goes through sanitizeLook and fitLook (a
+     * trait the earned feats do not unlock falls back to its default), lands
+     * in the save, and the sprite is redrawn at once.
+     */
+    setWardrobeLook(look: unknown): void {
+        this.look = fitLook(sanitizeLook(look), this.save.feats);
+        this.save = { ...this.save, look: { ...this.look } };
+        writeSave(this.storage, this.save);
+        this.preloadLook();
+        this.refreshSprite();
+        this.publishHud();
     }
 
     /** Preload every frame of the current look once so the animation does not flicker. */
@@ -548,6 +577,7 @@ class GameState {
         if (next === 'countdown') {
             this.summary = null;
             this.lastFeatNames = [];
+            this.lastLookUnlocks = [];
             // A restart abandons whatever run was live; from the title the
             // countdown starts one on its own. A refused start leaves no half
             // countdown behind.
@@ -563,7 +593,9 @@ class GameState {
             // The run is over: its numbers join the lifetime totals, new feats
             // are earned once and written to the save, and their names join
             // the summary rows the panel shows.
-            this.lastFeatNames = this.settleRun();
+            const settled = this.settleRun();
+            this.lastFeatNames = settled.names;
+            this.lastLookUnlocks = settled.unlocks;
             this.summary = summaryLines({
                 tally: this.run.tally,
                 score: this.run.score,
@@ -577,6 +609,7 @@ class GameState {
                 mode: this.modeId,
                 finished: this.lastFinished,
                 feats: this.lastFeatNames,
+                unlocks: this.lastLookUnlocks,
             });
         }
         this.publishHud();
@@ -714,13 +747,16 @@ class GameState {
      * list order, for the summary. Called once per run, when the screen moves
      * to "over" — dying and finishing both land there.
      */
-    private settleRun(): string[] {
+    private settleRun(): { names: string[]; unlocks: string[] } {
         const tally = this.run.tally;
         const totals = updateTotals(this.save.totals, tally);
         const freshIds = evaluateFeats(this.save.feats, tally, totals);
         this.save = { ...this.save, totals, feats: [...this.save.feats, ...freshIds] };
         writeSave(this.storage, this.save);
-        return freshIds.map((id) => featById(id)?.name ?? id);
+        return {
+            names: freshIds.map((id) => featById(id)?.name ?? id),
+            unlocks: freshIds.flatMap((id) => (UNLOCKS[id] ?? []).map((entry) => `${entry.layer} ${entry.trait}`)),
+        };
     }
 
     /** The title menu's Feats entry: opens the list of feats and their state. */
@@ -731,6 +767,17 @@ class GameState {
 
     /** The feats panel's Back button: Esc and the button both close it. */
     closeFeats(): void {
+        this.dispatch('back');
+    }
+
+    /** The title menu's Wardrobe entry: opens the look picker. */
+    openWardrobe(): void {
+        if (this.screen !== 'title') return;
+        this.dispatch('wardrobe');
+    }
+
+    /** The wardrobe panel's Back button: Esc and the button both close it. */
+    closeWardrobe(): void {
         this.dispatch('back');
     }
 
@@ -1025,6 +1072,7 @@ class GameState {
             modeBestText: this.modeBestText(),
             finished: this.lastFinished,
             feats: [...this.save.feats],
+            look: { ...this.look },
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -1042,7 +1090,8 @@ class GameState {
             && this.hudSnapshot.modeBlurb === next.modeBlurb
             && this.hudSnapshot.modeBestText === next.modeBestText
             && this.hudSnapshot.finished === next.finished
-            && sameFeats(this.hudSnapshot.feats, next.feats)) {
+            && sameFeats(this.hudSnapshot.feats, next.feats)
+            && sameLook(this.hudSnapshot.look, next.look)) {
             return;
         }
         this.hudSnapshot = next;
