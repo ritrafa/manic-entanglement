@@ -1,5 +1,7 @@
 import Player from './player';
-import Maze, { Cell, Item, Enemy } from './maze';
+import { Item, Enemy } from './maze';
+import { Maze } from '@/game/maze';
+import { createRng, type Rng } from '@/game/rng';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 
 const INITIAL_MAZE_SIZE = 5;
@@ -13,6 +15,7 @@ let energyInterval: NodeJS.Timeout;
 
 class GameState {
     public maze: Maze;
+    private rng: Rng;
     public player: Player;
     public powerups: { x: number, y: number, type: string }[];
     public enemies: { x: number, y: number }[];
@@ -30,7 +33,8 @@ class GameState {
     
 
     constructor() {
-        this.maze = new Maze(INITIAL_MAZE_SIZE, INITIAL_MAZE_SIZE);
+        this.rng = createRng(Date.now());
+        this.maze = new Maze(INITIAL_MAZE_SIZE, INITIAL_MAZE_SIZE, this.rng);
         this.player = new Player();
         this.player.maze_level = 1;
         this.player.energy = 100;
@@ -117,7 +121,7 @@ class GameState {
     initGame(size: number = INITIAL_MAZE_SIZE): Player {
         this.active = true;
         this.sound.play();
-        this.maze = new Maze(size, size);
+        this.maze = new Maze(size, size, this.rng);
 
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return this.player;
@@ -246,7 +250,21 @@ class GameState {
             }
         }
         // Add the overlay
-        this.maze.addOverlay(this.maze.origin.x * 2 + 1, this.maze.origin.y * 2 + 1);
+        this.addOverlay(this.maze.origin.x * 2 + 1, this.maze.origin.y * 2 + 1);
+    }
+
+    /** Draw the fade overlay centred on the given wall-grid tile. */
+    private addOverlay(x: number, y: number): void {
+        const mazeElement = document.getElementById('maze');
+        if (!mazeElement) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'fade-overlay';
+        overlay.style.width = '400px';
+        overlay.style.height = '400px';
+        overlay.style.left = `${x * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        overlay.style.top = `${y * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        mazeElement.appendChild(overlay);
     }
 
     updateStatus(): void {
@@ -324,12 +342,7 @@ class GameState {
         const newX = this.player.x + dx;
         const newY = this.player.y + dy;
 
-        if (newX >= 0 && newX < this.maze.width && newY >= 0 && newY < this.maze.height && this.player.energy > 0) {
-            if ((dx === -1 && !this.maze.grid[this.player.y][this.player.x].walls[3]) ||
-                (dx === 1 && !this.maze.grid[this.player.y][this.player.x].walls[1]) ||
-                (dy === -1 && !this.maze.grid[this.player.y][this.player.x].walls[0]) ||
-                (dy === 1 && !this.maze.grid[this.player.y][this.player.x].walls[2])) {
-
+        if (this.player.energy > 0 && this.maze.canMove(this.player.x, this.player.y, dx, dy)) {
                 if (dx === -1) {
                     this.player.facing_left = true;
                 } else if (dx === 1) {
@@ -342,7 +355,7 @@ class GameState {
                 this.player.points++;
 
                 for (let i = 0; i < SHUFFLE_COUNT; i++) {
-                    this.maze.shiftMaze();
+                    this.maze.shift(this.rng);
                 }
 
                 const powerupIndex = this.powerups.findIndex(p => p.x === this.player.x && p.y === this.player.y);
@@ -385,7 +398,6 @@ class GameState {
                     this.sound.playbackRate = 0.7;
                     return;
                 }
-            }
         }
     }
 
