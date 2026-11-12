@@ -386,3 +386,18 @@
   safe warnings went with them — the HUD's wallet callback lists `gameState`
   and the config file exports a named constant — leaving 0 warnings; one
   inline `eslint-disable` (a stable-callback effect in `Controls`) remains.
+
+- Moved the wallet's RPC host out of the source and made the loader safe: the
+  old `lib/helius.ts` (hard-coded provider host, unchecked replies, throws
+  inside an unawaited promise) is replaced by `lib/reptile.ts` — `rpcUrl()`
+  reads `NEXT_PUBLIC_RPC_URL` and only accepts a non-empty `https://` URL,
+  `findReptile()` walks the asset list defensively and builds the look through
+  `sanitizeLook` (an NFT changes the look only, never stats or the high
+  score), and `loadReptile()` never throws, answering `found`/`none`/`error`;
+  all covered by `lib/reptile.test.ts`. The HUD's wallet box moved to
+  `components/WalletBox.tsx` (connect button, Assets button, image and one
+  status line: "Loading...", "No Entangled Reptile in this wallet" or "Could
+  not reach the network"); `WalletContextProvider` uses `rpcUrl()` and, when
+  it is null, renders plain children, and the HUD then leaves the wallet box
+  out entirely. **The wallet needs `NEXT_PUBLIC_RPC_URL` set to an
+  `https://` RPC endpoint, or the wallet box stays hidden.**

@@ -1044,6 +1044,21 @@ body {
   width: 120px;
 }
 
+.wallet-actions:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.wallet-status {
+  color: #cfd8dc;
+  background-color: rgba(0, 0, 0, 0.6);
+  font-size: 11px;
+  border-radius: 5px;
+  padding: 4px 6px;
+  margin-top: 5px;
+  max-width: 160px;
+}
+
 #stat-level, #stat-attack, #stat-defense, #stat-speed, #stat-consumption {
   font-size: 2em;
 }

@@ -1,64 +1,26 @@
-import React, { useState, useCallback, useSyncExternalStore } from 'react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { getRelatedAssetsByOwner } from '../lib/helius';
-import { useWallet } from '@solana/wallet-adapter-react';
+import React, { useSyncExternalStore } from 'react';
+import { rpcUrl } from '@/lib/reptile';
 import GameState from '@/lib/GameState';
 import ToolBar from './ToolBar';
-
-/** The five sprite traits an NFT's attributes may set (game/sprite.ts). */
-const LOOK_LAYERS = ['Head', 'Eye', 'Clothes', 'Body', 'Back'] as const;
+import WalletBox from './WalletBox';
 
 interface HudProps {
     gameState: GameState;
 }
 
 const Hud: React.FC<HudProps> = ({ gameState }) => {
-    const { publicKey } = useWallet();
-    const [assetImage, setAssetImage] = useState<string | null>(null);
     // The whole model comes from the shell's store: one source, no getElementById,
     // and a React re-render (e.g. a wallet connecting) can never put stale text back.
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
 
-    const handleCheckAssets = useCallback(async () => {
-        if (publicKey) {
-            const assets = await getRelatedAssetsByOwner(publicKey.toBase58());
-            assets.forEach((element: {
-                file: any;
-                collection: string; data: any; 
-}) => {
-                if (element.collection == 'Dj5gDUph6CuUiQBjh31HhpmJTXhhfHzbMTNK89wNHzvz' && element.data){
-                    const data = element.data;
-                    const image = element.file;
-
-                    setAssetImage(image);
-                    // The look lives in the shell (GameState.setLook): take the
-                    // five sprite traits straight from the asset's attributes.
-                    const look: Record<string, string> = {};
-                    if (Array.isArray(data)) {
-                        for (const detail of data as { key?: string; value?: unknown }[]) {
-                            if (typeof detail?.key === 'string'
-                                && (LOOK_LAYERS as readonly string[]).includes(detail.key)
-                                && typeof detail.value === 'string') {
-                                look[detail.key] = detail.value;
-                            }
-                        }
-                    }
-                    gameState.setLook(look);
-
-                    return;
-                }   
-            });
-        }
-    }, [publicKey, gameState]);
+    // No RPC endpoint configured: no wallet box at all (no button, no hook
+    // that would miss its context). WalletBox holds the wallet hooks so they
+    // are never called conditionally here.
+    const hasWallet = rpcUrl() !== null;
 
     return (
         <div id="hud">
-            <div className="left-box">
-                <WalletMultiButton />
-                {publicKey && <button className="wallet-actions" onClick={handleCheckAssets}>🔍 Assets</button>}
-
-                {assetImage && <img src={assetImage} alt="Asset" className="asset-image" />}
-            </div>
+            {hasWallet && <WalletBox gameState={gameState} />}
             <div className="right-box">
                 <div className="bar-container">
                     <div id="stat-energy">{model.energyText}</div>
@@ -88,10 +50,6 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                 </div>
                 <div className="stats-container">
                 <div className="stat">
-                        <div><span aria-hidden="true">🌌</span> Maze Level</div>
-                        <div id="stat-level">{model.level}</div>
-                    </div>
-                    <div className="stat">
                         <div><span aria-hidden="true">⚔️</span> Attack</div>
                         <div id="stat-attack">{model.attack}</div>
                     </div>

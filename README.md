@@ -50,9 +50,16 @@ the maze grows the further you go.
 The Solana wallet is entirely optional and read-only: connect it and the game
 looks up your assets in the Entangled Reptiles collection (id
 `Dj5gDUph6CuUiQBjh31HhpmJTXhhfHzbMTNK89wNHzvz`) and, if you own one, loads its
-traits as your playable character's look. Nothing is signed, minted or sent,
-and the game plays exactly the same without a wallet — your look from the
-wardrobe is used instead.
+traits as your playable character's look — the look only, never the stats or
+the high score. Nothing is signed, minted or sent, and the game plays exactly
+the same without a wallet — your look from the wardrobe is used instead.
+
+The wallet needs an RPC endpoint from the environment: set
+`NEXT_PUBLIC_RPC_URL` to a non-empty `https://` URL (any RPC provider's
+mainnet endpoint works; no key is required for this read-only call). Without
+it the wallet box is hidden entirely — no connect button, no assets button.
+Failures are never silent: the box shows "Loading...", "No Entangled Reptile
+in this wallet" or "Could not reach the network" under the button.
 
 ## Develop
 
@@ -72,7 +79,8 @@ npm run check    # build + type-check + tests, the same as CI
   wardrobe, ...), no DOM and no clocks, covered by the vitest suites beside
   each file.
 - `lib/` — the browser shell: `GameState` drives a run from the pure rules,
-  `board.ts` paints the DOM, and the wallet-asset fetch lives here too.
+  `board.ts` paints the DOM, and `reptile.ts` holds the read-only wallet
+  loader (endpoint from `NEXT_PUBLIC_RPC_URL`, no host in the source).
 - `components/` — the React pieces (HUD, menu, overlays, wardrobe, ...).
 - `public/` — art and sounds, plus `public/images/title.png` as the share
   image and app icon.
@@ -81,11 +89,9 @@ npm run check    # build + type-check + tests, the same as CI
 
 - `NEXT_PUBLIC_SITE_URL` — the canonical site URL used for the share metadata;
   when unset or invalid the metadata falls back to `http://localhost:3000`.
-  Nothing else is required to build or run.
-
-The wallet's RPC endpoint is currently a constant in the wallet code
-(`lib/` and `components/WalletContextProvider.tsx`); the game needs no key
-for anything.
+- `NEXT_PUBLIC_RPC_URL` — the `https://` RPC endpoint for the optional,
+  read-only wallet lookup (see Wallet above); when unset or not `https://`
+  the wallet box is hidden. Nothing else is required to build or run.
 
 ## Deploy
 
