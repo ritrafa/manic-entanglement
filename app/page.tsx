@@ -6,6 +6,8 @@ import GameState from '../lib/GameState';
 import Hud from '../components/Hud';
 import TouchLayer from '../components/TouchLayer';
 import Overlay from '../components/Overlay';
+import Menu from '../components/Menu';
+import HowTo from '../components/HowTo';
 import '../styles/globals.css';
 import { Analytics } from "@vercel/analytics/react"
 
@@ -61,12 +63,10 @@ const Page: React.FC = () => {
             
             <div id="maze-container">
                 <div id="maze"/>
-                <img 
-                    src="/images/title.png" 
-                    alt="Title Screen" 
-                    id="title-screen" 
-                    onClick={() => gameState?.confirm()}
-                />
+                {/* The title art, the menu buttons and the how-to come from the
+                    shell's screen: the art shows on title, howto and countdown. */}
+                {gameState && <Menu gameState={gameState} />}
+                {gameState && <HowTo gameState={gameState} />}
                 <div id="level-complete-animation"></div>
                 {gameState && <Overlay gameState={gameState} />}
             </div>

@@ -6,12 +6,16 @@ import type { DeathCause } from "./events";
 import type { Tally } from "./run";
 
 /** Everything the shell can show. */
-export type Screen = "title" | "countdown" | "playing" | "paused" | "clear" | "over";
+export type Screen = "title" | "howto" | "countdown" | "playing" | "paused" | "clear" | "over";
 
 /** Everything that can move the shell between screens. */
 export type ScreenAction =
     /** Enter, Space, the title image or a panel button. */
     | "confirm"
+    /** The title menu's How to play, or Play itself when the how-to is unseen. */
+    | "howto"
+    /** The how-to's Back button. */
+    | "back"
     /** Esc or P: pauses while playing, resumes while paused. */
     | "pause"
     /** The tab became hidden. */
@@ -43,6 +47,11 @@ export interface ScreenContext {
      * next level has actually started. Defaults to "playing".
      */
     pausedFrom?: Screen;
+    /**
+     * True while the how-to was opened by the first Play: leaving it then runs
+     * the countdown instead of going back to the title. Defaults to false.
+     */
+    howtoFromPlay?: boolean;
 }
 
 /**
@@ -56,7 +65,16 @@ export function nextScreen(screen: Screen, action: ScreenAction, context: Screen
     const resumeTo: Screen = context.pausedFrom === "clear" ? "clear" : "playing";
     switch (screen) {
         case "title":
-            return action === "confirm" ? "countdown" : screen;
+            if (action === "confirm") return "countdown";
+            if (action === "howto") return "howto";
+            return screen;
+        case "howto":
+            // Back, confirm or Esc closes it: to the countdown when the first
+            // Play opened it, otherwise back to the title.
+            if (action === "confirm" || action === "pause" || action === "back") {
+                return context.howtoFromPlay ? "countdown" : "title";
+            }
+            return screen;
         case "countdown":
             return action === "started" ? "playing" : screen;
         case "playing":

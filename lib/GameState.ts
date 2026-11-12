@@ -23,6 +23,10 @@ export interface GameSnapshot extends HudModel {
     screen: Screen;
     /** The summary rows, built once when the run dies and shown on "over". */
     summary: SummaryLine[] | null;
+    /** The stored best score (save.best.descent), 0 when none was kept. */
+    best: number;
+    /** True while the how-to was opened by the first Play: its button reads "Start". */
+    howtoFromPlay: boolean;
 }
 
 const SPRITE_FRAME_MS = 150;
@@ -66,6 +70,8 @@ class GameState {
     private pausedFrom: Screen = 'playing';
     /** The cause of the most recent death, kept for the summary. */
     private lastCause: DeathCause = 'time';
+    /** True while the how-to was opened by the first Play: leaving it starts the run. */
+    private howtoFromPlay: boolean = false;
     /** True when the clear-screen animation finished while paused: the next level
      * turns over on resume, so the clock can never run behind the pause panel. */
     private pendingNextLevel: boolean = false;
@@ -94,7 +100,7 @@ class GameState {
             },
         });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null };
+        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false };
         // The saved mute choice applies before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.muted = this.save.settings.muted === true;
@@ -275,14 +281,45 @@ class GameState {
     }
 
     /**
-     * Enter, Space, the title image and the panel's Retry button all come through
-     * here: the countdown starts from the title, the summary restarts, a paused
-     * game resumes, and while the run is live nothing happens. A focused button
-     * keeps Enter/Space for itself (actionFor's targetTag rule), so the click and
-     * this path can never both fire for one keypress.
+     * Enter, Space and the panel's Retry button all come through here: from the
+     * title this follows the Play button's path (the how-to may show before the
+     * countdown), the summary restarts, a paused game resumes, and while the run
+     * is live nothing happens. A focused button keeps Enter/Space for itself
+     * (actionFor's targetTag rule), so the click and this path can never both
+     * fire for one keypress.
      */
     confirm(): void {
+        // From the title, Enter follows the same path as the Play button (which
+        // may show the how-to first); everywhere else it is the plain confirm.
+        if (this.screen === 'title') {
+            this.play();
+            return;
+        }
         this.dispatch('confirm');
+    }
+
+    /**
+     * The menu's Play (and Enter on the title): the countdown starts, unless the
+     * how-to has never been seen — then it shows first with its button reading
+     * "Start", the flag is kept in the save, and confirming it runs the countdown.
+     */
+    play(): void {
+        if (this.screen !== 'title') return;
+        if (!this.save.seen.howto) {
+            this.howtoFromPlay = true;
+            this.save = { ...this.save, seen: { ...this.save.seen, howto: true } };
+            writeSave(this.storage, this.save);
+            this.dispatch('howto');
+            return;
+        }
+        this.dispatch('confirm');
+    }
+
+    /** The menu's How to play, on request: the lines with their button reading "Back". */
+    openHowTo(): void {
+        if (this.screen !== 'title') return;
+        this.howtoFromPlay = false;
+        this.dispatch('howto');
     }
 
     /** The pause panel's Resume: the same toggle Esc/P uses. */
@@ -307,10 +344,14 @@ class GameState {
      */
     private dispatch(action: ScreenAction): void {
         const prev = this.screen;
-        const next = nextScreen(prev, action, { pausedFrom: this.pausedFrom });
+        const next = nextScreen(prev, action, { pausedFrom: this.pausedFrom, howtoFromPlay: this.howtoFromPlay });
         if (next === prev) return;
         this.screen = next;
 
+        if (prev === 'howto') {
+            // Closed once: a later visit is only ever on request.
+            this.howtoFromPlay = false;
+        }
         if (next === 'paused') {
             this.pausedFrom = prev;
             this.enterPaused();
@@ -374,12 +415,10 @@ class GameState {
         this.audio.stopMusic();
         this.pendingNextLevel = false;
         this.summary = null;
+        this.howtoFromPlay = false;
         this.run.abandon();
-        const titleElement = document.getElementById('title-screen');
-        if (titleElement) {
-            titleElement.style.display = '';
-            titleElement.style.opacity = '';
-        }
+        // The page shows the title again by itself: the title art belongs to
+        // components/Menu.tsx, driven by the screen in the snapshot.
         this.board.setLevel(this.run, this.cellSize);
         this.refreshSprite();
     }
@@ -432,11 +471,10 @@ class GameState {
         if (this.countdownTimers !== null) return false;
         if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return false;
         const mazeContainerElement = document.getElementById('maze-container');
-        const titleElement = document.getElementById('title-screen');
-        if (!titleElement) return false;
-        titleElement.style.opacity = '0.5';
+        // The title art stays on screen, dimmed by the page while the screen is
+        // "countdown"; only the number is drawn here, over it.
         const countdownElement = document.createElement('p');
-        countdownElement.className = 'title-screen-countdown';
+        countdownElement.className = 'game-countdown';
         countdownElement.textContent = '3';
         mazeContainerElement?.appendChild(countdownElement);
         this.audio.play('beep');
@@ -455,7 +493,6 @@ class GameState {
         timers.push(setTimeout(() => {
             this.countdownTimers = null;
             countdownElement.remove();
-            titleElement.style.display = 'none';
             this.beginRun();
         }, 3000));
 
@@ -468,7 +505,7 @@ class GameState {
         if (this.countdownTimers === null) return;
         this.countdownTimers.forEach(clearTimeout);
         this.countdownTimers = null;
-        document.querySelector('.title-screen-countdown')?.remove();
+        document.querySelector('.game-countdown')?.remove();
     }
 
     /** Start (or restart) the run at level 1 and set the clock going. */
@@ -565,10 +602,14 @@ class GameState {
             ...hudModel(this.run, this.bestBeforeRun),
             screen: this.screen,
             summary: this.summary,
+            best: this.highScore,
+            howtoFromPlay: this.howtoFromPlay,
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
-            && sameSummary(this.hudSnapshot.summary, next.summary)) {
+            && sameSummary(this.hudSnapshot.summary, next.summary)
+            && this.hudSnapshot.best === next.best
+            && this.hudSnapshot.howtoFromPlay === next.howtoFromPlay) {
             return;
         }
         this.hudSnapshot = next;

@@ -21,6 +21,25 @@ describe("nextScreen", () => {
         expect(nextScreen("title", "restart")).toBe("title");
     });
 
+    it("the title opens the how-to, and the how-to goes back to the title", () => {
+        expect(nextScreen("title", "howto")).toBe("howto");
+        expect(nextScreen("howto", "confirm")).toBe("title");
+        expect(nextScreen("howto", "pause")).toBe("title");
+        expect(nextScreen("howto", "back")).toBe("title");
+        // Nothing else moves it, and the title does not take the back action.
+        expect(nextScreen("howto", "hide")).toBe("howto");
+        expect(nextScreen("howto", "restart")).toBe("howto");
+        expect(nextScreen("title", "back")).toBe("title");
+    });
+
+    it("a how-to opened by the first Play continues into the countdown", () => {
+        expect(nextScreen("howto", "confirm", { howtoFromPlay: true })).toBe("countdown");
+        expect(nextScreen("howto", "pause", { howtoFromPlay: true })).toBe("countdown");
+        expect(nextScreen("howto", "back", { howtoFromPlay: true })).toBe("countdown");
+        // Without the flag the very same actions go back to the title.
+        expect(nextScreen("howto", "confirm", { howtoFromPlay: false })).toBe("title");
+    });
+
     it("the countdown only leaves on the run starting", () => {
         expect(nextScreen("countdown", "started")).toBe("playing");
         expect(nextScreen("countdown", "pause")).toBe("countdown");
@@ -87,8 +106,8 @@ describe("nextScreen", () => {
     });
 
     it("unknown pairs keep the screen", () => {
-        const screens: Screen[] = ["title", "countdown", "playing", "paused", "clear", "over"];
-        const actions: ScreenAction[] = ["confirm", "pause", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"];
+        const screens: Screen[] = ["title", "howto", "countdown", "playing", "paused", "clear", "over"];
+        const actions: ScreenAction[] = ["confirm", "howto", "back", "pause", "hide", "restart", "quit", "started", "cleared", "levelStarted", "died"];
         for (const screen of screens) {
             for (const action of actions) {
                 const next = nextScreen(screen, action);
