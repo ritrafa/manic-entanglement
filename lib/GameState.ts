@@ -1,6 +1,6 @@
 import Player from './player';
 import { Run } from '@/game/run';
-import type { GameEvent } from '@/game/events';
+import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 
@@ -246,7 +246,7 @@ class GameState {
                 case 'dead':
                     this.stopClock();
                     this.highScore = Math.max(this.run.score, this.highScore);
-                    this.gameOver();
+                    this.gameOver(event.cause);
                     break;
             }
         }
@@ -415,7 +415,7 @@ class GameState {
         }, 300);
     }
 
-    gameOver(): void {
+    gameOver(cause: DeathCause = 'time'): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         this.sound.pause();
@@ -428,7 +428,8 @@ class GameState {
         gameOverMessageText.textContent = `You lost -- but the game's not over!`;
         gameOverMessage.appendChild(gameOverMessageText);
         const gameOverMessageText2 = document.createElement('p');
-        gameOverMessageText2.textContent = `You ran out of energy, but you scored ${score} points${score == this.highScore ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
+        const lostReason = cause === 'fight' ? 'An enemy took your last energy' : 'You ran out of energy';
+        gameOverMessageText2.textContent = `${lostReason}, but you scored ${score} points${score == this.highScore ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
         gameOverMessage.appendChild(gameOverMessageText2);
         mazeElement.appendChild(gameOverMessage);
 

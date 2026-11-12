@@ -6,6 +6,7 @@
 import { Maze } from "./maze";
 import { createRng, type Rng } from "./rng";
 import { CONFIG } from "./config";
+import { fightCost } from "./combat";
 import type { DeathCause, GameEvent, ItemType } from "./events";
 
 export type RunPhase = "ready" | "playing" | "clear" | "dead";
@@ -109,7 +110,7 @@ export class Run {
         const enemyIndex = this.enemies.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
         if (enemyIndex !== -1) {
             const enemy = this.enemies[enemyIndex];
-            const cost = (CONFIG.enemy.hp / this.stats.attack) * (CONFIG.enemy.power - this.stats.defense);
+            const cost = fightCost(this.stats, CONFIG.enemy);
             this.energy -= cost;
             this.enemies.splice(enemyIndex, 1);
             fought = true;
@@ -126,6 +127,16 @@ export class Run {
             this.die(fought ? "fight" : "move");
         }
         return true;
+    }
+
+    /**
+     * The energy the enemy standing on (x, y) would cost with the current stats,
+     * or null when no enemy is there. For later cards that display the cost.
+     */
+    fightCostAt(x: number, y: number): number | null {
+        const enemy = this.enemies.find((p) => p.x === x && p.y === y);
+        if (enemy === undefined) return null;
+        return fightCost(this.stats, CONFIG.enemy);
     }
 
     /** Advance the energy clock. Only runs while playing: stopped in "ready", "clear" and "dead". */

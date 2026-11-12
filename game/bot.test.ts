@@ -47,6 +47,17 @@ describe("nextStep", () => {
 });
 
 describe("playBot", () => {
+  it("reaches level 2 or deeper in at least 34 of 40 seeds at 4 moves a second", () => {
+    let deepEnough = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const run = new Run({ seed });
+      const deepest = playBot(run, 4, 5000);
+      if (deepest >= 2) deepEnough++;
+    }
+    expect(deepEnough).toBeGreaterThanOrEqual(34);
+  });
+
+
   it("reaches the exit of level 1 for 20 seeds once the enemies are removed", () => {
     for (let seed = 0; seed < 20; seed++) {
       const run = new Run({ seed });

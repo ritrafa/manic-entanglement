@@ -9,7 +9,7 @@ export function eventMessage(event: GameEvent): string | null {
         case 'pickup':
             return event.text;
         case 'fight':
-            return `-${Math.round(event.cost * 100) / 100} Energy to Defeat`;
+            return `-${event.cost} Energy`;
         default:
             return null;
     }
