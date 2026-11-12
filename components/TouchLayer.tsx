@@ -39,11 +39,14 @@ const TouchLayer: React.FC<TouchLayerProps> = ({ children, onPress, onRelease })
     // The pure geometry: positions and times go in, operations come out.
     const trackerRef = useRef<TouchTracker | null>(null);
     if (trackerRef.current === null) trackerRef.current = new TouchTracker();
-    // Keep the latest callbacks in refs so the listeners bind exactly once.
+    // Keep the latest callbacks in refs so the listeners bind exactly once;
+    // the refs are refreshed from an effect, never during a render.
     const onPressRef = useRef(onPress);
-    onPressRef.current = onPress;
     const onReleaseRef = useRef(onRelease);
-    onReleaseRef.current = onRelease;
+    useEffect(() => {
+        onPressRef.current = onPress;
+        onReleaseRef.current = onRelease;
+    }, [onPress, onRelease]);
 
     useEffect(() => {
         const wrapper = wrapperRef.current;

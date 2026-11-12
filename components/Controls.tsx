@@ -44,11 +44,21 @@ const ControlsPanel: React.FC<ControlsProps> = ({ gameState }) => {
         setCapture({ action, slot });
     };
 
-    // Leaving the screen (Back, Esc, anything) drops a waiting capture.
+    // Leaving the screen (Back, Esc, anything) drops a waiting capture: the
+    // pending binding is cleared by a render-time state adjustment, and this
+    // effect keeps the listener's ref and the shell's capture flag in step.
+    const [wasOpen, setWasOpen] = useState(open);
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        if (!open) setCapture(null);
+    }
+
     useEffect(() => {
-        if (!open) stopCapture();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open]);
+        if (!open) {
+            captureRef.current = null;
+            gameState.endKeyCapture();
+        }
+    }, [open, gameState]);
 
     // While a capture runs the panel owns the keyboard: the shell's global
     // handler stands down (the capturingKey flag), and this listener takes the

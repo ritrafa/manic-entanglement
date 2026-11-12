@@ -368,3 +368,21 @@
   feats and wardrobe), the optional read-only wallet, Develop, Project
   layout, Environment variables (`NEXT_PUBLIC_SITE_URL` only) and Deploy
   (Vercel, merge to `main` publishes, check the preview) added.
+
+- Brought linting back on ESLint 9's flat config: the new `eslint.config.mjs`
+  spreads `eslint-config-next/core-web-vitals`, ignores `.next/**`,
+  `node_modules/**`, `public/**` and `next-env.d.ts`, and switches
+  `@next/next/no-img-element` off because the pixel-art sprites and tiles are
+  plain `<img>`s on purpose; `package.json` gained `"lint": "eslint ."` and
+  the `check` script now ends with it (CI runs `check`, so lint joins every
+  push and pull request unchanged). Seven errors were fixed and none needed a
+  rule disabled: `app/page.tsx` keeps creating the shell inside the effect
+  (never during server rendering) but hands it to React through a microtask
+  instead of a synchronous setState, and `useCoarsePointer` reads the
+  matchMedia query through `useSyncExternalStore`; `Menu`, `Settings` and
+  `Controls` now reset their transient focus/arming/capture state with
+  render-time state adjustments instead of setState-in-effect, and
+  `TouchLayer` refreshes its latest-callback refs from an effect. The two
+  safe warnings went with them — the HUD's wallet callback lists `gameState`
+  and the config file exports a named constant — leaving 0 warnings; one
+  inline `eslint-disable` (a stable-callback effect in `Controls`) remains.

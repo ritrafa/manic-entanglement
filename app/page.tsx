@@ -15,17 +15,34 @@ import type { Dir } from '../game/stepper';
 import '../styles/globals.css';
 import { Analytics } from "@vercel/analytics/react"
 
+/** Follow the coarse-pointer media query; the store re-renders when it flips. */
+function subscribeCoarsePointer(onStoreChange: () => void): () => void {
+    try {
+        const query = window.matchMedia('(pointer: coarse)');
+        query.addEventListener('change', onStoreChange);
+        return () => query.removeEventListener('change', onStoreChange);
+    } catch {
+        return () => {};
+    }
+}
+
+/** The device as the browser sees it now; phones and tablets answer true. */
+function readCoarsePointer(): boolean {
+    try {
+        return window.matchMedia('(pointer: coarse)').matches;
+    } catch {
+        return false;
+    }
+}
+
+/** There is no pointer at all while server rendering: the D-pad stays hidden. */
+function readCoarsePointerOnServer(): boolean {
+    return false;
+}
+
 /** True on a phone or tablet; desktop mice never see the D-pad or the pause button. */
 function useCoarsePointer(): boolean {
-    const [coarse, setCoarse] = useState(false);
-    useEffect(() => {
-        try {
-            setCoarse(window.matchMedia('(pointer: coarse)').matches);
-        } catch {
-            setCoarse(false);
-        }
-    }, []);
-    return coarse;
+    return useSyncExternalStore(subscribeCoarsePointer, readCoarsePointer, readCoarsePointerOnServer);
 }
 
 interface GameShellProps {
@@ -89,12 +106,18 @@ const Page: React.FC = () => {
 
     useEffect(() => {
         const newGameState = new GameState();
-        setGameState(newGameState);
 
         const handleKeyPress = (event: KeyboardEvent) => newGameState.handleKeyPress(event);
         const handleKeyRelease = (event: KeyboardEvent) => newGameState.handleKeyRelease(event);
         window.addEventListener('keydown', handleKeyPress);
         window.addEventListener('keyup', handleKeyRelease);
+
+        // The shell is created here, never during a render: its constructor
+        // touches window, storage, document and audio. The hand-off to React
+        // rides a microtask so the state lands before the browser paints; the
+        // effect still owns subscribing and dispose(), and StrictMode's extra
+        // mount/unmount pair disposes exactly the shell it created.
+        queueMicrotask(() => setGameState(newGameState));
 
         return () => {
             window.removeEventListener('keydown', handleKeyPress);

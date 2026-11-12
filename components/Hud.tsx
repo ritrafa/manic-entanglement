@@ -49,7 +49,7 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                 }   
             });
         }
-    }, [publicKey]);
+    }, [publicKey, gameState]);
 
     return (
         <div id="hud">

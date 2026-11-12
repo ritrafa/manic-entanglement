@@ -52,10 +52,14 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
     const showsArt = model.screen === 'title' || model.screen === 'howto' || model.screen === 'countdown';
     const showsButtons = model.screen === 'title';
 
-    // The menu appearing (first show or a return to the title) starts at the top.
-    useEffect(() => {
+    // The menu appearing (first show or a return to the title) starts at the
+    // top: the reset is a render-time state adjustment, not an effect, so the
+    // menu never paints once with a stale focus and re-renders.
+    const [wasShowingButtons, setWasShowingButtons] = useState(showsButtons);
+    if (showsButtons !== wasShowingButtons) {
+        setWasShowingButtons(showsButtons);
         if (showsButtons) setFocusIndex(0);
-    }, [showsButtons]);
+    }
 
     // The first button takes focus when the menu appears, and the focused entry
     // follows the index the arrow keys move; the last slot is the mode row.

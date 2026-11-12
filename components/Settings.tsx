@@ -25,12 +25,18 @@ const SettingsPanel: React.FC<SettingsProps> = ({ gameState }) => {
     // Wiping progress asks once more: the first press only arms the button.
     const [confirmReset, setConfirmReset] = useState(false);
 
-    // The panel is modal while it shows: focus the first control when it appears,
-    // and a half-armed reset never survives a visit.
+    // The panel is modal while it shows: focus the first control when it appears.
     useEffect(() => {
         if (open) firstControlRef.current?.focus();
-        setConfirmReset(false);
     }, [open]);
+
+    // A half-armed reset never survives a visit: the arming is dropped by a
+    // render-time state adjustment whenever the open flag changes.
+    const [wasOpen, setWasOpen] = useState(open);
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        setConfirmReset(false);
+    }
 
     if (!open) return null;
 
