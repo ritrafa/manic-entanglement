@@ -63,3 +63,111 @@ export function classifyTouch(dx: number, dy: number, ms: number): TouchResult {
     }
     return { kind: "swipe", dx: 0, dy: sign(dy) };
 }
+
+// --- Swipe-and-hold tracking (owner decision Q15) --------------------------------------
+// The same pure geometry, but continuous: the caller feeds raw touch positions and
+// times in and gets press/release/tap operations out, so a held finger keeps the
+// Stepper running and sliding turns without lifting. No DOM, no clocks here either.
+
+import type { Dir } from "./stepper";
+
+/** One instruction for the shell: hold a direction, let it go, or a tap. */
+export type TouchOp =
+    | { op: "press" | "release"; dir: Dir }
+    | { op: "tap" };
+
+/** The direction a movement from the anchor implies, or null when it is too small. */
+function dominantDir(dx: number, dy: number): Dir | null {
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    // The dominant axis decides; a tie is horizontal, exactly as in classifyTouch.
+    if (absX >= absY) {
+        if (!(absX >= SWIPE_MIN_DISTANCE_PX)) return null;
+        return dx > 0 ? "right" : "left";
+    }
+    if (!(absY >= SWIPE_MIN_DISTANCE_PX)) return null;
+    return dy > 0 ? "down" : "up";
+}
+
+/**
+ * Follows one finger and turns its path into held-direction operations.
+ *
+ * - `start` anchors the finger. From then on `move` watches the distance from
+ *   the anchor: once it reaches 24 px along the dominant axis, that direction
+ *   is pressed and the anchor moves to the current point.
+ * - While a direction is held, reaching 24 px along a *different* direction
+ *   (the opposite one included) releases the old one and presses the new.
+ *   Continuing along the held direction never re-presses it.
+ * - `end` releases whatever is still held. If nothing was ever pressed and the
+ *   whole touch fits `classifyTouch`'s tap rule (short and small), `end` hands
+ *   back a single tap instead — the browser's own click still does the tapping.
+ * - `cancel` releases and forgets; a later `start` begins fresh.
+ *
+ * A quick flick therefore gives press then release: exactly one step, as before.
+ */
+export class TouchTracker {
+    /** True between start() and the end()/cancel() that closes the touch. */
+    private tracking = false;
+    /** Where the current segment is measured from; moves to each press point. */
+    private anchorX = 0;
+    private anchorY = 0;
+    /** Where and when the whole touch began; the tap rule measures against this. */
+    private startX = 0;
+    private startY = 0;
+    private startMs = 0;
+    /** The direction currently held down; null between runs. */
+    private held: Dir | null = null;
+    /** True once any direction was pressed during this touch: no tap after that. */
+    private pressed = false;
+
+    /** The finger went down at (x, y) at time t. Any unfinished touch is forgotten. */
+    start(x: number, y: number, t: number): void {
+        this.tracking = true;
+        this.anchorX = this.startX = x;
+        this.anchorY = this.startY = y;
+        this.startMs = t;
+        this.held = null;
+        this.pressed = false;
+    }
+
+    /** The finger slid to (x, y) at time t; hands back the operations it earned. */
+    move(x: number, y: number, t: number): TouchOp[] {
+        if (!this.tracking) return [];
+        const dir = dominantDir(x - this.anchorX, y - this.anchorY);
+        // Too small, or simply more of the same: the held direction keeps running.
+        if (dir === null || dir === this.held) return [];
+        const ops: TouchOp[] = [];
+        if (this.held !== null) ops.push({ op: "release", dir: this.held });
+        ops.push({ op: "press", dir });
+        this.held = dir;
+        this.pressed = true;
+        // The new segment starts here, so the next turn is 24 px from this point.
+        this.anchorX = x;
+        this.anchorY = y;
+        return ops;
+    }
+
+    /** The finger lifted at (x, y) at time t: release what is held, or report a tap. */
+    end(x: number, y: number, t: number): TouchOp[] {
+        if (!this.tracking) return [];
+        this.tracking = false;
+        const ops: TouchOp[] = [];
+        if (this.held !== null) {
+            ops.push({ op: "release", dir: this.held });
+        } else if (!this.pressed && classifyTouch(x - this.startX, y - this.startY, t - this.startMs).kind === "tap") {
+            ops.push({ op: "tap" });
+        }
+        this.held = null;
+        return ops;
+    }
+
+    /** The touch was taken away (a system gesture, a lost window): release and reset. */
+    cancel(): TouchOp[] {
+        if (!this.tracking) return [];
+        this.tracking = false;
+        const ops: TouchOp[] = [];
+        if (this.held !== null) ops.push({ op: "release", dir: this.held });
+        this.held = null;
+        return ops;
+    }
+}

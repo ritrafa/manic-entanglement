@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { classifyTouch } from "@/game/swipe";
+import { TouchTracker, classifyTouch, type TouchOp } from "@/game/swipe";
+import { hapticFor } from "@/game/fx";
+import { Stepper } from "@/game/stepper";
+import type { GameEvent } from "@/game/events";
 
 describe("classifyTouch", () => {
   it("a small, quick touch is a tap", () => {
@@ -73,5 +76,108 @@ describe("classifyTouch", () => {
 
   it("a long press without movement is none", () => {
     expect(classifyTouch(0, 0, 5000)).toEqual({ kind: "none" });
+  });
+});
+
+describe("TouchTracker", () => {
+  it("a swipe right that turns down presses each and releases at the end", () => {
+    const t = new TouchTracker();
+    t.start(100, 100, 0);
+    expect(t.move(130, 102, 50)).toEqual([{ op: "press", dir: "right" }]);
+    expect(t.move(131, 140, 100)).toEqual([
+      { op: "release", dir: "right" },
+      { op: "press", dir: "down" },
+    ]);
+    expect(t.end(131, 140, 150)).toEqual([{ op: "release", dir: "down" }]);
+  });
+
+  it("a quick, small touch is exactly one tap and nothing else", () => {
+    const t = new TouchTracker();
+    t.start(100, 100, 0);
+    expect(t.end(103, 100, 60)).toEqual([{ op: "tap" }]);
+  });
+
+  it("a 30 px swipe is one press then one release: a flick is one step", () => {
+    const t = new TouchTracker();
+    t.start(0, 0, 0);
+    expect(t.move(30, 0, 80)).toEqual([{ op: "press", dir: "right" }]);
+    expect(t.end(30, 0, 120)).toEqual([{ op: "release", dir: "right" }]);
+  });
+
+  it("a slow wobble never reaches the anchor distance and is no tap after 2 s", () => {
+    const t = new TouchTracker();
+    t.start(0, 0, 0);
+    expect(t.move(10, 8, 100)).toEqual([]);
+    expect(t.move(-12, 5, 500)).toEqual([]);
+    expect(t.move(6, -20, 1500)).toEqual([]);
+    expect(t.end(-4, 9, 2000)).toEqual([]);
+  });
+
+  it("moving right 100 px in ten moves presses right once, not four times", () => {
+    const t = new TouchTracker();
+    t.start(0, 0, 0);
+    const ops: TouchOp[] = [];
+    for (let i = 1; i <= 10; i++) ops.push(...t.move(i * 10, 0, i * 20));
+    expect(ops).toEqual([{ op: "press", dir: "right" }]);
+    expect(t.end(100, 0, 220)).toEqual([{ op: "release", dir: "right" }]);
+  });
+
+  it("reversing releases the held direction and presses the opposite", () => {
+    const t = new TouchTracker();
+    t.start(0, 0, 0);
+    expect(t.move(40, 0, 50)).toEqual([{ op: "press", dir: "right" }]);
+    // 24 px back along x from the press point turns the run around.
+    expect(t.move(10, 0, 100)).toEqual([
+      { op: "release", dir: "right" },
+      { op: "press", dir: "left" },
+    ]);
+    expect(t.end(10, 0, 150)).toEqual([{ op: "release", dir: "left" }]);
+  });
+
+  it("cancel releases a held direction and a second start works normally", () => {
+    const t = new TouchTracker();
+    t.start(0, 0, 0);
+    expect(t.move(0, 30, 50)).toEqual([{ op: "press", dir: "down" }]);
+    expect(t.cancel()).toEqual([{ op: "release", dir: "down" }]);
+    // A second, clean touch behaves as if the tracker had never been used.
+    t.start(0, 0, 1000);
+    expect(t.move(-30, 0, 1050)).toEqual([{ op: "press", dir: "left" }]);
+    expect(t.end(-30, 0, 1100)).toEqual([{ op: "release", dir: "left" }]);
+  });
+
+  it("cancel with nothing held and moves without a start do nothing", () => {
+    const t = new TouchTracker();
+    expect(t.cancel()).toEqual([]);
+    expect(t.move(100, 0, 0)).toEqual([]);
+    expect(t.end(100, 0, 50)).toEqual([]);
+  });
+
+  it("a press during a run hands the Stepper about nine steps in one second", () => {
+    const t = new TouchTracker();
+    const stepper = new Stepper();
+    t.start(0, 0, 0);
+    for (const op of t.move(60, 0, 40)) {
+      if (op.op === "press") stepper.press(op.dir, 40);
+    }
+    // The finger stays down; frames poll the Stepper for a whole second.
+    let steps = 0;
+    for (let now = 40; now <= 1040; now += 16) {
+      if (stepper.poll(now) !== null) steps += 1;
+    }
+    expect(steps).toBe(9);
+    for (const op of t.end(60, 0, 1040)) {
+      if (op.op === "release") stepper.release(op.dir);
+    }
+    expect(stepper.poll(2000)).toBeNull();
+  });
+});
+
+describe("hapticFor", () => {
+  it("pickup, fight and dead rumble; anything else is silent", () => {
+    expect(hapticFor({ type: "pickup", item: "energy", text: "+25", x: 1, y: 2 })).toBe(10);
+    expect(hapticFor({ type: "fight", cost: 15, kind: "wisp", x: 1, y: 2 })).toBe(30);
+    expect(hapticFor({ type: "dead", cause: "time", score: 10, level: 1 })).toBe(80);
+    expect(hapticFor({ type: "move", x: 1, y: 2, dx: 1, dy: 0 })).toBe(0);
+    expect(hapticFor({ type: "nonsense" } as unknown as GameEvent)).toBe(0);
   });
 });

@@ -103,3 +103,25 @@
   `[data-contrast="true"]` (white 2 px outlines on enemies, pickups, the exit and the
   player, thicker forecast marks, the galaxy at 40% and static, HUD pure white on solid
   black) and `--ui-scale` sizing for the HUD and panels.
+- Made touch screens first-class (owner decision Q15: swipe-and-hold is the default):
+  `game/swipe.ts` gained the pure `TouchTracker` (`start`/`move`/`end`/`cancel` hand back
+  `TouchOp`s — a direction is pressed once the finger reaches 24 px from its anchor along
+  the dominant axis and the anchor re-anchors there, sliding to another direction releases
+  the old one and presses the new, continuing along the held one never re-presses, `end`
+  releases what is held and hands back a single tap only when nothing was ever pressed and
+  the old `classifyTouch` tap rule still holds, so a quick flick stays exactly one step),
+  covered by `game/swipe.test.ts` including a one-second hold through the `Stepper`
+  (~nine steps); `game/fx.ts` gained `hapticFor(event)` (pickup 10 ms, fight 30, dead 80,
+  anything else 0) and `lib/GameState.ts` calls `navigator.vibrate` only when haptics are
+  on, the value is above 0 and the device has a vibrator, alongside the new `pressDir`/
+  `releaseDir` (the Stepper's own cadence for touches and the D-pad) and `togglePause`;
+  `game/settings.ts` gained `touch: "swipe" | "dpad"` (default swipe) and `haptics`
+  (default true) with their rows; `components/TouchLayer.tsx` now feeds one finger into
+  the tracker and passes press/release ops to the shell; `components/DPad.tsx` is the new
+  optional cross of four 56 px buttons (pointerdown presses, pointerup/pointerleave/
+  pointercancel release, labelled for readers), shown below the board on coarse-pointer
+  devices when `settings.touch` is `"dpad"`, next to the 44 px `aria-label="Pause"`
+  button at the board's top right; `app/layout.tsx` exports a `viewport`
+  (`device-width`, `initialScale: 1`, `viewportFit: "cover"`, zoom untouched) and
+  `styles/globals.css` pads the page with `env(safe-area-inset-*)` and styles the D-pad
+  and the pause button.

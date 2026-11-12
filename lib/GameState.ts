@@ -7,7 +7,7 @@ import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
 import { CONFIG, FX } from '@/game/config';
-import { FxLimiter, fxFor, lowEnergy, type Motion } from '@/game/fx';
+import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
 import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
@@ -326,26 +326,19 @@ class GameState {
     }
 
     /**
-     * One recognised swipe: a press followed straight by a release, so touches
-     * share the keyboard's cadence (exactly one step, and a swipe pressed during
-     * a wait is remembered like a tap).
+     * A touch began a held direction (or a D-pad button went down): the direction
+     * joins the keyboard's cadence and keeps stepping while it stays down. The
+     * TouchLayer and the D-pad are the only callers; they decide when a direction
+     * is pressed and released, the Stepper decides when the steps fall.
      */
-    tapMove(dx: number, dy: number): void {
+    pressDir(dir: Dir): void {
         if (!this.active) return;
-        const dir = GameState.dirName(dx, dy);
-        if (dir === null) return;
-        const now = performance.now();
-        this.stepper.press(dir, now);
-        this.stepper.release(dir);
+        this.stepper.press(dir, performance.now());
     }
 
-    /** The Stepper's name for a movement, or null when it is not one of the four. */
-    private static dirName(dx: number, dy: number): Dir | null {
-        if (dy === -1) return 'up';
-        if (dy === 1) return 'down';
-        if (dx === -1) return 'left';
-        if (dx === 1) return 'right';
-        return null;
+    /** The touch left that direction (or the D-pad button came up): the run stops. */
+    releaseDir(dir: Dir): void {
+        this.stepper.release(dir);
     }
 
     /**
@@ -414,6 +407,11 @@ class GameState {
 
     /** The pause panel's Resume: the same toggle Esc/P uses. */
     resume(): void {
+        this.dispatch('pause');
+    }
+
+    /** The touch pause button: the same toggle Esc and P use. */
+    togglePause(): void {
         this.dispatch('pause');
     }
 
@@ -772,6 +770,7 @@ class GameState {
         for (const event of this.run.takeEvents()) {
             this.playEventSfx(event);
             this.playFx(event);
+            this.vibrateFor(event);
             switch (event.type) {
                 case 'start':
                     // The countdown finished and the run is live.
@@ -848,6 +847,20 @@ class GameState {
                 continue;
             }
             this.board.play(fx);
+        }
+    }
+
+    /**
+     * The rumble one run event earns (game/fx.ts decides the length): only when
+     * the player asked for haptics, the event asks for a rumble at all, and the
+     * device actually has a vibrator.
+     */
+    private vibrateFor(event: GameEvent): void {
+        if (!this.settings.haptics) return;
+        const ms = hapticFor(event);
+        if (ms <= 0) return;
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(ms);
         }
     }
 

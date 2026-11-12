@@ -10,6 +10,9 @@ import type { Screen } from "./screens";
 /** How much motion the player asked for; "system" follows the OS's own ask. */
 export type MotionSetting = "system" | "full" | "reduced";
 
+/** How the player steers on a touch screen (owner decision Q15: swipe is the default). */
+export type TouchSetting = "swipe" | "dpad";
+
 /** Everything the settings screen owns, one validated field at a time. */
 export interface Settings {
     /** The music bus volume, 0 to 1. */
@@ -26,6 +29,10 @@ export interface Settings {
     textScale: 1 | 1.25 | 1.5;
     /** True lets the board shake. */
     shake: boolean;
+    /** Swipe-and-hold, or the on-screen D-pad, on a touch screen. */
+    touch: TouchSetting;
+    /** True lets pickups, fights and death rumble the device (where it can). */
+    haptics: boolean;
     /** The keyboard mapping the Controls screen edits (game/keys.ts). */
     keys: KeyMap;
 }
@@ -39,11 +46,16 @@ export const DEFAULT_SETTINGS: Settings = {
     contrast: false,
     textScale: 1,
     shake: true,
+    touch: "swipe",
+    haptics: true,
     keys: DEFAULT_KEYS,
 };
 
 /** The accepted motion settings, in the order the screen offers them. */
 const MOTION_VALUES: readonly MotionSetting[] = ["system", "full", "reduced"];
+
+/** The accepted touch control styles, in the order the screen offers them. */
+const TOUCH_VALUES: readonly TouchSetting[] = ["swipe", "dpad"];
 
 /** The accepted text scales, in the order the screen offers them. */
 const TEXT_SCALES: readonly (1 | 1.25 | 1.5)[] = [1, 1.25, 1.5];
@@ -89,6 +101,10 @@ export function sanitizeSettings(value: unknown): Settings {
             ? (source.textScale as 1 | 1.25 | 1.5)
             : DEFAULT_SETTINGS.textScale,
         shake: readBoolean(source.shake, DEFAULT_SETTINGS.shake),
+        touch: TOUCH_VALUES.includes(source.touch as TouchSetting)
+            ? (source.touch as TouchSetting)
+            : DEFAULT_SETTINGS.touch,
+        haptics: readBoolean(source.haptics, DEFAULT_SETTINGS.haptics),
         keys: sanitizeKeys(source.keys),
     };
     // The extras first, the checked fields over them: unknown keys survive.
@@ -149,6 +165,16 @@ export const SETTING_ROWS: readonly SettingRow[] = [
         ],
     },
     { id: "shake", label: "Screen shake", kind: "toggle" },
+    {
+        id: "touch",
+        label: "Touch controls",
+        kind: "choice",
+        choices: [
+            { value: "swipe", label: "Swipe" },
+            { value: "dpad", label: "D-pad" },
+        ],
+    },
+    { id: "haptics", label: "Vibrate on events", kind: "toggle" },
 ];
 
 /** The two snapshots announcement compares: the whole HUD model plus the screen. */

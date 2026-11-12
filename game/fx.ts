@@ -122,3 +122,21 @@ export class FxLimiter {
 export function lowEnergy(energyPct: number): boolean {
     return Number.isFinite(energyPct) && energyPct < FX.lowEnergyPct;
 }
+
+/**
+ * How long the device should rumble for one run event, in milliseconds:
+ * a pickup 10, a fight 30, death 80, anything else 0 (no vibration at all).
+ * Pure data — the shell is the one that asks the hardware.
+ */
+export function hapticFor(event: GameEvent): number {
+    switch (event.type) {
+        case 'pickup':
+            return 10;
+        case 'fight':
+            return 30;
+        case 'dead':
+            return 80;
+        default:
+            return 0;
+    }
+}

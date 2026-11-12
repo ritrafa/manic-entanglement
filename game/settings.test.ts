@@ -68,6 +68,8 @@ describe("sanitizeSettings", () => {
             contrast: true,
             textScale: 1.5,
             shake: false,
+            touch: "dpad",
+            haptics: false,
             keys: { ...DEFAULT_SETTINGS.keys, up: ["KeyI", "ArrowUp"] },
         };
         expect(sanitizeSettings(good)).toEqual(good);
@@ -78,6 +80,18 @@ describe("sanitizeSettings", () => {
         expect(kept.musicVol).toBe(0.25);
         expect((kept as unknown as Record<string, unknown>).theme).toBe("midnight");
         expect(kept).toEqual({ ...DEFAULT_SETTINGS, musicVol: 0.25, theme: "midnight" });
+    });
+
+    it("touch and haptics keep valid values and default on broken ones", () => {
+        expect(sanitizeSettings({ touch: "dpad" }).touch).toBe("dpad");
+        expect(sanitizeSettings({ touch: "swipe" }).touch).toBe("swipe");
+        expect(sanitizeSettings({ touch: "joystick" }).touch).toBe(DEFAULT_SETTINGS.touch);
+        expect(sanitizeSettings({ touch: 1 }).touch).toBe(DEFAULT_SETTINGS.touch);
+        expect(sanitizeSettings({ haptics: false }).haptics).toBe(false);
+        expect(sanitizeSettings({ haptics: "yes" }).haptics).toBe(DEFAULT_SETTINGS.haptics);
+        // The defaults: swipe-and-hold is the way, and the device rumbles (Q15).
+        expect(sanitizeSettings({}).touch).toBe("swipe");
+        expect(sanitizeSettings({}).haptics).toBe(true);
     });
 
     it("the keys field goes through sanitizeKeys: broken maps fall back to the defaults", () => {

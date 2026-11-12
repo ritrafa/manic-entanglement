@@ -5,6 +5,14 @@ body {
   justify-content: center;
   height: 100vh;
   height: 100dvh;
+  /* viewportFit=cover runs the page under notches and browser bars: the page
+     itself keeps its content inside the safe area. */
+  box-sizing: border-box;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
   background: linear-gradient(135deg, #08412c, #40154f);
   color: white;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -1091,4 +1099,62 @@ body {
 .controls-key:focus-visible {
   background-color: rgba(255, 255, 255, 0.22);
   outline: 2px solid #ffd34d;
+}
+
+/* --- Touch controls: the optional D-pad and the pause button ----------------------- */
+
+/* Four 56 px buttons in a cross, below the board (settings.touch === "dpad"). */
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 56px);
+  gap: 6px;
+  margin: 8px auto 0;
+  justify-content: center;
+}
+
+.dpad-btn {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: white;
+  background: rgba(8, 65, 44, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  /* A held button belongs to the game: no pan, zoom, text selection or long-press menu. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.dpad-btn:active {
+  background: rgba(64, 21, 79, 0.85);
+}
+
+.dpad-up    { grid-column: 2; grid-row: 1; }
+.dpad-left  { grid-column: 1; grid-row: 2; }
+.dpad-right { grid-column: 3; grid-row: 2; }
+.dpad-down  { grid-column: 2; grid-row: 3; }
+
+/* The touch pause button: top right of the board, clear of the notch. */
+.pause-button {
+  position: absolute;
+  /* The body already pads with the safe-area insets; this rides inside them. */
+  top: 8px;
+  right: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  font-size: 1.1rem;
+  color: white;
+  background: rgba(8, 65, 44, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  z-index: 20;
+  touch-action: manipulation;
 }
