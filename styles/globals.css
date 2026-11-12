@@ -261,6 +261,44 @@ body {
   image-rendering: pixelated;
 }
 
+/* Blackout (game/modifiers.ts, lib/board.ts): on an entangled level the tiles
+   outside the view fade to a hint of their picture and the entities standing
+   on them vanish; the shell re-marks the cells on every update. The forecast
+   marks live on the fx layer and stay visible everywhere. */
+.wall-image.unseen {
+  opacity: 0.06;
+}
+
+.entities .unseen {
+  display: none;
+}
+
+/* The entanglement banner (lib/board.ts banner): the twist's name and its
+   line as real text over the board, shown while the shell's timer runs. */
+.level-banner {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: rgba(10, 12, 28, 0.82);
+  border: 1px solid rgba(255, 215, 120, 0.55);
+  color: #ffe9a8;
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.level-banner strong {
+  font-size: 1.15em;
+  letter-spacing: 0.08em;
+}
+
 /* Entities are one persistent element each, placed with a transform by
    lib/board.ts (left/top stay at 0 so every glide is a pure translation). */
 .player, .exit, .powerup, .enemy {

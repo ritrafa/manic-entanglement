@@ -2,6 +2,7 @@
 
 import type { EnemyKind } from "./enemies";
 import type { ToolId } from "./tools";
+import type { ModifierId } from "./modifiers";
 
 export type ItemType = "energy" | "boots" | "gloves" | "shield" | "speed" | "backpack";
 
@@ -12,7 +13,7 @@ export type DeathCause = "time" | "move" | "fight";
 
 export type GameEvent =
     | { type: "start" }
-    | { type: "levelStart"; level: number; size: number }
+    | { type: "levelStart"; level: number; size: number; modifier: ModifierId | null }
     | { type: "move"; x: number; y: number; dx: number; dy: number }
     | { type: "blocked"; dx: number; dy: number }
     | { type: "pickup"; item: PickupType; text: string; x: number; y: number }

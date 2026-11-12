@@ -66,8 +66,9 @@ describe("playBot", () => {
   it("at 4 moves a second, at least 34 of 40 seeds reach depth 3 and at least 24 depth 4", () => {
     let reached3 = 0;
     let reached4 = 0;
+    // The baseline curve is pinned without the entanglements (game/modifiers.ts).
     for (let seed = 0; seed < 40; seed++) {
-      const deepest = playBot(new Run({ seed }), 4, 20000);
+      const deepest = playBot(new Run({ seed, modifiers: false }), 4, 20000);
       if (deepest >= 3) reached3++;
       if (deepest >= 4) reached4++;
     }
@@ -78,7 +79,7 @@ describe("playBot", () => {
   it("at 2 moves a second, at least 32 of 40 seeds reach depth 2", () => {
     let reached2 = 0;
     for (let seed = 0; seed < 40; seed++) {
-      const deepest = playBot(new Run({ seed }), 2, 20000);
+      const deepest = playBot(new Run({ seed, modifiers: false }), 2, 20000);
       if (deepest >= 2) reached2++;
     }
     expect(reached2).toBeGreaterThanOrEqual(32);
@@ -86,11 +87,22 @@ describe("playBot", () => {
 
   it("at 8 moves a second, every one of 40 runs ends before depth 25", () => {
     for (let seed = 0; seed < 40; seed++) {
-      const run = new Run({ seed });
+      const run = new Run({ seed, modifiers: false });
       const deepest = playBot(run, 8, 20000);
       expect(run.phase, `seed ${seed} never died`).toBe("dead");
       expect(deepest, `seed ${seed} reached ${deepest}`).toBeLessThan(25);
     }
+  });
+
+  it("with modifiers on, at 4 moves a second, at least 20 of 40 seeds reach depth 4", () => {
+    // The entangled levels (game/modifiers.ts) make depth harder but not unfair:
+    // the plain thresholds above stay pinned, this one carries the twists.
+    let reached4 = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const deepest = playBot(new Run({ seed }), 4, 20000);
+      if (deepest >= 4) reached4++;
+    }
+    expect(reached4).toBeGreaterThanOrEqual(20);
   });
 
   it("starts a ready run and returns the deepest level reached", () => {

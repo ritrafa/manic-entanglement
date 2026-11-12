@@ -5,6 +5,7 @@
 
 import type { Run } from '@/game/run';
 import { CONFIG, FX } from '@/game/config';
+import { visibleCells } from '@/game/modifiers';
 import { blobRect } from '@/game/layout';
 import { entityPx, markTiles, tileDiff } from '@/game/view';
 import type { Fx, FxTone } from '@/game/fx';
@@ -52,6 +53,12 @@ export class Board {
     private boardElement: HTMLElement | null = null;
     /** The live spark particles, oldest first; playBurst() keeps the cap. */
     private sparks: HTMLElement[] = [];
+    /**
+     * The Blackout view of the level last drawn: which cells show, indexed
+     * [y][x] (game/modifiers.ts visibleCells). Null on a plain level, where
+     * every tile and entity is visible.
+     */
+    private visible: boolean[][] | null = null;
 
     /** Create the three layers inside #maze: the grid, the gliding entities and the effects. */
     mount(el: HTMLElement): void {
@@ -81,6 +88,7 @@ export class Board {
         this.knotElement = null;
         this.itemElements.clear();
         this.enemyElements.clear();
+        this.visible = null;
     }
 
     /** Rebuild the tile grid for the level's size and create the entity elements. */
@@ -181,6 +189,26 @@ export class Board {
                 this.playZoom(fx.x, fx.y, fx.ms);
                 break;
         }
+    }
+
+    /**
+     * Show the entanglement banner (game/modifiers.ts) over the board for `ms`
+     * milliseconds: the twist's name and its line as real text, gone when the
+     * time is up. A second call replaces the banner still standing.
+     */
+    banner(name: string, line: string, ms: number): void {
+        const board = this.boardElement;
+        if (!board) return;
+        board.querySelector('.level-banner')?.remove();
+        const banner = document.createElement('div');
+        banner.className = 'level-banner';
+        const title = document.createElement('strong');
+        title.textContent = name;
+        const text = document.createElement('span');
+        text.textContent = line;
+        banner.append(title, text);
+        board.appendChild(banner);
+        setTimeout(() => banner.remove(), Math.max(1, Math.round(ms)));
     }
 
     /** The board breathes a warning while the shell says the energy is low. */
@@ -362,8 +390,10 @@ export class Board {
 
     /** Place every entity of the run at the current cell size. */
     private placeAll(run: Run): void {
+        this.syncVisibility(run);
         this.place(this.playerElement, run.player.x, run.player.y);
         this.place(this.exitElement, run.exit.x, run.exit.y);
+        this.syncTileVisibility();
         this.syncItems(run);
         this.syncEnemies(run);
         this.placeBlob(run);
@@ -378,6 +408,61 @@ export class Board {
         element.style.transform = `translate(${x}px, ${y}px)`;
     }
 
+    /**
+     * Recompute the Blackout view (game/modifiers.ts): the cells near the
+     * player plus the Knot, the forecast walk and the exit. On a plain level
+     * the view is null and everything shows. Called on every draw, so the view
+     * follows each move and every re-rolled forecast.
+     */
+    private syncVisibility(run: Run): void {
+        if (run.vision === null) {
+            this.visible = null;
+            return;
+        }
+        this.visible = visibleCells({
+            size: run.maze.width,
+            player: run.player,
+            knot: run.maze.origin,
+            exit: run.exit,
+            walk: run.forecast ? run.forecast.walk : [],
+            radius: run.vision,
+        });
+    }
+
+    /** True when cell (cellX, cellY) shows: always off Blackout, by the view on it. */
+    private cellShown(cellX: number, cellY: number): boolean {
+        if (this.visible === null) return true;
+        return this.visible[cellY]?.[cellX] === true;
+    }
+
+    /**
+     * True when the wall-grid tile (tx, ty) shows: a tile belongs to the cell
+     * it sits in, and a wall or corner tile touches the cells around it — it
+     * shows when any of them does, so the walls between two visible cells are
+     * visible and the edge of the light is drawn.
+     */
+    private tileShown(tx: number, ty: number): boolean {
+        if (this.visible === null) return true;
+        const xs = tx % 2 === 1 ? [(tx - 1) / 2] : [tx / 2 - 1, tx / 2];
+        const ys = ty % 2 === 1 ? [(ty - 1) / 2] : [ty / 2 - 1, ty / 2];
+        for (const y of ys) {
+            for (const x of xs) {
+                if (this.visible[y]?.[x] === true) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Dim the tiles outside the Blackout view; a plain level lights them all. */
+    private syncTileVisibility(): void {
+        for (let ty = 0; ty < this.tileImages.length; ty++) {
+            const row = this.tileImages[ty];
+            for (let tx = 0; tx < row.length; tx++) {
+                row[tx].classList.toggle('unseen', !this.tileShown(tx, ty));
+            }
+        }
+    }
+
     private syncItems(run: Run): void {
         const alive = new Set<number>();
         for (const item of run.items) {
@@ -389,6 +474,7 @@ export class Board {
                 this.entitiesLayer?.appendChild(element);
             }
             element.className = `powerup item_${item.type}`;
+            element.classList.toggle('unseen', !this.cellShown(item.x, item.y));
             this.place(element, item.x, item.y);
         }
         for (const [id, element] of this.itemElements) {
@@ -414,6 +500,7 @@ export class Board {
             // Kind classes change the shape (CSS only); the badge shows the current
             // toll and is refreshed on every update because stats and energy move.
             element.className = `enemy enemy-${enemy.kind}`;
+            element.classList.toggle('unseen', !this.cellShown(enemy.x, enemy.y));
             const badge = element.firstElementChild;
             if (badge instanceof HTMLElement) {
                 const toll = run.tollOf(enemy);

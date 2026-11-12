@@ -10,6 +10,7 @@ import { spawnLevel, GEAR_TYPES } from "./spawn";
 import { routeCells } from "./bot";
 import { ENEMY_KINDS, type EnemyKind } from "./enemies";
 import { levelPlan } from "./plan";
+import { applyModifier, modifierFor, type ModifierId, type ModifiedPlan } from "./modifiers";
 import { CONFIG, GEAR_RULES } from "./config";
 import { fightCost } from "./combat";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "./score";
@@ -100,6 +101,12 @@ export interface RunOptions {
      * shift; leaving it out takes each level's planned number.
      */
     shiftsOverride?: number;
+    /**
+     * False leaves the depth's entanglements (game/modifiers.ts) off: no level
+     * ever carries a modifier and the rng is consumed exactly as before the
+     * card. Left out, every third level from depth 3 gets its twist.
+     */
+    modifiers?: boolean;
 }
 
 export class Run {
@@ -142,6 +149,16 @@ export class Run {
      * anchored. While it is above 0 the forecast stays empty and no shift is applied.
      */
     anchored = 0;
+    /**
+     * The twist the current level carries (game/modifiers.ts), null on a plain
+     * level and always null for a run built with `modifiers: false`.
+     */
+    modifier: ModifierId | null = null;
+    /**
+     * The Blackout vision radius (Chebyshev cells) of the current level, or
+     * null when it is not a Blackout level (game/modifiers.ts, lib/board.ts).
+     */
+    vision: number | null = null;
 
     private mode: ModeRules;
     private rng: Rng;
@@ -154,11 +171,16 @@ export class Run {
     private movesOnLevel = 0;
     /** The RunOptions.shiftsOverride in force, or null when the plan decides the shifts. */
     private shiftsOverride: number | null;
+    /** False when the run was built with `modifiers: false`: no level is entangled. */
+    private modifiersEnabled: boolean;
+    /** The modified plan the current level was built from; decides shifts and the exit bonus. */
+    private currentPlan: ModifiedPlan = levelPlan(1);
 
     constructor(options: RunOptions) {
         const { seed, gear, mode = MODES.descent } = options;
         this.mode = mode;
         this.rng = createRng(seed);
+        this.modifiersEnabled = options.modifiers !== false;
         this.shiftsOverride = Number.isFinite(options.shiftsOverride ?? Number.NaN)
             ? Math.max(0, Math.floor(options.shiftsOverride as number))
             : null;
@@ -197,7 +219,7 @@ export class Run {
         this.buildLevel();
         this.rollForecast();
         this.phase = "playing";
-        this.push({ type: "levelStart", level: this.level, size: this.maze.width });
+        this.push({ type: "levelStart", level: this.level, size: this.maze.width, modifier: this.modifier });
     }
 
     /**
@@ -340,13 +362,15 @@ export class Run {
      * exit bonus (capped at storage), and the level is rebuilt from `levelPlan`. */
     nextLevel(): void {
         if (this.phase !== "clear") return;
-        this.energy = Math.min(this.stats.storage, this.energy + levelPlan(this.level).exitBonus);
+        // The bonus of the plan the cleared level was built from: a Storm exit
+        // pays its extra energy (game/modifiers.ts), capped at storage.
+        this.energy = Math.min(this.stats.storage, this.energy + this.currentPlan.exitBonus);
         this.level += 1;
         this.tally.depth = Math.max(this.tally.depth, this.level);
         this.buildLevel();
         this.rollForecast();
         this.phase = "playing";
-        this.push({ type: "levelStart", level: this.level, size: this.maze.width });
+        this.push({ type: "levelStart", level: this.level, size: this.maze.width, modifier: this.modifier });
     }
 
     /**
@@ -535,7 +559,13 @@ export class Run {
 
     /** Build the maze, start, exit, pickups and enemies for the current level from its plan. */
     private buildLevel(): void {
-        const plan = levelPlan(this.level);
+        // Every third level from depth 3 is entangled with one twist, drawn with
+        // the run's rng; a run built with `modifiers: false` never draws one.
+        const id = this.modifiersEnabled ? modifierFor(this.level, this.rng) : null;
+        const plan = applyModifier(levelPlan(this.level), id);
+        this.modifier = id;
+        this.vision = plan.vision ?? null;
+        this.currentPlan = plan;
         const size = plan.size;
         this.maze = new Maze(size, size, this.rng);
         this.player.x = Math.floor(size / 2);
@@ -576,7 +606,8 @@ export class Run {
             this.forecast = { walk: [], opens: [], closes: [] };
             return;
         }
-        const shifts = this.shiftsOverride ?? levelPlan(this.level).shifts;
+        // The plan the level was built from: a Storm level shifts twice as much.
+        const shifts = this.shiftsOverride ?? this.currentPlan.shifts;
         this.forecastDirs = rollWalk(this.maze, this.rng, shifts);
         this.forecast = forecastOf(this.maze, this.forecastDirs);
     }

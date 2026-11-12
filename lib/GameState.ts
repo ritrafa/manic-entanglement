@@ -5,7 +5,7 @@ import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
-import { CONFIG, FX } from '@/game/config';
+import { CONFIG, FX, MODIFIER_RULES } from '@/game/config';
 import { ENEMY_KINDS } from '@/game/enemies';
 import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
@@ -16,6 +16,7 @@ import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { formatTenths, nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
 import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules } from '@/game/modes';
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
+import { MODIFIER_INFO } from '@/game/modifiers';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -1074,6 +1075,17 @@ class GameState {
                     // says so once, in its own words.
                     if (event.level === ENEMY_KINDS.stalker.fromDepth) {
                         this.board.float('Something is following you', this.run.player.x, this.run.player.y);
+                    }
+                    // An entangled level (game/modifiers.ts) announces itself:
+                    // the twist's name and line stand over the board for two
+                    // seconds as real text, and the live region says them too.
+                    if (event.modifier !== null) {
+                        const info = MODIFIER_INFO[event.modifier];
+                        this.board.banner(info.name, info.line, MODIFIER_RULES.bannerMs);
+                        this.hudSnapshot = {
+                            ...this.hudSnapshot,
+                            announcement: `${info.name}. ${info.line}`,
+                        };
                     }
                     break;
                 case 'dead':

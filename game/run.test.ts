@@ -6,7 +6,9 @@ import type { GameEvent, ItemType } from "@/game/events";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "@/game/score";
 import { ENEMY_KINDS, isHeavy, type EnemyKind } from "@/game/enemies";
 import { fightCost } from "@/game/combat";
-import { GEAR_TYPES } from "@/game/spawn";
+import { GEAR_TYPES, spawnLevel, startCell, exitCell } from "@/game/spawn";
+import { createRng } from "@/game/rng";
+import { applyModifier, modifierFor, MODIFIER_IDS, type ModifierId } from "@/game/modifiers";
 import { playBot, routeCells } from "@/game/bot";
 import { MODES, dailySeed, type ModeRules } from "@/game/modes";
 import {
@@ -131,7 +133,7 @@ describe("Run phases", () => {
     run.start();
     const events = run.takeEvents();
     expect(events[0]).toEqual({ type: "start" });
-    expect(events[1]).toEqual({ type: "levelStart", level: 1, size: CONFIG.startSize });
+    expect(events[1]).toEqual({ type: "levelStart", level: 1, size: CONFIG.startSize, modifier: null });
     expect(run.phase).toBe("playing");
 
     run.score = 42;
@@ -394,7 +396,7 @@ describe("Levels", () => {
     expect(run.maze.width).toBe(levelPlan(2).size);
     expect(run.maze.height).toBe(levelPlan(2).size);
     expect(run.score).toBe(gained); // the level-1 award carries over between levels
-    expect(run.takeEvents()).toEqual([{ type: "levelStart", level: 2, size: levelPlan(2).size }]);
+    expect(run.takeEvents()).toEqual([{ type: "levelStart", level: 2, size: levelPlan(2).size, modifier: null }]);
 
     const forbidden = [
       { x: run.player.x, y: run.player.y },
@@ -1344,5 +1346,134 @@ describe("Daily mode: one seed per calendar day", () => {
     const a = startedModeRun(dailySeed(20261112), MODES.daily);
     const b = startedModeRun(dailySeed(20261113), MODES.daily);
     expect(a.maze.grid).not.toEqual(b.maze.grid);
+  });
+});
+
+describe("Run modifiers", () => {
+  /** Clear levels with the plain helper until the run stands on `level`, events drained. */
+  function advanceToLevel(run: Run, level: number): void {
+    while (run.level < level) {
+      run.energy = 500; // the clock and the moves must not kill the walk there
+      reachClear(run);
+      expect(run.phase).toBe("clear");
+      run.nextLevel();
+      run.takeEvents();
+    }
+  }
+
+  /** The first seed whose depth-3 twist is the given one. */
+  function seedForModifierAtDepth3(id: ModifierId): number {
+    for (let seed = 0; seed < 10000; seed++) {
+      if (modifierFor(3, createRng(seed)) === id) return seed;
+    }
+    throw new Error(`no seed under 10000 gives ${id} at depth 3`);
+  }
+
+  it("a run built with modifiers: false never carries one", () => {
+    const run = new Run({ seed: 5, modifiers: false });
+    run.start();
+    const starts = run.takeEvents().filter((event) => event.type === "levelStart");
+    while (run.level < 7) {
+      run.energy = 500;
+      reachClear(run);
+      run.nextLevel();
+      starts.push(...run.takeEvents().filter((event) => event.type === "levelStart"));
+    }
+    expect(run.modifier).toBeNull();
+    // Every level of the plain run, 1 through 7, was announced with no twist.
+    expect(starts.map((event) => (event.type === "levelStart" ? event.level : 0))).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    for (const event of starts) {
+      expect(event.type === "levelStart" && event.modifier).toBeNull();
+    }
+  });
+
+  it("level 3 carries a twist and its levelStart names it", () => {
+    const run = new Run({ seed: 5 });
+    run.start();
+    run.takeEvents();
+    advanceToLevel(run, 2);
+    expect(run.modifier).toBeNull(); // level 2 is plain
+    run.energy = 500;
+    reachClear(run);
+    run.nextLevel();
+    const starts = run.takeEvents().filter((event) => event.type === "levelStart");
+    expect(starts.length).toBe(1);
+    const start = starts[0];
+    expect(start.type === "levelStart" && start.level).toBe(3);
+    expect(MODIFIER_IDS).toContain(start.type === "levelStart" && start.modifier);
+    expect(run.modifier).toBe(start.type === "levelStart" ? start.modifier : null);
+    expect(run.modifier).not.toBeNull();
+  });
+
+  it("the Blackout level sets the vision radius, the others leave it null", () => {
+    for (const id of MODIFIER_IDS) {
+      const run = new Run({ seed: seedForModifierAtDepth3(id) });
+      run.start();
+      advanceToLevel(run, 3);
+      expect(run.modifier).toBe(id);
+      expect(run.vision).toBe(id === "blackout" ? 2 : null);
+    }
+  });
+
+  it("clearing a Storm level adds 75 energy, capped at storage", () => {
+    const run = new Run({ seed: seedForModifierAtDepth3("storm") });
+    run.start();
+    advanceToLevel(run, 3);
+    expect(run.modifier).toBe("storm");
+    run.items = [];
+    run.enemies = [];
+    run.energy = 10; // far from the cap: the full bonus lands
+    reachClear(run);
+    expect(run.phase).toBe("clear");
+    const left = run.energy;
+    run.nextLevel();
+    expect(run.energy).toBe(Math.min(run.stats.storage, left + 75));
+    expect(run.energy).toBe(left + 75);
+    // Near the cap the bonus stops at storage.
+    run.items = [];
+    run.enemies = [];
+    run.energy = run.stats.storage - 5;
+    reachClear(run);
+    expect(run.phase).toBe("clear");
+    run.nextLevel();
+    expect(run.energy).toBe(run.stats.storage);
+  });
+
+  it("the same seed gives the same twists, level by level", () => {
+    const trace = (seed: number): [number, ModifierId | null][] => {
+      const run = new Run({ seed });
+      run.start();
+      run.takeEvents();
+      const seen: [number, ModifierId | null][] = [];
+      for (let level = 1; level <= 7; level++) {
+        advanceToLevel(run, level);
+        seen.push([run.level, run.modifier]);
+      }
+      return seen;
+    };
+    expect(trace(11)).toEqual(trace(11));
+    const one = trace(11);
+    expect(one[2][1]).not.toBeNull(); // level 3 carries one
+    expect(one[5][1]).not.toBeNull(); // and so does level 6
+  });
+
+  it("a Hoard level never places more things than there are free cells", () => {
+    // The tightest Hoard board: size 5 has 23 free cells once start and exit
+    // are kept out, and the doubled asks must still fit without overlap.
+    const plan = applyModifier({ ...levelPlan(3), size: 5 }, "hoard");
+    const rng = createRng(3);
+    const spawned = spawnLevel(rng, 5, { items: plan.items, enemies: plan.enemies, tools: plan.tools }, plan.energyShare, { depth: 3 });
+    const start = startCell(5);
+    const exit = exitCell(5);
+    const taken = new Set<string>();
+    for (const thing of [...spawned.items, ...spawned.enemies]) {
+      expect(thing.x === start.x && thing.y === start.y).toBe(false);
+      expect(thing.x === exit.x && thing.y === exit.y).toBe(false);
+      const key = `${thing.x},${thing.y}`;
+      expect(taken.has(key), `cell ${key} used twice`).toBe(false);
+      taken.add(key);
+    }
+    expect(taken.size).toBeLessThanOrEqual(5 * 5 - 2);
+    expect(spawned.items.length).toBeLessThanOrEqual(plan.items[1]);
   });
 });

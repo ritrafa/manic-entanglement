@@ -110,6 +110,14 @@ export function sfxFor(event: GameEvent, ctx: SfxContext): Voice[] {
             // A quiet low note: something took a step closer.
             return [{ wave: "sine", freq: 98, at: 0, dur: 0.18, gain: 0.08 }];
         case "levelStart":
+            if (event.modifier !== null) {
+                // An entangled level: the same soft low note with a bright
+                // high answer, so the twist sounds different from a plain floor.
+                return [
+                    { wave: "sine", freq: 110, at: 0, dur: 0.3, gain: 0.12 },
+                    { wave: "triangle", freq: noteHz(12), at: 0.12, dur: 0.22, gain: 0.16 },
+                ];
+            }
             // One soft low note under the new maze.
             return [{ wave: "sine", freq: 110, at: 0, dur: 0.3, gain: 0.12 }];
         case "dead": {

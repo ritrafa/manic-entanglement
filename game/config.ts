@@ -158,3 +158,29 @@ export const FX = {
     /** Below this fraction of storage the board breathes the low-energy pulse. */
     lowEnergyPct: 0.25,
 } as const;
+
+// --- Entanglements (game/modifiers.ts) --------------------------------------------------
+// Every third level from firstDepth carries one named twist: Blackout dims the
+// far board, Storm doubles the shifts and pays the exit more, Hoard doubles
+// the pickups and adds enemies. Pure data: no DOM, no clocks, no randomness.
+
+export const MODIFIER_RULES = {
+    /** The first depth that can be entangled. */
+    firstDepth: 3,
+    /** Only depths that are a multiple of this carry a twist. */
+    everyDepths: 3,
+    /** Storm: the planned shifts per move multiplied by this... */
+    stormShiftFactor: 2,
+    /** ...and capped at this many shifts. */
+    stormShiftMax: 14,
+    /** Storm: energy the exit pays on top of the plan's exit bonus. */
+    stormExitBonus: 25,
+    /** Hoard: both ends of the pickup count range multiplied by this. */
+    hoardItemsFactor: 2,
+    /** Hoard: enemies added to the level. */
+    hoardExtraEnemies: 2,
+    /** Blackout: Chebyshev radius (max(|dx|, |dy|)) the player can see. */
+    blackoutVision: 2,
+    /** Milliseconds the banner naming the twist stays over the board. */
+    bannerMs: 2000,
+} as const;

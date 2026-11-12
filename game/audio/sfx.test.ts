@@ -9,7 +9,7 @@ const MID: SfxContext = { streak: 4, energyPct: 60, depth: 3 };
 /** One example of every event type in the union. */
 const EVERY_EVENT: GameEvent[] = [
     { type: "start" },
-    { type: "levelStart", level: 2, size: 9 },
+    { type: "levelStart", level: 2, size: 9, modifier: null },
     { type: "move", x: 3, y: 4, dx: 1, dy: 0 },
     { type: "blocked", dx: 0, dy: 1 },
     { type: "pickup", item: "energy", text: "+25 Energy", x: 2, y: 5 },
@@ -140,7 +140,7 @@ describe("sfxFor per event", () => {
     });
 
     it("levelStart is one soft low note", () => {
-        const voices = sfxFor({ type: "levelStart", level: 1, size: 7 }, MID);
+        const voices = sfxFor({ type: "levelStart", level: 1, size: 7, modifier: null }, MID);
         expect(voices).toHaveLength(1);
         expect(voices[0].freq).toBeLessThan(200);
         expect(loudest(voices)).toBeLessThanOrEqual(0.2);

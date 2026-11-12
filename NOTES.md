@@ -254,3 +254,39 @@
   the wall/board/exit/shared-cell invariants over 20 seeded shifting runs,
   the intent, both fight directions and determinism, and the
   `game/forecast.test.ts` baseline was re-captured for the new events.
+
+- Tied named twists to the deep levels: the new pure `game/modifiers.ts` has
+  `ModifierId = "blackout" | "storm" | "hoard"`, `MODIFIER_IDS`, `MODIFIER_INFO`
+  (each twist's display name and a banner line of at most 70 characters),
+  `modifierFor(depth, rng)` (null unless `depth >= MODIFIER_RULES.firstDepth`
+  and `depth % MODIFIER_RULES.everyDepths === 0`, then one of the three drawn
+  with the rng — which a plain depth never consumes), `applyModifier(plan, id)`
+  (a fresh plan: Storm caps `shifts * 2` at `stormShiftMax` and adds
+  `stormExitBonus` to `exitBonus`, Hoard doubles both ends of `items` and adds
+  `hoardExtraEnemies`, Blackout only adds `vision: blackoutVision`, null leaves
+  it unchanged) and `visibleCells({ size, player, knot, exit, walk, radius })`
+  (a `[y][x]` grid: true within the Chebyshev `radius` of the player, on the
+  Knot, on every forecast-walk cell and on the exit), all the numbers in
+  `MODIFIER_RULES` in `game/config.ts`; `game/run.ts` takes a `modifiers`
+  option (default on), builds each level from
+  `applyModifier(levelPlan(level), modifierFor(level, rng))`, keeps the twist
+  in `run.modifier` and the radius in `run.vision`, shifts and pays the exit
+  from that modified plan (so a Storm level shifts twice as much and its exit
+  adds 75, capped at storage) and the `levelStart` event (now in
+  `game/events.ts`) carries `modifier`; `lib/board.ts` recomputes the view on
+  every update — on a Blackout level tiles outside it get `.unseen` (6%
+  opacity) and the items and enemies on those cells hide, while wall tiles
+  touching two visible cells stay lit, the Knot, the exit and the forecast
+  marks always show — and its new `banner(name, line, ms)` stands the twist's
+  name and line over the board for `bannerMs` milliseconds, which
+  `lib/GameState.ts` calls on a `levelStart` that carries a twist and repeats
+  into the live region; `game/audio/sfx.ts` answers the plain low note with a
+  bright high one on an entangled level; `game/bot.test.ts` pins the baseline
+  curve with `modifiers: false` and adds the twisted threshold (at 4 moves a
+  second, at least 20 of 40 seeds reach depth 4 — measured 38), and
+  `game/forecast.test.ts` replays its two baselines with `modifiers: false`
+  (re-captured with the `modifier` field); covered by `game/modifiers.test.ts`
+  and the `Run modifiers` cases in `game/run.test.ts` (plain depths, all three
+  twists over 300 seeds, no-mutation, the caps, the Blackout view, the Storm
+  bonus and its cap, same seed same twists, and a Hoard size-5 level never
+  placing more things than the 23 free cells).

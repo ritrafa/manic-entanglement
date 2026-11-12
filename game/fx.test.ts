@@ -12,7 +12,7 @@ const BLOCKED: GameEvent = { type: "blocked", dx: -1, dy: 1 };
 const PICKUP: GameEvent = { type: "pickup", item: "boots", text: "Boots!", x: 3, y: 4 };
 const FIGHT: GameEvent = { type: "fight", cost: 15, kind: "wisp", x: 1, y: 2 };
 const LEVEL_CLEAR: GameEvent = { type: "levelClear", level: 2, gained: 50 };
-const LEVEL_START: GameEvent = { type: "levelStart", level: 2, size: 5 };
+const LEVEL_START: GameEvent = { type: "levelStart", level: 2, size: 5, modifier: null };
 const DEAD: GameEvent = { type: "dead", cause: "time", score: 100, level: 2 , lost: 0 };
 
 const ALL_EVENTS: GameEvent[] = [BLOCKED, PICKUP, FIGHT, LEVEL_CLEAR, LEVEL_START, DEAD];
