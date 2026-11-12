@@ -80,7 +80,7 @@ const Page: React.FC = () => {
                     src="/images/title.png" 
                     alt="Title Screen" 
                     id="title-screen" 
-                    onClick={() => gameState?.startGame()}
+                    onClick={() => gameState?.confirm()}
                 />
                 <div id="level-complete-animation"></div>
             </div>

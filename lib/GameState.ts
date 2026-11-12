@@ -5,6 +5,7 @@ import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { blobRect, boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
+import { actionFor, dirOf } from '@/game/keys';
 
 const SPRITE_FRAME_MS = 150;
 const CLOCK_TICK_MS = 50;
@@ -34,6 +35,10 @@ class GameState {
     private timeouts: Set<ReturnType<typeof setTimeout>> = new Set();
     /** The wall-grid tile size in whole pixels, set by sizeBoard and used to place the blob. */
     private cellSize: number = 4;
+    /** True while M has silenced every sound the shell owns. */
+    private muted: boolean = false;
+    /** The visible game-over panel, so confirm() can take it away on a restart. */
+    private gameOverElement: HTMLElement | null = null;
 
     constructor() {
         this.player = new Player();
@@ -145,24 +150,54 @@ class GameState {
         });
     }
 
+    /**
+     * One keydown entry point: the pure mapping turns the event into an action,
+     * any action the game owns gets preventDefault() so arrows and Space never
+     * scroll the page. Browser chords and typing in fields are left alone.
+     */
     handleKeyPress(event: KeyboardEvent): void {
-        switch (event.key) {
-            case 'ArrowUp':
-            case 'w':
-                this.movePlayer(0, -1);
-                break;
-            case 'ArrowRight':
-            case 'd':
-                this.movePlayer(1, 0);
-                break;
-            case 'ArrowDown':
-            case 's':
-                this.movePlayer(0, 1);
-                break;
-            case 'ArrowLeft':
-            case 'a':
-                this.movePlayer(-1, 0);
-                break;
+        const target = event.target as Element | null;
+        const action = actionFor({
+            code: event.code,
+            ctrlKey: event.ctrlKey,
+            altKey: event.altKey,
+            metaKey: event.metaKey,
+            targetTag: typeof target?.tagName === 'string' ? target.tagName : undefined,
+        });
+        if (action === null) return;
+        event.preventDefault();
+        const dir = dirOf(action);
+        if (dir) {
+            if (this.active) this.movePlayer(dir.dx, dir.dy);
+            return;
+        }
+        if (action === 'confirm') {
+            this.confirm();
+        } else if (action === 'mute') {
+            this.toggleMute();
+        }
+        // 'pause' is consumed here; the pause screen itself arrives in a later card.
+    }
+
+    /**
+     * Enter, Space, the title image and the game-over panel all come through here:
+     * the countdown starts from the title, a dead run restarts, and while the run
+     * is live nothing happens.
+     */
+    confirm(): void {
+        if (this.run.phase === 'dead') {
+            this.clearGameOverPanel();
+            this.beginRun();
+            return;
+        }
+        this.startGame();
+    }
+
+    /** M: every sound the shell owns goes quiet together, and back. */
+    toggleMute(): void {
+        this.muted = !this.muted;
+        for (const audio of [this.sound, this.lost, this.levelup, this.countdown, this.pickupSound, this.fightSound]) {
+            audio.muted = this.muted;
         }
     }
 
@@ -489,12 +524,17 @@ class GameState {
         gameOverMessageText2.textContent = `${reason}, but you scored ${score} points${score == this.highScore ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
         gameOverMessage.appendChild(gameOverMessageText2);
         mazeElement.appendChild(gameOverMessage);
+        this.gameOverElement = gameOverMessage;
 
-        gameOverMessage.addEventListener('click', () => {
-            gameOverMessage.remove();
-            mazeElement.style.backgroundColor = '';
-            this.beginRun();
-        });
+        gameOverMessage.addEventListener('click', () => this.confirm());
+    }
+
+    /** Take the game-over panel away again, leaving no red overlay behind. */
+    private clearGameOverPanel(): void {
+        this.gameOverElement?.remove();
+        this.gameOverElement = null;
+        const mazeElement = document.getElementById('maze');
+        if (mazeElement) mazeElement.style.backgroundColor = '';
     }
 
     handleResize() {
