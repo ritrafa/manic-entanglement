@@ -1,11 +1,13 @@
 import Player from './player';
 import Maze, { Cell, Item, Enemy } from './maze';
+import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 
 const INITIAL_MAZE_SIZE = 5;
 const INITIAL_MAZE_LEVEL = 1;
 const POWERUP_COUNT = [2, 5];
 const ENEMY_COUNT = [1, 3];
 const SHUFFLE_COUNT = 15;
+const SPRITE_FRAME_MS = 150;
 let energyInterval: NodeJS.Timeout;
 //const SOUND = {pickup: new Audio('pickup.wav'), background: new Audio('standoff-loop.mp3'), fight: new Audio('fight.wav'), playbackRate: 0.7};
 
@@ -20,6 +22,11 @@ class GameState {
     public lost: HTMLAudioElement;
     public levelup: HTMLAudioElement;
     public countdown: HTMLAudioElement;
+    private look: Look;
+    private playerElement: HTMLElement | null = null;
+    private layerImages: HTMLImageElement[] = [];
+    private preloadedUrls: Set<string> = new Set();
+    private spriteInterval: ReturnType<typeof setInterval> | null = null;
     
 
     constructor() {
@@ -41,6 +48,70 @@ class GameState {
         this.levelup = new Audio('/levelup.wav');
         this.countdown = new Audio('/beep.mp3');
         this.countdown.playbackRate = 1.5;
+        this.look = this.lookFromPlayer();
+        this.preloadLook();
+        this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
+    }
+
+    /** The look starts from the Player's five trait fields, sanitized. */
+    private lookFromPlayer(): Look {
+        return sanitizeLook({
+            Back: this.player.back,
+            Body: this.player.body,
+            Clothes: this.player.clothes,
+            Eye: this.player.eye,
+            Head: this.player.head,
+        });
+    }
+
+    /** Replace the current look (e.g. after loading an NFT from the wallet). */
+    setLook(look: unknown): void {
+        this.look = sanitizeLook(look);
+        this.preloadLook();
+        this.refreshSprite();
+    }
+
+    /** Preload every frame of the current look once so the animation does not flicker. */
+    private preloadLook(): void {
+        for (let frame = 1; frame <= 4; frame++) {
+            for (const url of spriteLayers(this.look, frame)) {
+                if (!this.preloadedUrls.has(url)) {
+                    this.preloadedUrls.add(url);
+                    const image = new Image();
+                    image.src = url;
+                }
+            }
+        }
+    }
+
+    /** Build the stacked layer images of the player element at the current frame. */
+    private attachSprite(playerElement: HTMLElement): void {
+        this.playerElement = playerElement;
+        this.layerImages = [];
+        for (const url of spriteLayers(this.look, frameAt(Date.now()))) {
+            const layerImage = document.createElement('img');
+            layerImage.className = 'player-layer';
+            layerImage.src = url;
+            layerImage.alt = '';
+            playerElement.appendChild(layerImage);
+            this.layerImages.push(layerImage);
+        }
+    }
+
+    /** Point the current player element's layers at the frames for the current instant. */
+    private refreshSprite(): void {
+        if (!this.playerElement) return;
+        const urls = spriteLayers(this.look, frameAt(Date.now()));
+        if (urls.length !== this.layerImages.length) {
+            // The look changed while the element existed: rebuild the stack.
+            this.layerImages.forEach((image) => image.remove());
+            this.attachSprite(this.playerElement);
+            return;
+        }
+        urls.forEach((url, index) => {
+            const image = this.layerImages[index];
+            if (image.getAttribute('src') !== url) image.setAttribute('src', url);
+        });
     }
 
     initGame(size: number = INITIAL_MAZE_SIZE): Player {
@@ -129,6 +200,8 @@ class GameState {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         mazeElement.innerHTML = '';
+        this.playerElement = null;
+        this.layerImages = [];
 
         for (let y = 0; y < this.maze.height * 2 + 1; y++) {
             for (let x = 0; x < this.maze.width * 2 + 1; x++) {
@@ -147,6 +220,7 @@ class GameState {
                     if (cellX === this.player.x && cellY === this.player.y) {
                         const playerElement = document.createElement('div');
                         playerElement.className = `player${this.player.facing_left ? ' flip-horizontal' : ''}`;
+                        this.attachSprite(playerElement);
                         cell.appendChild(playerElement);
                     } else if (cellX === this.exit.x && cellY === this.exit.y) {
                         const exitElement = document.createElement('div');

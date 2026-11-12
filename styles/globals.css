@@ -82,8 +82,16 @@ body {
 }
 
 .player {
-  background-image: url('/images/player.gif');
-  background-size: cover;
+  /* The reptile is drawn by stacked <img class="player-layer"> elements,
+     built in lib/GameState.ts from game/sprite.ts. */
+}
+
+.player-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
 }
 
 .player.flip-horizontal {

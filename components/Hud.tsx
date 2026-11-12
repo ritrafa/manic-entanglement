@@ -28,6 +28,13 @@ const Hud: React.FC<HudProps> = ({ player, gameState }) => {
 
                     setAssetImage(image);
                     player.setPlayerDetails(data);
+                    gameState.setLook({
+                        Head: player.head,
+                        Eye: player.eye,
+                        Clothes: player.clothes,
+                        Body: player.body,
+                        Back: player.back,
+                    });
 
                     return;
                 }   
