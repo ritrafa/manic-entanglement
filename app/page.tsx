@@ -65,6 +65,14 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
     const handlePress = useCallback((dir: Dir) => gameState.pressDir(dir), [gameState]);
     const handleRelease = useCallback((dir: Dir) => gameState.releaseDir(dir), [gameState]);
 
+    // The board mounts once #maze is actually in the page: in a production
+    // build the GameState is created before the element exists, so the
+    // constructor's call is a no-op and this one does the mounting. Board.mount
+    // uses replaceChildren, so a second call is harmless.
+    useEffect(() => {
+        gameState.mountBoard();
+    }, [gameState]);
+
     return (
         <>
         <TouchLayer onPress={handlePress} onRelease={handleRelease}>

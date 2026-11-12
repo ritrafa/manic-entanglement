@@ -288,7 +288,7 @@ class GameState {
     }
 
     /** Build the board's layers once and draw the level that waits behind the title. */
-    private mountBoard(): void {
+    mountBoard(): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         this.board.mount(mazeElement);

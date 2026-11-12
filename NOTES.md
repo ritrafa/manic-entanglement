@@ -426,3 +426,14 @@
   sixteen wall pictures once when the board mounts, so a wall that changes never
   flashes empty. **First-load JavaScript: 1137.8 kB before, 663.7 kB after
   (uncompressed); `public`: 8.0 MB before, 1.5 MB after.**
+- E41: Drew the maze in production builds and let a long slide turn: `lib/GameState.ts`
+  `mountBoard()` is public (its constructor call stays, a no-op while `#maze` is missing), and
+  `GameShell` in `app/page.tsx` gained `useEffect(() => { gameState.mountBoard(); }, [gameState]);`
+  so the board mounts once the element is really in the page — before this a production build
+  showed the title and HUD over an empty maze, since the GameState was created while the page
+  still read "Loading..." and React's double setup only hid it in development; mounting twice
+  stays harmless because `Board.mount` uses `replaceChildren`. `TouchTracker.move` in
+  `game/swipe.ts` now moves the anchor to the current point whenever the finger keeps travelling
+  in the held direction (no operations returned), so after a 300 px slide a 30 px perpendicular
+  flick turns instead of having to beat the whole horizontal run from the original anchor; the
+  class doc comment says so and `game/swipe.test.ts` pins the long-slide-then-turn sequence.

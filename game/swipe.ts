@@ -97,7 +97,9 @@ function dominantDir(dx: number, dy: number): Dir | null {
  *   is pressed and the anchor moves to the current point.
  * - While a direction is held, reaching 24 px along a *different* direction
  *   (the opposite one included) releases the old one and presses the new.
- *   Continuing along the held direction never re-presses it.
+ *   Continuing along the held direction never re-presses it, but the anchor
+ *   follows the finger, so a turn after a long slide is measured from where
+ *   the finger is now, not from where the slide began.
  * - `end` releases whatever is still held. If nothing was ever pressed and the
  *   whole touch fits `classifyTouch`'s tap rule (short and small), `end` hands
  *   back a single tap instead — the browser's own click still does the tapping.
@@ -134,8 +136,15 @@ export class TouchTracker {
     move(x: number, y: number, t: number): TouchOp[] {
         if (!this.tracking) return [];
         const dir = dominantDir(x - this.anchorX, y - this.anchorY);
-        // Too small, or simply more of the same: the held direction keeps running.
-        if (dir === null || dir === this.held) return [];
+        if (dir !== null && dir === this.held) {
+            // More of the same: the held direction keeps running and the anchor
+            // follows the finger, so the next turn is measured from here.
+            this.anchorX = x;
+            this.anchorY = y;
+            return [];
+        }
+        // Too small a move from the anchor: nothing changes.
+        if (dir === null) return [];
         const ops: TouchOp[] = [];
         if (this.held !== null) ops.push({ op: "release", dir: this.held });
         ops.push({ op: "press", dir });

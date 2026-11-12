@@ -91,6 +91,22 @@ describe("TouchTracker", () => {
     expect(t.end(131, 140, 150)).toEqual([{ op: "release", dir: "down" }]);
   });
 
+  it("a turn after a long slide is measured from the finger, not the start", () => {
+    const t = new TouchTracker();
+    t.start(0, 0, 0);
+    // One press right across a 300 px slide taken in small steps.
+    const ops: TouchOp[] = [];
+    for (let x = 10; x <= 300; x += 10) ops.push(...t.move(x, 0, x));
+    expect(ops).toEqual([{ op: "press", dir: "right" }]);
+    // 30 px down from where the finger is now turns: the held right is
+    // released and down is pressed, without beating the whole 300 px run.
+    expect(t.move(300, 30, 400)).toEqual([
+      { op: "release", dir: "right" },
+      { op: "press", dir: "down" },
+    ]);
+    expect(t.end(300, 30, 450)).toEqual([{ op: "release", dir: "down" }]);
+  });
+
   it("a quick, small touch is exactly one tap and nothing else", () => {
     const t = new TouchTracker();
     t.start(100, 100, 0);
