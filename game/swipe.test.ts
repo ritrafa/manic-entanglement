@@ -176,7 +176,7 @@ describe("hapticFor", () => {
   it("pickup, fight and dead rumble; anything else is silent", () => {
     expect(hapticFor({ type: "pickup", item: "energy", text: "+25", x: 1, y: 2 })).toBe(10);
     expect(hapticFor({ type: "fight", cost: 15, kind: "wisp", x: 1, y: 2 })).toBe(30);
-    expect(hapticFor({ type: "dead", cause: "time", score: 10, level: 1 })).toBe(80);
+    expect(hapticFor({ type: "dead", cause: "time", score: 10, level: 1 , lost: 0 })).toBe(80);
     expect(hapticFor({ type: "move", x: 1, y: 2, dx: 1, dy: 0 })).toBe(0);
     expect(hapticFor({ type: "nonsense" } as unknown as GameEvent)).toBe(0);
   });

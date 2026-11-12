@@ -1,18 +1,18 @@
 import React, { useState, useCallback, useSyncExternalStore } from 'react';
-import Player from '../lib/player';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { getRelatedAssetsByOwner } from '../lib/helius';
 import { useWallet } from '@solana/wallet-adapter-react';
 import GameState from '@/lib/GameState';
 import ToolBar from './ToolBar';
 
+/** The five sprite traits an NFT's attributes may set (game/sprite.ts). */
+const LOOK_LAYERS = ['Head', 'Eye', 'Clothes', 'Body', 'Back'] as const;
 
 interface HudProps {
-    player: Player;
     gameState: GameState;
 }
 
-const Hud: React.FC<HudProps> = ({ player, gameState }) => {
+const Hud: React.FC<HudProps> = ({ gameState }) => {
     const { publicKey } = useWallet();
     const [assetImage, setAssetImage] = useState<string | null>(null);
     // The whole model comes from the shell's store: one source, no getElementById,
@@ -31,14 +31,19 @@ const Hud: React.FC<HudProps> = ({ player, gameState }) => {
                     const image = element.file;
 
                     setAssetImage(image);
-                    player.setPlayerDetails(data);
-                    gameState.setLook({
-                        Head: player.head,
-                        Eye: player.eye,
-                        Clothes: player.clothes,
-                        Body: player.body,
-                        Back: player.back,
-                    });
+                    // The look lives in the shell (GameState.setLook): take the
+                    // five sprite traits straight from the asset's attributes.
+                    const look: Record<string, string> = {};
+                    if (Array.isArray(data)) {
+                        for (const detail of data as { key?: string; value?: unknown }[]) {
+                            if (typeof detail?.key === 'string'
+                                && (LOOK_LAYERS as readonly string[]).includes(detail.key)
+                                && typeof detail.value === 'string') {
+                                look[detail.key] = detail.value;
+                            }
+                        }
+                    }
+                    gameState.setLook(look);
 
                     return;
                 }   
@@ -103,6 +108,14 @@ const Hud: React.FC<HudProps> = ({ player, gameState }) => {
                         <div id="stat-consumption">{model.stepPct}%</div>
                     </div>
                 </div>
+                {/* Gear picked up since the last exit: kept by reaching it, lost
+                    on death (game/run.ts). The marker shows only while something
+                    is carried. */}
+                {model.carried > 0 && (
+                    <div className="carried-marker" title="Reach the exit to keep it">
+                        Carried: {model.carried}
+                    </div>
+                )}
             </div>
             {/* The two tool buttons: Anchor and Twist, spent by click, tap or keys 1 and 2. */}
             <ToolBar gameState={gameState} />

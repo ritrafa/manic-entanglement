@@ -852,6 +852,19 @@ body {
   margin-right: 10px;
 }
 
+/* The HUD's carried-gear marker: shown only while the run carries pieces
+   (game/run.ts); the title text tells the player the exit keeps them. */
+.carried-marker {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 1px solid #ffd700;
+  color: #ffd700;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
 .wallet-actions {
   color: white;
   background-color: rgba(0, 0, 0, 0.8);

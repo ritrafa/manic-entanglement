@@ -8,6 +8,14 @@ import { ENEMY_KINDS, type EnemyKind } from "@/game/enemies";
 import { fightCost } from "@/game/combat";
 import { GEAR_TYPES } from "@/game/spawn";
 import { routeCells } from "@/game/bot";
+import {
+    addGear,
+    gearCap,
+    noGear,
+    statsFromGear,
+    type GearId,
+    type GearLevels,
+} from "@/game/gear";
 
 const STEPS = [
   { dx: 0, dy: -1 },
@@ -50,17 +58,14 @@ function enemyAt(id: number, x: number, y: number, kind: EnemyKind = "wisp") {
   return { id, x, y, kind, hp: ENEMY_KINDS[kind].hp, power: ENEMY_KINDS[kind].power };
 }
 
-/** The stat change a gear pickup of this type must make (game/config.ts). */
-function expectGearEffect(before: Record<string, number>, after: Record<string, number>, type: string): void {
-  const expected = { ...before };
-  if (type === "boots") expected.consumption *= CONFIG.pickups.boots;
-  else if (type === "gloves") expected.attack += CONFIG.pickups.gloves;
-  else if (type === "shield") expected.defense += CONFIG.pickups.shield;
-  else if (type === "speed") expected.speed *= CONFIG.pickups.speed;
-  else if (type === "backpack") {
-    expected.storage += CONFIG.pickups.backpack;
+/** The stats a gear pickup of this type must leave, given the levels held before it. */
+function expectGearEffect(before: GearLevels, after: ReturnType<typeof statsFromGear>, type: string): void {
+  if (type === "energy") {
+    expect(after).toEqual(statsFromGear(before));
+    return;
   }
-  expect(after).toEqual(expected);
+  const id = type as GearId;
+  expect(after).toEqual(statsFromGear({ ...before, [id]: before[id] + 1 }));
 }
 
 describe("Run phases", () => {
@@ -120,16 +125,14 @@ describe("Run phases", () => {
     expect(dead.phase).toBe("dead");
   });
 
-  it("start goes from ready or dead to playing at level 1 with score 0, keeping stats", () => {
-    const run = new Run({ seed: 7 });
+  it("start goes from ready or dead to playing at level 1 with score 0, keeping the bank", () => {
+    const run = new Run({ seed: 7, gear: { ...noGear(), gloves: 13, backpack: 10 } });
     run.start();
     const events = run.takeEvents();
     expect(events[0]).toEqual({ type: "start" });
     expect(events[1]).toEqual({ type: "levelStart", level: 1, size: CONFIG.startSize });
     expect(run.phase).toBe("playing");
 
-    run.stats.attack = 2.3;
-    run.stats.storage = 150;
     run.score = 42;
     run.level = 4;
     run.tick(999999);
@@ -139,8 +142,8 @@ describe("Run phases", () => {
     expect(run.phase).toBe("playing");
     expect(run.level).toBe(1);
     expect(run.score).toBe(0);
-    expect(run.stats.attack).toBe(2.3);
-    expect(run.stats.storage).toBe(150);
+    expect(run.stats.attack).toBeCloseTo(2.3, 10); // 1 + 0.1 * 13 banked gloves
+    expect(run.stats.storage).toBe(150); // 100 + 5 * 10 banked backpacks
     expect(run.energy).toBe(150); // max(100, storage)
   });
 });
@@ -152,7 +155,7 @@ describe("Energy clock", () => {
     expect(run.phase).toBe("dead");
     const dead = eventsOf(run, "dead");
     expect(dead).toHaveLength(1);
-    expect(dead[0]).toEqual({ type: "dead", cause: "time", score: 0, level: 1 });
+    expect(dead[0]).toEqual({ type: "dead", cause: "time", score: 0, level: 1, lost: 0 });
   });
 
   it("14000 ms of doing nothing does not kill a fresh run", () => {
@@ -165,9 +168,9 @@ describe("Energy clock", () => {
 
   it("speed takes effect at once", () => {
     const run = startedRun(10);
-    run.stats.speed = 2; // drains take twice as long
+    run.banked.speed = 21; // the cap: every drain takes 150 * 1.5 ms
     run.tick(14000);
-    expect(run.energy).toBe(100 - 46); // 14000 / 300 = 46 drains
+    expect(run.energy).toBe(100 - 62); // 14000 / 225 = 62 drains
   });
 });
 
@@ -230,8 +233,8 @@ describe("Pickups", () => {
     },
     {
       type: "boots",
-      text: "-1% Energy Use",
-      check: (run) => expect(run.stats.consumption).toBeCloseTo(0.99, 10),
+      text: "-2% Energy Use",
+      check: (run) => expect(run.stats.consumption).toBeCloseTo(0.98, 10),
     },
     {
       type: "gloves",
@@ -245,8 +248,8 @@ describe("Pickups", () => {
     },
     {
       type: "speed",
-      text: "+1% Speed",
-      check: (run) => expect(run.stats.speed).toBeCloseTo(1.01, 10),
+      text: "+2% Speed",
+      check: (run) => expect(run.stats.speed).toBeCloseTo(1.02, 10),
     },
     {
       type: "backpack",
@@ -336,13 +339,13 @@ describe("Fights", () => {
     expect(run.fightCostAt(target.x, target.y)).toBeNull();
     run.enemies = [enemyAt(913, target.x, target.y)];
     expect(run.fightCostAt(target.x, target.y)).toBe(15);
-    run.stats.attack = 3;
+    run.banked.gloves = gearCap("gloves"); // attack 3
     expect(run.fightCostAt(target.x, target.y)).toBe(5);
     expect(run.fightCostAt(run.player.x, run.player.y)).toBeNull();
   });
 
   it("a better attack and defense lower the cost", () => {
-    const run = new Run({ seed: 18, stats: { attack: 2, defense: 5 } });
+    const run = new Run({ seed: 18, gear: { ...noGear(), gloves: 10, shield: 20 } }); // attack 2, defense 3
     run.start();
     run.takeEvents();
     run.items = [];
@@ -350,10 +353,10 @@ describe("Fights", () => {
     const step = openStep(run);
     run.enemies = [enemyAt(912, run.player.x + step.dx, run.player.y + step.dy)];
     run.move(step.dx, step.dy);
-    // cost = round(3 / 2 * max(1, 6 - 5)) = 2
+    // cost = round(3 / 2 * max(1, 6 - 3)) = 5
     expect(run.takeEvents()).toContainEqual({
       type: "fight",
-      cost: 2,
+      cost: 5,
       kind: "wisp",
       x: run.player.x,
       y: run.player.y,
@@ -673,7 +676,7 @@ describe("Enemy kinds and tolls", () => {
     expect(run.tollOf(enemy)).toBe(fightCost(run.stats, enemy));
     expect(run.tollOf(enemy)).toBe(30); // default stats
     const before = run.tollOf(enemy);
-    run.stats.attack += 0.5;
+    run.carried.gloves += 5; // attack 1.5
     expect(run.tollOf(enemy)).toBeLessThan(before);
     expect(run.tollOf(enemy)).toBe(fightCost(run.stats, enemy));
     expect(run.fightCostAt(enemy.x, enemy.y)).toBe(run.tollOf(enemy));
@@ -686,7 +689,8 @@ describe("Enemy kinds and tolls", () => {
     const step = openStep(run);
     const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
     run.enemies = [enemyAt(941, target.x, target.y, "brute")];
-    const statsBefore = { ...run.stats };
+    const statsBefore = run.stats;
+    const levelsBefore = addGear(run.banked, run.carried);
     const scoreBefore = run.score;
     run.move(step.dx, step.dy);
     const events = run.takeEvents();
@@ -698,7 +702,7 @@ describe("Enemy kinds and tolls", () => {
     expect(pickups).toHaveLength(1);
     const item = (pickups as unknown as [{ item: ItemType }])[0].item;
     expect(GEAR_TYPES).toContain(item);
-    expectGearEffect(statsBefore, { ...run.stats } as unknown as Record<string, number>, item);
+    expectGearEffect(levelsBefore, run.stats, item);
     expect(run.score).toBe(scoreBefore + KILL_SCORE + PICKUP_SCORE);
     expect(run.tally.kills).toBe(1);
     expect(run.tally.pickups).toBe(1);
@@ -711,7 +715,8 @@ describe("Enemy kinds and tolls", () => {
     const step = openStep(run);
     const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
     run.enemies = [enemyAt(942, target.x, target.y, "warden")];
-    const statsBefore = { ...run.stats };
+    const statsBefore = run.stats;
+    const levelsBefore = addGear(run.banked, run.carried);
     run.move(step.dx, step.dy);
     const events = run.takeEvents();
     const fights = events.filter((event) => event.type === "fight");
@@ -724,17 +729,12 @@ describe("Enemy kinds and tolls", () => {
       expect(pickup.x).toBe(target.x);
       expect(pickup.y).toBe(target.y);
     }
-    // The two drops together move the stats like two ordinary pickups of those types.
-    const expected = { ...statsBefore } as unknown as Record<string, number>;
-    for (const pickup of pickups as unknown as [{ item: ItemType }]) {
-      const type = pickup.item;
-      if (type === "boots") expected.consumption *= CONFIG.pickups.boots;
-      else if (type === "gloves") expected.attack += CONFIG.pickups.gloves;
-      else if (type === "shield") expected.defense += CONFIG.pickups.shield;
-      else if (type === "speed") expected.speed *= CONFIG.pickups.speed;
-      else if (type === "backpack") expected.storage += CONFIG.pickups.backpack;
+    // The two drops together raise the two levels like two ordinary pickups.
+    const expected = { ...levelsBefore };
+    for (const pickup of pickups as unknown as [{ item: GearId }]) {
+      expected[pickup.item] += 1;
     }
-    expect(run.stats as unknown as Record<string, number>).toEqual(expected);
+    expect(run.stats).toEqual(statsFromGear(expected));
     expect(run.tally.pickups).toBe(2);
   });
 
@@ -1061,5 +1061,131 @@ describe("Run tools: determinism", () => {
     for (const seed of [3, 11, 42, 77, 123]) {
       expect(scripted(seed)).toBe(scripted(seed));
     }
+  });
+});
+
+
+// --- Gear carried, banked and lost (game/gear.ts, owner decision Q10) ---
+
+/** Place one pickup on the cell the next open step leads to and take that step. */
+function pickUp(run: Run, type: ItemType): void {
+  run.items = [];
+  run.enemies = [];
+  const step = openStep(run);
+  run.items = [{ id: 980 + run.score, x: run.player.x + step.dx, y: run.player.y + step.dy, type }];
+  expect(run.move(step.dx, step.dy)).toBe(true);
+}
+
+describe("Run gear: carried, banked and lost", () => {
+  it("stats are always statsFromGear of banked plus carried", () => {
+    const run = new Run({ seed: 60, gear: { ...noGear(), gloves: 4, boots: 10 } });
+    run.start();
+    run.takeEvents();
+    expect(run.stats).toEqual(statsFromGear(addGear(run.banked, run.carried)));
+    pickUp(run, "gloves");
+    expect(run.stats).toEqual(statsFromGear(addGear(run.banked, run.carried)));
+    expect(run.stats.attack).toBeCloseTo(1.5, 10); // (4 banked + 1 carried) * 0.1
+  });
+
+  it("carried gear dies with the run: attack is 1 again after start, and dead carries lost 1", () => {
+    const run = startedRun(61);
+    pickUp(run, "gloves");
+    expect(run.carried.gloves).toBe(1);
+    expect(run.stats.attack).toBeCloseTo(1.1, 10);
+    run.takeEvents();
+    run.tick(999999);
+    const dead = eventsOf(run, "dead");
+    expect(dead).toHaveLength(1);
+    expect(dead[0]).toMatchObject({ type: "dead", cause: "time", lost: 1 });
+    expect(run.carried).toEqual(noGear());
+    run.start();
+    expect(run.stats.attack).toBe(1);
+    expect(run.banked).toEqual(noGear());
+  });
+
+  it("the exit banks the carried gear, emits banked, and it survives death and restart", () => {
+    const run = startedRun(62);
+    pickUp(run, "gloves");
+    run.takeEvents();
+    reachClear(run);
+    expect(run.banked.gloves).toBe(1);
+    expect(run.carried).toEqual(noGear());
+    expect(eventsOf(run, "banked")).toEqual([{ type: "banked", count: 1 }]);
+
+    // A later death cannot take what the exit already kept.
+    run.nextLevel();
+    run.takeEvents();
+    run.tick(999999);
+    expect(run.phase).toBe("dead");
+    expect(eventsOf(run, "dead")[0]).toMatchObject({ lost: 0 });
+    run.start();
+    expect(run.stats.attack).toBeCloseTo(1.1, 10);
+    expect(run.banked.gloves).toBe(1);
+  });
+
+  it("an exit with nothing carried banks nothing and emits no banked event", () => {
+    const run = startedRun(63);
+    reachClear(run);
+    expect(run.banked).toEqual(noGear());
+    expect(eventsOf(run, "banked")).toEqual([]);
+  });
+
+  it("a pickup at the cap gives +10 energy and changes no level", () => {
+    const run = new Run({ seed: 64, gear: { ...noGear(), gloves: gearCap("gloves") } });
+    run.start();
+    run.takeEvents();
+    const energyBefore = run.energy;
+    pickUp(run, "gloves");
+    expect(run.banked.gloves).toBe(gearCap("gloves"));
+    expect(run.carried.gloves).toBe(0);
+    expect(run.stats.attack).toBe(3); // at the limit, unchanged
+    expect(run.energy).toBe(Math.min(run.stats.storage, energyBefore - 1 + 10));
+    const pickups = eventsOf(run, "pickup");
+    expect(pickups).toHaveLength(1);
+    expect((pickups[0] as unknown as { text: string }).text).toContain("maxed");
+    expect((pickups[0] as unknown as { text: string }).text).toContain("+10 Energy");
+  });
+
+  it("banked plus carried together hit the cap", () => {
+    const run = new Run({ seed: 65, gear: { ...noGear(), backpack: gearCap("backpack") - 1 } });
+    run.start();
+    run.takeEvents();
+    pickUp(run, "backpack"); // the last level: storage reaches 200
+    expect(run.carried.backpack).toBe(1);
+    expect(run.stats.storage).toBe(200);
+    const energyBefore = run.energy;
+    pickUp(run, "backpack"); // one past the cap: energy instead
+    expect(run.carried.backpack).toBe(1);
+    expect(run.energy).toBe(Math.min(run.stats.storage, energyBefore - 1 + 10));
+  });
+
+  it("start keeps the bank and drops anything left carried", () => {
+    const run = startedRun(66);
+    run.banked.shield = 3;
+    run.carried.boots = 2;
+    run.abandon(); // quitting is not an exit: carried goes with the run, the bank stays
+    run.start();
+    expect(run.banked.shield).toBe(3);
+    expect(run.carried).toEqual(noGear());
+    expect(run.stats.defense).toBeCloseTo(1.3, 10);
+    expect(run.stats.consumption).toBe(1);
+  });
+
+  it("abandoning a run leaves the carried gear behind too", () => {
+    const run = startedRun(67);
+    pickUp(run, "speed");
+    expect(run.carried.speed).toBe(1);
+    run.abandon();
+    expect(run.carried).toEqual(noGear());
+    run.start();
+    expect(run.stats.speed).toBe(1);
+  });
+
+  it("a banked backpack raises the starting energy with its storage", () => {
+    const run = new Run({ seed: 68, gear: { ...noGear(), backpack: 8 } });
+    expect(run.energy).toBe(140); // max(100, 100 + 5 * 8)
+    run.tick(999999);
+    run.start();
+    expect(run.energy).toBe(140);
   });
 });

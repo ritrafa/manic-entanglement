@@ -36,20 +36,10 @@ export const CONFIG = {
     drainMs: 150,
     /** Energy at the start of the run (also the floor, storage may raise it). */
     startEnergy: 100,
-    /** Per-pickup effects, keyed by item type. */
+    /** Per-pickup effects, keyed by item type (gear lives in GEAR_RULES below). */
     pickups: {
         /** Energy restored by an "energy" pickup (capped at storage). */
         energy: 25,
-        /** Multiplier applied to consumption by "boots". */
-        boots: 0.99,
-        /** Attack gained by "gloves". */
-        gloves: 0.1,
-        /** Defense gained by "shield". */
-        shield: 0.1,
-        /** Multiplier applied to speed by "speed". */
-        speed: 1.01,
-        /** Storage (and energy) gained by "backpack". */
-        backpack: 5,
     },
     /** Fight maths: cost = round(hp / max(0.1, attack) * max(1, power - defense)) clamped to 1..999 (game/combat.ts). */
     enemy: { hp: 3, power: 6 },
@@ -70,6 +60,40 @@ export const CONFIG = {
         /** Depths from warden.fromDepth on. */
         high: { wisp: 0.5, brute: 0.35, warden: 0.15 },
     },
+} as const;
+
+// --- Gear (game/gear.ts, owner decision Q10) ------------------------------------------
+// Gear helps from the moment it is picked up, becomes permanent when the level's
+// exit is reached, and is lost when the run dies before that. Each kind has a
+// cap: the smallest level at which its stat reaches its limit.
+
+export const GEAR_RULES = {
+    /** attack = min(attackMax, attackBase + attackStep * gloves). */
+    attackBase: 1,
+    attackStep: 0.1,
+    attackMax: 3,
+    /** defense = min(defenseMax, defenseBase + defenseStep * shield). */
+    defenseBase: 1,
+    defenseStep: 0.1,
+    defenseMax: 3,
+    /** consumption = max(consumptionMin, consumptionBase * bootsFactor ^ boots). */
+    consumptionBase: 1,
+    bootsFactor: 0.98,
+    consumptionMin: 0.6,
+    /** speed = min(speedMax, speedBase * speedFactor ^ speed). */
+    speedBase: 1,
+    speedFactor: 1.02,
+    speedMax: 1.5,
+    /** storage = min(storageMax, storageBase + storageStep * backpack). */
+    storageBase: 100,
+    storageStep: 5,
+    storageMax: 200,
+    /** The smallest level at which each kind's stat sits at its limit. */
+    caps: { boots: 26, gloves: 20, shield: 20, speed: 21, backpack: 20 },
+    /** Energy given instead when a gear pickup arrives at the cap. */
+    maxedEnergy: 10,
+    /** Energy a backpack adds on top of the storage it brings. */
+    backpackEnergy: 5,
 } as const;
 
 // --- Score rules (game/score.ts, owner decision Q9) -----------------------------------

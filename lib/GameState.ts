@@ -1,4 +1,3 @@
-import Player from './player';
 import { Run } from '@/game/run';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
@@ -10,7 +9,8 @@ import { CONFIG, FX } from '@/game/config';
 import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
-import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
+import { defaultSave, loadSave, resetProgress, writeSave, type SaveData, type StorageLike } from '@/game/save';
+import { countGear, noGear, sanitizeGear } from '@/game/gear';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
@@ -42,6 +42,9 @@ export interface GameSnapshot extends HudModel {
     anchored: number;
     /** The tool waiting for a direction (Cut), null when nothing is armed. */
     armed: ToolId | null;
+    /** Pieces of gear carried since the last exit (game/gear.ts); the HUD marks them
+     * while above 0: they are kept by reaching the exit and lost on death. */
+    carried: number;
 }
 
 /** True when two tool charge records show the same counts. */
@@ -59,7 +62,6 @@ const WARN_EVERY_MS = 1000;
 
 class GameState {
     public run: Run;
-    public player: Player;
     /** The best score kept in the save (save.best.descent), 0 when none was stored. */
     public highScore: number = 0;
     /** The one save object, loaded once from storage in the constructor. */
@@ -108,6 +110,10 @@ class GameState {
     private settingsFrom: Screen = 'title';
     /** The cause of the most recent death, kept for the summary. */
     private lastCause: DeathCause = 'time';
+    /** Pieces of gear this run banked at exits, counted from "banked" events. */
+    private runBanked: number = 0;
+    /** Pieces of gear the last death lost, from the "dead" event. */
+    private runLost: number = 0;
     /** True while the how-to was opened by the first Play: leaving it starts the run. */
     private howtoFromPlay: boolean = false;
     /** True when the clear-screen animation finished while paused: the next level
@@ -129,24 +135,17 @@ class GameState {
         this.storage = GameState.readStorage();
         this.save = loadSave(this.storage);
         this.highScore = this.save.best.descent ?? 0;
-        this.player = new Player();
-        this.run = new Run({
-            seed: Date.now(),
-            stats: {
-                attack: this.player.attack,
-                defense: this.player.defense,
-                speed: this.player.speed,
-                consumption: this.player.consumption,
-                storage: this.player.energy_storage,
-            },
-        });
+        // The bank carries what earlier runs kept by reaching exits; anything
+        // wrongly stored reads as no gear (game/gear.ts).
+        this.run = new Run({ seed: Date.now(), gear: sanitizeGear(this.save.gear) });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null };
+        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried) };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
         this.applySettings();
-        this.look = this.lookFromPlayer();
+        // The look lives in the save; a fresh one is the default sprite.
+        this.look = sanitizeLook(this.save.look);
         this.preloadLook();
         this.mountBoard();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
@@ -206,17 +205,6 @@ class GameState {
             fn();
         }, ms);
         this.timeouts.add(id);
-    }
-
-    /** The look starts from the Player's five trait fields, sanitized. */
-    private lookFromPlayer(): Look {
-        return sanitizeLook({
-            Back: this.player.back,
-            Body: this.player.body,
-            Clothes: this.player.clothes,
-            Eye: this.player.eye,
-            Head: this.player.head,
-        });
     }
 
     /** Replace the current look (e.g. after loading an NFT from the wallet). */
@@ -520,6 +508,8 @@ class GameState {
                 best: this.bestBeforeRun,
                 newBest: isNewBest(this.run.score, this.bestBeforeRun),
                 cause: this.lastCause,
+                banked: this.runBanked,
+                lost: this.runLost,
             });
         }
         this.publishHud();
@@ -605,6 +595,23 @@ class GameState {
     /** The settings as they stand now (the settings screen reads the snapshot). */
     getSettings(): Settings {
         return this.settings;
+    }
+
+    /**
+     * The settings panel's Reset progress (asked twice before it lands): every
+     * best, the gear bank, the lifetime totals and the feats return to their
+     * defaults and are written back, while the settings, the look and the
+     * seen messages stay. The live run keeps playing with an empty bank.
+     */
+    resetProgress(): void {
+        this.save = resetProgress(this.save);
+        writeSave(this.storage, this.save);
+        this.highScore = 0;
+        this.bestBeforeRun = 0;
+        this.run.banked = noGear();
+        this.run.carried = noGear();
+        this.runBanked = 0;
+        this.publishHud();
     }
 
     /**
@@ -842,6 +849,7 @@ class GameState {
             tools: { ...this.run.tools },
             anchored: this.run.anchored,
             armed: this.armedTool,
+            carried: countGear(this.run.carried),
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -852,7 +860,8 @@ class GameState {
             && this.hudSnapshot.announcement === next.announcement
             && sameTools(this.hudSnapshot.tools, next.tools)
             && this.hudSnapshot.anchored === next.anchored
-            && this.hudSnapshot.armed === next.armed) {
+            && this.hudSnapshot.armed === next.armed
+            && this.hudSnapshot.carried === next.carried) {
             return;
         }
         this.hudSnapshot = next;
@@ -867,8 +876,17 @@ class GameState {
             this.vibrateFor(event);
             switch (event.type) {
                 case 'start':
-                    // The countdown finished and the run is live.
+                    // The countdown finished and the run is live; its gear story
+                    // (banked pieces and the final loss) starts from nothing.
+                    this.runBanked = 0;
+                    this.runLost = 0;
                     this.dispatch('started');
+                    break;
+                case 'banked':
+                    // The exit kept what the level carried: the bank is the save now.
+                    this.runBanked += event.count;
+                    this.save = { ...this.save, gear: { ...this.run.banked } };
+                    writeSave(this.storage, this.save);
                     break;
                 case 'pickup':
                     // The sound just played rode the streak's degree; count it now.
@@ -917,6 +935,7 @@ class GameState {
                     this.stopClock();
                     this.recordBest(this.run.score);
                     this.lastCause = event.cause;
+                    this.runLost = event.lost;
                     this.dispatch('died');
                     break;
             }

@@ -3,6 +3,7 @@ import {
   SAVE_KEY,
   defaultSave,
   loadSave,
+  resetProgress,
   writeSave,
   type SaveData,
   type StorageLike,
@@ -145,5 +146,62 @@ describe("writeSave", () => {
     expect(writeSave(null, defaultSave())).toBe(false);
     const storage = fakeStorage({}, { throwOnSet: true });
     expect(writeSave(storage, defaultSave())).toBe(false);
+  });
+});
+
+describe("resetProgress", () => {
+  it("empties gear, bests, totals and feats and keeps settings, look and seen", () => {
+    const save: SaveData = {
+      v: 1,
+      best: { descent: 90 },
+      settings: { motion: "reduced" },
+      gear: { gloves: 4, boots: 26 },
+      totals: { runs: 5 },
+      feats: ["dash"],
+      look: { Body: "Blue" },
+      seen: { howto: true },
+    };
+    const reset = resetProgress(save);
+    expect(reset).not.toBe(save);
+    expect(reset.best).toEqual({});
+    expect(reset.gear).toEqual({});
+    expect(reset.totals).toEqual({});
+    expect(reset.feats).toEqual([]);
+    expect(reset.settings).toEqual({ motion: "reduced" });
+    expect(reset.look).toEqual({ Body: "Blue" });
+    expect(reset.seen).toEqual({ howto: true });
+    expect(reset.v).toBe(1);
+    // The stored save itself is untouched.
+    expect(save.best).toEqual({ descent: 90 });
+    expect(save.gear).toEqual({ gloves: 4, boots: 26 });
+  });
+
+  it("keeps a scoreRule and any other field a newer version wrote", () => {
+    const save = { ...defaultSave(), scoreRule: "zen", trophy: "gold" } as SaveData & {
+      scoreRule: string;
+      trophy: string;
+    };
+    const reset = resetProgress(save) as SaveData & { scoreRule: string; trophy: string };
+    expect(reset.scoreRule).toBe("zen");
+    expect(reset.trophy).toBe("gold");
+  });
+
+  it("on a fresh save gives the fresh save back", () => {
+    expect(resetProgress(defaultSave())).toEqual(defaultSave());
+  });
+
+  it("survives a round trip: the wiped save loads back wiped", () => {
+    const save: SaveData = {
+      ...defaultSave(),
+      best: { descent: 12 },
+      gear: { speed: 21 },
+      settings: { muted: true },
+    };
+    const storage = fakeStorage();
+    expect(writeSave(storage, resetProgress(save))).toBe(true);
+    const loaded = loadSave(storage);
+    expect(loaded.gear).toEqual({});
+    expect(loaded.best).toEqual({});
+    expect(loaded.settings).toEqual({ muted: true });
   });
 });

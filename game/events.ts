@@ -19,4 +19,6 @@ export type GameEvent =
     | { type: "tool"; id: ToolId; dx?: number; dy?: number }
     | { type: "fight"; cost: number; kind: EnemyKind; x: number; y: number }
     | { type: "levelClear"; level: number; gained: number }
-    | { type: "dead"; cause: DeathCause; score: number; level: number };
+    /** Carried gear became permanent at the exit: `count` pieces joined the bank. */
+    | { type: "banked"; count: number }
+    | { type: "dead"; cause: DeathCause; score: number; level: number; lost: number };

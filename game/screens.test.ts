@@ -200,6 +200,8 @@ describe("summaryLines", () => {
             "Time",
             "Enemies beaten",
             "Pickups",
+            "Gear banked",
+            "Gear lost",
         ]);
     });
 
@@ -228,6 +230,16 @@ describe("summaryLines", () => {
         expect(line(lines, "Score")).toBe("420");
         expect(line(lines, "Enemies beaten")).toBe("4");
         expect(line(lines, "Pickups")).toBe("9");
+    });
+
+    it("prints the gear banked and lost, 0 when the run gave nothing", () => {
+        expect(line(summaryLines(base), "Gear banked")).toBe("0");
+        expect(line(summaryLines(base), "Gear lost")).toBe("0");
+        const lines = summaryLines({ ...base, banked: 3, lost: 1 });
+        expect(line(lines, "Gear banked")).toBe("3");
+        expect(line(lines, "Gear lost")).toBe("1");
+        expect(line(summaryLines({ ...base, banked: -4, lost: 2.6 }), "Gear banked")).toBe("0");
+        expect(line(summaryLines({ ...base, banked: -4, lost: 2.6 }), "Gear lost")).toBe("3");
     });
 });
 

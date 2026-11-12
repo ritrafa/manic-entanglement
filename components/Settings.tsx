@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import GameState, { type GameSnapshot } from '@/lib/GameState';
 import { SETTING_ROWS, type SettingRow } from '@/game/settings';
 
@@ -22,10 +22,14 @@ const SettingsPanel: React.FC<SettingsProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
     const firstControlRef = useRef<HTMLInputElement>(null);
     const open = model.screen === 'settings';
+    // Wiping progress asks once more: the first press only arms the button.
+    const [confirmReset, setConfirmReset] = useState(false);
 
-    // The panel is modal while it shows: focus the first control when it appears.
+    // The panel is modal while it shows: focus the first control when it appears,
+    // and a half-armed reset never survives a visit.
     useEffect(() => {
         if (open) firstControlRef.current?.focus();
+        setConfirmReset(false);
     }, [open]);
 
     if (!open) return null;
@@ -103,6 +107,19 @@ const SettingsPanel: React.FC<SettingsProps> = ({ gameState }) => {
             </div>
             <div className="overlay-buttons">
                 <button onClick={() => gameState.openControls()}>Controls</button>
+                <button
+                    className="settings-reset"
+                    onClick={() => {
+                        if (confirmReset) {
+                            setConfirmReset(false);
+                            gameState.resetProgress();
+                        } else {
+                            setConfirmReset(true);
+                        }
+                    }}
+                >
+                    {confirmReset ? 'Really reset everything?' : 'Reset progress'}
+                </button>
                 <button onClick={() => gameState.closeSettings()}>Back</button>
             </div>
         </div>

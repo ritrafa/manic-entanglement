@@ -169,3 +169,22 @@
   `public/images/tools/cut.svg` joins the icons and new `game/maze.test.ts` /
   `game/tools.test.ts` cases cover the reroot invariants and the Cut's effects
   and refusals.
+
+- Made gear permanent progress: `game/gear.ts` gave the five kinds (`boots`,
+  `gloves`, `shield`, `speed`, `backpack`) capped levels with `statsFromGear`
+  (attack 1 + 0.1 per gloves up to 3, defense 1 + 0.1 per shield up to 3,
+  consumption 0.98^boots down to 0.6, speed 1.02^speed up to 1.5, storage
+  100 + 5 per backpack up to 200), `gearCap` (gloves 20, shield 20, boots 26,
+  speed 21, backpack 20), `sanitizeGear` and `addGear`, all numbers in
+  `GEAR_RULES` (`game/config.ts`); `game/run.ts` now keeps `banked` and
+  `carried` and derives `stats` from their sum, a gear pickup raises `carried`
+  (one arriving at the cap gives +10 energy instead), the exit banks what was
+  carried behind a `banked` event and death empties it, the `dead` event
+  telling how many were `lost`; `game/save.ts` gained `resetProgress`, the
+  shell builds its run from `sanitizeGear(save.gear)`, writes the save on every
+  `banked` event, shows a "Carried: n" marker in the HUD, grew `Gear banked`
+  and `Gear lost` summary rows and a twice-asked "Reset progress" button in
+  settings, and `lib/player.ts` is gone with the look living in the shell and
+  the save; `game/gear.test.ts` covers the curves, caps and sanitizer and new
+  `game/run.test.ts` / `game/save.test.ts` cases cover banking, loss and the
+  wipe.

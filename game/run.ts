@@ -10,21 +10,28 @@ import { spawnLevel, GEAR_TYPES } from "./spawn";
 import { routeCells } from "./bot";
 import { ENEMY_KINDS, type EnemyKind } from "./enemies";
 import { levelPlan } from "./plan";
-import { CONFIG } from "./config";
+import { CONFIG, GEAR_RULES } from "./config";
 import { fightCost } from "./combat";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "./score";
 import type { DeathCause, GameEvent, ItemType, PickupType } from "./events";
 import { TOOL_INFO, TOOL_IDS, isToolType, type ToolId } from "./tools";
+import {
+    addGear,
+    countGear,
+    gearCap,
+    GEAR_NAMES,
+    noGear,
+    sanitizeGear,
+    statsFromGear,
+    type GearId,
+    type GearLevels,
+    type Stats,
+} from "./gear";
 
 export type RunPhase = "ready" | "playing" | "clear" | "dead";
 
-export interface RunStats {
-    attack: number;
-    defense: number;
-    speed: number;
-    consumption: number;
-    storage: number;
-}
+/** The five numbers of a run, all derived from gear levels (game/gear.ts). */
+export type RunStats = Stats;
 
 export interface RunItem {
     id: number;
@@ -73,10 +80,9 @@ function freshTally(): Tally {
 
 export interface RunOptions {
     seed: number;
-    stats?: Partial<RunStats>;
+    /** The banked gear levels the run starts with (game/gear.ts); anything invalid reads as 0. */
+    gear?: GearLevels;
 }
-
-const DEFAULT_STATS: RunStats = { attack: 1, defense: 1, speed: 1, consumption: 1, storage: 100 };
 
 export class Run {
     phase: RunPhase = "ready";
@@ -85,7 +91,16 @@ export class Run {
     /** What this run did, kept through death and reset by start(). */
     tally: Tally = freshTally();
     energy: number;
-    stats: RunStats;
+    /**
+     * Gear kept for good: raised at every exit (game/gear.ts), kept through
+     * death and start(), written to the save by the shell on each "banked" event.
+     */
+    banked: GearLevels;
+    /**
+     * Gear picked up since the last exit: raised by gear pickups, banked on
+     * "levelClear" and emptied on death.
+     */
+    carried: GearLevels;
     maze: Maze;
     player: { x: number; y: number; facingLeft: boolean };
     exit: { x: number; y: number };
@@ -117,9 +132,10 @@ export class Run {
     private nextId = 1;
     private pendingMs = 0;
 
-    constructor({ seed, stats }: RunOptions) {
+    constructor({ seed, gear }: RunOptions) {
         this.rng = createRng(seed);
-        this.stats = { ...DEFAULT_STATS, ...stats };
+        this.banked = sanitizeGear(gear);
+        this.carried = noGear();
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.maze = new Maze(CONFIG.startSize, CONFIG.startSize, this.rng);
         this.player = { x: Math.floor(CONFIG.startSize / 2), y: CONFIG.startSize - 1, facingLeft: false };
@@ -127,10 +143,20 @@ export class Run {
         this.buildLevel();
     }
 
-    /** Start (or restart) at level 1 with score 0; the stats gained are kept. */
+    /**
+     * The run's five numbers, always exactly what the gear says: banked plus
+     * carried levels through statsFromGear (game/gear.ts). Nothing else moves
+     * them, so a pickup takes effect the moment it lands in `carried`.
+     */
+    get stats(): RunStats {
+        return statsFromGear(addGear(this.banked, this.carried));
+    }
+
+    /** Start (or restart) at level 1 with score 0; the banked gear is kept. */
     start(): void {
         if (this.phase !== "ready" && this.phase !== "dead") return;
         this.push({ type: "start" });
+        this.carried = noGear();
         this.level = 1;
         this.score = 0;
         this.tally = freshTally();
@@ -152,6 +178,8 @@ export class Run {
         if (this.phase === "ready") return;
         this.phase = "ready";
         this.pendingMs = 0;
+        // Nothing was kept by an exit: what was carried goes with the run.
+        this.carried = noGear();
     }
 
     /** One cardinal step. False (and no change) unless playing; a wall or the edge only costs a "blocked" event. */
@@ -215,6 +243,13 @@ export class Run {
             this.tally.cleared += 1;
             this.tally.depth = Math.max(this.tally.depth, this.level + 1);
             this.push({ type: "levelClear", level: this.level, gained });
+            // The exit keeps what the level carried: it joins the bank for good.
+            const count = countGear(this.carried);
+            if (count > 0) {
+                this.banked = addGear(this.banked, this.carried);
+                this.carried = noGear();
+                this.push({ type: "banked", count });
+            }
             return true;
         }
 
@@ -335,30 +370,37 @@ export class Run {
     private die(cause: DeathCause): void {
         this.phase = "dead";
         this.pendingMs = 0;
-        this.push({ type: "dead", cause, score: this.score, level: this.level });
+        // Dying before the exit loses everything carried since the last one.
+        const lost = countGear(this.carried);
+        this.carried = noGear();
+        this.push({ type: "dead", cause, score: this.score, level: this.level, lost });
     }
 
     private applyItem(type: ItemType): string {
-        switch (type) {
-            case "energy":
-                this.energy = Math.min(this.stats.storage, this.energy + CONFIG.pickups.energy);
-                return "+25 Energy";
+        if (type === "energy") {
+            this.energy = Math.min(this.stats.storage, this.energy + CONFIG.pickups.energy);
+            return "+25 Energy";
+        }
+        // A gear pickup raises its carried level by one, until banked plus
+        // carried stands at the cap; one past it gives energy instead.
+        const id: GearId = type;
+        if (this.banked[id] + this.carried[id] >= gearCap(id)) {
+            this.energy = Math.min(this.stats.storage, this.energy + GEAR_RULES.maxedEnergy);
+            return `${GEAR_NAMES[id]} maxed +${GEAR_RULES.maxedEnergy} Energy`;
+        }
+        this.carried = { ...this.carried, [id]: this.carried[id] + 1 };
+        switch (id) {
             case "boots":
-                this.stats.consumption *= CONFIG.pickups.boots;
-                return "-1% Energy Use";
+                return `-${Math.round((1 - GEAR_RULES.bootsFactor) * 100)}% Energy Use`;
             case "gloves":
-                this.stats.attack += CONFIG.pickups.gloves;
-                return "+0.1 Attack";
+                return `+${GEAR_RULES.attackStep} Attack`;
             case "shield":
-                this.stats.defense += CONFIG.pickups.shield;
-                return "+0.1 Defense";
+                return `+${GEAR_RULES.defenseStep} Defense`;
             case "speed":
-                this.stats.speed *= CONFIG.pickups.speed;
-                return "+1% Speed";
+                return `+${Math.round((GEAR_RULES.speedFactor - 1) * 100)}% Speed`;
             case "backpack":
-                this.stats.storage += CONFIG.pickups.backpack;
-                this.energy += CONFIG.pickups.backpack;
-                return "+5 Energy Storage";
+                this.energy += GEAR_RULES.backpackEnergy;
+                return `+${GEAR_RULES.storageStep} Energy Storage`;
         }
     }
 

@@ -15,7 +15,7 @@ const EVERY_EVENT: GameEvent[] = [
     { type: "pickup", item: "energy", text: "+25 Energy", x: 2, y: 5 },
     { type: "fight", cost: 12, kind: "wisp", x: 6, y: 1 },
     { type: "levelClear", level: 2, gained: 137 },
-    { type: "dead", cause: "time", score: 42, level: 2 },
+    { type: "dead", cause: "time", score: 42, level: 2 , lost: 0 },
 ];
 
 /** The latest a voice goes quiet, seconds from the trigger. */
@@ -145,7 +145,7 @@ describe("sfxFor per event", () => {
     });
 
     it("dead is three slow falling notes", () => {
-        const voices = sfxFor({ type: "dead", cause: "time", score: 0, level: 1 }, MID);
+        const voices = sfxFor({ type: "dead", cause: "time", score: 0, level: 1 , lost: 0 }, MID);
         expect(voices).toHaveLength(3);
         for (let i = 1; i < voices.length; i++) {
             expect(voices[i].freq).toBeLessThan(voices[i - 1].freq);

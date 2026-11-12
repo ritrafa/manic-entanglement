@@ -202,13 +202,17 @@ export interface SummaryInput {
     /** Whether this run beat that best (game/hud.ts isNewBest). */
     newBest: boolean;
     cause: DeathCause;
+    /** Pieces of gear this run banked at exits (game/run.ts); 0 when nothing was kept. */
+    banked?: number;
+    /** Pieces of gear this run lost on death; 0 when nothing was carried. */
+    lost?: number;
 }
 
 /**
  * The end-of-run summary as label/value rows: how the run ended, how deep it
  * got, what it scored against the best, and what it did on the way down.
  */
-export function summaryLines({ tally, score, best, newBest, cause }: SummaryInput): SummaryLine[] {
+export function summaryLines({ tally, score, best, newBest, cause, banked = 0, lost = 0 }: SummaryInput): SummaryLine[] {
     return [
         { label: "Cause", value: CAUSE_TEXT[cause] ?? CAUSE_TEXT.time },
         { label: "Depth reached", value: String(Math.max(1, Math.round(tally.depth))) },
@@ -217,6 +221,8 @@ export function summaryLines({ tally, score, best, newBest, cause }: SummaryInpu
         { label: "Time", value: formatClock(tally.ms) },
         { label: "Enemies beaten", value: String(Math.max(0, Math.round(tally.kills))) },
         { label: "Pickups", value: String(Math.max(0, Math.round(tally.pickups))) },
+        { label: "Gear banked", value: String(Math.max(0, Math.round(banked))) },
+        { label: "Gear lost", value: String(Math.max(0, Math.round(lost))) },
     ];
 }
 

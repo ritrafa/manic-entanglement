@@ -115,6 +115,24 @@ export function loadSave(storage: StorageLike): SaveData {
 }
 
 /**
+ * A copy of the save with all progress wiped: `best`, `gear`, `totals` and
+ * `feats` return to their fresh defaults, while `settings`, `look`, `seen` and
+ * any other field (a `scoreRule`, a field a newer version added) stay as they
+ * were. The stored object itself is not touched.
+ */
+export function resetProgress(save: SaveData): SaveData {
+    const fresh = defaultSave();
+    return {
+        ...save,
+        v: 1,
+        best: fresh.best,
+        gear: fresh.gear,
+        totals: fresh.totals,
+        feats: fresh.feats,
+    };
+}
+
+/**
  * Write the save to a storage. Returns true on success, and false — never a
  * throw — when storage is null, setItem throws (private browsing, blocked site
  * data, a full quota) or the data cannot be serialised.

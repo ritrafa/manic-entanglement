@@ -1,7 +1,6 @@
 "use client"; // Add this line at the top
 
 import React, { useEffect, useState, useCallback, useSyncExternalStore } from 'react';
-import Player from '../lib/player';
 import GameState from '../lib/GameState';
 import Hud from '../components/Hud';
 import TouchLayer from '../components/TouchLayer';
@@ -30,7 +29,6 @@ function useCoarsePointer(): boolean {
 
 interface GameShellProps {
     gameState: GameState;
-    player: Player;
 }
 
 /**
@@ -39,7 +37,7 @@ interface GameShellProps {
  * D-pad when settings.touch says so, and the pause button top right, both only
  * on devices with a coarse pointer.
  */
-const GameShell: React.FC<GameShellProps> = ({ gameState, player }) => {
+const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
     const coarse = useCoarsePointer();
 
@@ -76,7 +74,7 @@ const GameShell: React.FC<GameShellProps> = ({ gameState, player }) => {
                 <DPad onPress={handlePress} onRelease={handleRelease} />
             )}
 
-            <Hud player={player} gameState={gameState} />
+            <Hud gameState={gameState} />
         </div>
         </TouchLayer>
         <Analytics/>
@@ -85,13 +83,11 @@ const GameShell: React.FC<GameShellProps> = ({ gameState, player }) => {
 };
 
 const Page: React.FC = () => {
-    const [player, setPlayer] = useState<Player | null>(null);
     const [gameState, setGameState] = useState<GameState | null>(null);
 
     useEffect(() => {
         const newGameState = new GameState();
         setGameState(newGameState);
-        setPlayer(newGameState.player);
 
         const handleKeyPress = (event: KeyboardEvent) => newGameState.handleKeyPress(event);
         const handleKeyRelease = (event: KeyboardEvent) => newGameState.handleKeyRelease(event);
@@ -117,11 +113,11 @@ const Page: React.FC = () => {
         };
     }, [gameState]);
 
-    if (!player || !gameState) {
+    if (!gameState) {
         return <div>Loading...</div>;
     }
 
-    return <GameShell gameState={gameState} player={player} />;
+    return <GameShell gameState={gameState} />;
 };
 
 export default Page;

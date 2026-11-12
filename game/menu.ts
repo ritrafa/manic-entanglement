@@ -57,7 +57,7 @@ export const HOWTO: HowToLine[] = [
     { text: "The maze rewires itself around the Knot each time you move.", image: null },
     { text: "Dashed marks will open, hatched marks will seal.", image: null },
     { text: "Enemies charge the toll shown on them.", image: "/images/enemy.gif" },
-    { text: "Gear makes you stronger: gloves hit harder, a shield blunts the toll.", image: "/images/gloves.gif" },
+    { text: "Gear makes you stronger and is kept when you reach the exit; dying loses it.", image: "/images/gloves.gif" },
     { text: "Boots make each step cheaper and speed slows the energy clock.", image: "/images/boots.gif" },
     { text: "A backpack carries more energy.", image: "/images/backpack.gif" },
     { text: "Anchor freezes the maze for six moves; Twist rerolls the forecast. Keys 1 and 2.", image: "/images/tools/anchor.svg" },
