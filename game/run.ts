@@ -6,6 +6,7 @@
 import { Maze } from "./maze";
 import { createRng, type Rng } from "./rng";
 import { CONFIG } from "./config";
+import { spawnLevel } from "./spawn";
 import type { DeathCause, GameEvent, ItemType } from "./events";
 
 export type RunPhase = "ready" | "playing" | "clear" | "dead";
@@ -37,8 +38,6 @@ export interface RunOptions {
 }
 
 const DEFAULT_STATS: RunStats = { attack: 1, defense: 1, speed: 1, consumption: 1, storage: 100 };
-
-const ITEM_TYPES: readonly ItemType[] = ["energy", "boots", "gloves", "shield", "speed", "backpack"];
 
 export class Run {
     phase: RunPhase = "ready";
@@ -205,46 +204,11 @@ export class Run {
         this.exit = { x: Math.floor(size / 2), y: 0 };
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.pendingMs = 0;
-        this.items = this.placeItems(size);
-        this.enemies = this.placeEnemies(size);
-    }
-
-    private isStartOrExit(x: number, y: number): boolean {
-        return (x === this.player.x && y === this.player.y) || (x === this.exit.x && y === this.exit.y);
-    }
-
-    private placeItems(size: number): RunItem[] {
-        const { min, max } = CONFIG.pickupCount;
-        const count = min + this.rng.int(max - min + 1);
-        const items: RunItem[] = [];
-        for (let i = 0; i < count; i++) {
-            const type = this.rng.pick(ITEM_TYPES);
-            let x: number, y: number;
-            do {
-                x = this.rng.int(size);
-                y = this.rng.int(size);
-            } while (this.isStartOrExit(x, y) || items.some((p) => p.x === x && p.y === y));
-            items.push({ id: this.nextId++, x, y, type });
-        }
-        return items;
-    }
-
-    private placeEnemies(size: number): RunEnemy[] {
-        const { min, max } = CONFIG.enemyCount;
-        const count = min + this.rng.int(max - min + 1);
-        const enemies: RunEnemy[] = [];
-        for (let i = 0; i < count; i++) {
-            let x: number, y: number;
-            do {
-                x = this.rng.int(size);
-                y = this.rng.int(size);
-            } while (
-                this.isStartOrExit(x, y) ||
-                this.items.some((p) => p.x === x && p.y === y) ||
-                enemies.some((p) => p.x === x && p.y === y)
-            );
-            enemies.push({ id: this.nextId++, x, y });
-        }
-        return enemies;
+        const placed = spawnLevel(this.rng, size, {
+            items: CONFIG.pickupCount,
+            enemies: CONFIG.enemyCount,
+        });
+        this.items = placed.items.map((item) => ({ id: this.nextId++, ...item }));
+        this.enemies = placed.enemies.map((enemy) => ({ id: this.nextId++, ...enemy }));
     }
 }
