@@ -2,6 +2,26 @@
 
 ## Queue log
 
+- Made the best score survive closing the tab: rewrote `game/save.ts` as the one
+  versioned save object — `SAVE_KEY = "manic-entanglement.save"`, `SaveData` at
+  `v: 1` with `best`, `settings`, `gear`, `totals`, `feats`, `look` and `seen`
+  (later cards fill those in instead of inventing new keys), `defaultSave()`
+  returning a fresh object each call, `loadSave(storage)` returning the default
+  for a null storage, a missing key, broken JSON, a non-object or a save not at
+  version 1 and otherwise the stored object with every missing or wrongly typed
+  top-level field replaced from the default (numbers in `best` that are not
+  finite and non-negative are dropped, unknown extra fields are kept, and a
+  throwing `getItem` still yields the default), and `writeSave(storage, data)`
+  returning false without a throw when storage is null or `setItem` fails; the
+  storage comes in as a `StorageLike` argument, so nothing under `game/` reaches
+  for a browser global and the node tests pass a plain object; `lib/GameState.ts`
+  now reads `window.localStorage` once in the constructor inside a try (null
+  when it is missing or throws), seeds `highScore` from `save.best.descent`, and
+  calls `recordBest(score)` on `levelClear` and `dead`, which updates the saved
+  best and writes it back only when the run beat it — the HUD bar and the
+  game-over text read that saved best; covered by `game/save.test.ts` (round
+  trip, defaults, broken payloads, field repair, throwing storages, kept extras).
+
 - Scored runs by what they achieved instead of by pacing: new pure `game/score.ts` (`levelScore({ level, energyLeft }) = 100 * level + floor(max(0, energyLeft))` awarded when a level is cleared with the energy as it is on arrival, before the exit bonus; `KILL_SCORE = 25` per enemy defeated and `PICKUP_SCORE = 10` per pickup, both awarded at once, the three numbers exported from `game/config.ts`), covered by `game/score.test.ts`; `game/run.ts` no longer touches `score` on a move and keeps a `run.tally: Tally` (`moves`, `ms` from `tick` while playing, `kills`, `pickups`, `bumps` for blocked moves, `depth` (deepest level, starts at 1), `cleared` and `lostToFights`), reset by `start()` and still readable after death, and the `levelClear` event carries `gained`; `game/save.ts` gained `upgradeSave(data)`, which empties `best` and stamps `totals.scoreRule = 2` once so old bests counted in steps never haunt the HUD bar, applied by `loadSave`; the shell floats `+<gained>` above the player when a level clears; `game/bot.test.ts` thresholds unchanged prove the rules themselves did not move, and `game/forecast.test.ts` pins the new event streams of the two seeded replays.
 
 - Made the next shift visible before you take it: `game/maze.ts` gained `step(dir)` (moves the origin one step in a `"u" | "r" | "d" | "l"` direction, with `DIR_DELTAS` exported and `shift(rng)` now just "pick a valid direction, then step"), `validDirs(at?)` and a deep, independent `clone()`; the new pure `game/forecast.ts` has `Edge = { x, y, dir: "r" | "d" }` (the wall between a cell and its right or lower neighbour), `rollWalk(maze, rng, steps)` (the directions the origin will take, each drawn from the valid directions at the simulated position, so the walk never leaves the board) and `forecastOf(maze, walk)` (applies the walk to a clone and returns `{ walk, opens, closes }` - the origin's positions and the net wall changes, dropping any wall the walk opens and seals again); `game/run.ts` rolls the walk for the next move at each level start and after every successful move into `run.forecast` (a blocked move leaves it untouched), and a successful move applies exactly the stored directions with `maze.step` - the rolls consume the rng at the very points the old per-move shifts did, so `game/forecast.test.ts` pins two seeded bot replays to the events captured before this change; `game/view.ts` gained `markTiles(forecast)` (an `r` edge at (x, y) marks wall tile (2x + 2, 2y + 1), a `d` edge (2x + 1, 2y + 2)); `lib/board.ts` draws the Knot as one persistent `.knot` element gliding on the origin's tile (CSS-only gold ring with a teal centre and a slow pulse) over the now 4-tiles-wide blob (`blobTiles` in `game/config.ts`, passed to `blobRect` as its new third argument, 8 by default), and replaces one `.mark.mark-open` / `.mark.mark-close` element per marked wall tile on every update - opening walls get a dashed gold outline with the wall showing through, sealing walls a diagonal white hatch, so the two read by shape and pattern, not only colour; covered by `game/forecast.test.ts` (20 seeds x 50 moves where the walls after a move equal the walls before it with the forecast applied, opens/closes balance and bounds, walk shape, blocked moves, clone independence, 1,000-step walks on sizes 3 and 5) and the `markTiles` cases in `game/view.test.ts`.

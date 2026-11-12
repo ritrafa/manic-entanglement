@@ -9,6 +9,7 @@ import { actionFor, dirOf } from '@/game/keys';
 import { CONFIG } from '@/game/config';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
+import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
 
 const SPRITE_FRAME_MS = 150;
 const BASE_PLAYBACK_RATE = 0.7;
@@ -17,7 +18,12 @@ const PLAYBACK_RATE_PER_LEVEL = 0.03;
 class GameState {
     public run: Run;
     public player: Player;
+    /** The best score kept in the save (save.best.descent), 0 when none was stored. */
     public highScore: number = 0;
+    /** The one save object, loaded once from storage in the constructor. */
+    private save: SaveData = defaultSave();
+    /** window.localStorage where it works, null where storage is missing or throws. */
+    private storage: StorageLike = null;
     public sound: HTMLAudioElement;
     public lost: HTMLAudioElement;
     public levelup: HTMLAudioElement;
@@ -46,6 +52,11 @@ class GameState {
     private gameOverElement: HTMLElement | null = null;
 
     constructor() {
+        // The save is read once, here: private windows, blocked site data and the
+        // server render all get null storage and a fresh default save instead.
+        this.storage = GameState.readStorage();
+        this.save = loadSave(this.storage);
+        this.highScore = this.save.best.descent ?? 0;
         this.player = new Player();
         this.run = new Run({
             seed: Date.now(),
@@ -233,6 +244,26 @@ class GameState {
         this.startGame();
     }
 
+    /** The browser's storage, or null where it is missing or refuses to be touched. */
+    private static readStorage(): StorageLike {
+        try {
+            return window.localStorage;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Fold a finished score into the save: when it beats the stored best, the best
+     * is updated and written back, so it survives closing the tab.
+     */
+    private recordBest(score: number): void {
+        if (score <= this.highScore) return;
+        this.highScore = score;
+        this.save = { ...this.save, best: { ...this.save.best, descent: score } };
+        writeSave(this.storage, this.save);
+    }
+
     /** M: every sound the shell owns goes quiet together, and back. */
     toggleMute(): void {
         this.muted = !this.muted;
@@ -379,7 +410,7 @@ class GameState {
                     this.levelup.play();
                     this.stopClock();
                     this.board.float(`+${event.gained}`, this.run.player.x, this.run.player.y);
-                    this.highScore = Math.max(this.run.score, this.highScore);
+                    this.recordBest(this.run.score);
                     this.triggerLevelCompleteAnimation(() => {
                         this.run.nextLevel();
                         this.handleEvents();
@@ -395,7 +426,7 @@ class GameState {
                     break;
                 case 'dead':
                     this.stopClock();
-                    this.highScore = Math.max(this.run.score, this.highScore);
+                    this.recordBest(this.run.score);
                     this.gameOver(event.cause);
                     break;
             }
