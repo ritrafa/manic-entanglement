@@ -274,7 +274,7 @@ describe("Pickups", () => {
 });
 
 describe("Fights", () => {
-  it("a fight at default stats costs 90 and removes the enemy", () => {
+  it("a fight at default stats costs 15 and removes the enemy", () => {
     const run = startedRun(16);
     run.items = [];
     run.enemies = [];
@@ -282,10 +282,10 @@ describe("Fights", () => {
     const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
     run.enemies = [{ id: 910, x: target.x, y: target.y }];
     run.move(step.dx, step.dy);
-    expect(run.energy).toBeCloseTo(100 - 1 - 90, 10);
+    expect(run.energy).toBeCloseTo(100 - 1 - 15, 10);
     expect(run.enemies).toEqual([]);
     expect(run.phase).toBe("playing");
-    expect(run.takeEvents()).toContainEqual({ type: "fight", cost: 90, x: target.x, y: target.y });
+    expect(run.takeEvents()).toContainEqual({ type: "fight", cost: 15, x: target.x, y: target.y });
   });
 
   it("a fight that drains the energy ends the run with cause fight", () => {
@@ -294,12 +294,26 @@ describe("Fights", () => {
     run.enemies = [];
     const step = openStep(run);
     run.enemies = [{ id: 911, x: run.player.x + step.dx, y: run.player.y + step.dy }];
-    run.energy = 50;
+    run.energy = 10; // the move (1) plus the fight (15) take it below 0
     run.move(step.dx, step.dy);
     expect(run.phase).toBe("dead");
     const dead = eventsOf(run, "dead");
     expect(dead).toHaveLength(1);
     expect(dead[0]).toMatchObject({ type: "dead", cause: "fight", level: 1 });
+  });
+
+  it("fightCostAt gives the whole-number cost of the enemy on a cell, or null", () => {
+    const run = startedRun(18);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
+    expect(run.fightCostAt(target.x, target.y)).toBeNull();
+    run.enemies = [{ id: 913, x: target.x, y: target.y }];
+    expect(run.fightCostAt(target.x, target.y)).toBe(15);
+    run.stats.attack = 3;
+    expect(run.fightCostAt(target.x, target.y)).toBe(5);
+    expect(run.fightCostAt(run.player.x, run.player.y)).toBeNull();
   });
 
   it("a better attack and defense lower the cost", () => {
@@ -311,10 +325,10 @@ describe("Fights", () => {
     const step = openStep(run);
     run.enemies = [{ id: 912, x: run.player.x + step.dx, y: run.player.y + step.dy }];
     run.move(step.dx, step.dy);
-    // cost = 10 / 2 * (10 - 5) = 25
+    // cost = round(3 / 2 * max(1, 6 - 5)) = 2
     expect(run.takeEvents()).toContainEqual({
       type: "fight",
-      cost: 25,
+      cost: 2,
       x: run.player.x,
       y: run.player.y,
     });

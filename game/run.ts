@@ -7,6 +7,7 @@ import { Maze } from "./maze";
 import { createRng, type Rng } from "./rng";
 import { spawnLevel } from "./spawn";
 import { CONFIG } from "./config";
+import { fightCost } from "./combat";
 import type { DeathCause, GameEvent, ItemType } from "./events";
 
 export type RunPhase = "ready" | "playing" | "clear" | "dead";
@@ -108,7 +109,7 @@ export class Run {
         const enemyIndex = this.enemies.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
         if (enemyIndex !== -1) {
             const enemy = this.enemies[enemyIndex];
-            const cost = (CONFIG.enemy.hp / this.stats.attack) * (CONFIG.enemy.power - this.stats.defense);
+            const cost = fightCost(this.stats, CONFIG.enemy);
             this.energy -= cost;
             this.enemies.splice(enemyIndex, 1);
             fought = true;
@@ -150,6 +151,16 @@ export class Run {
         this.buildLevel();
         this.phase = "playing";
         this.push({ type: "levelStart", level: this.level, size: this.maze.width });
+    }
+
+    /**
+     * The energy defeating the enemy standing on (x, y) would cost with the current
+     * stats, or null when no enemy is on that cell. For cards that display the cost
+     * before the fight (see game/combat.ts).
+     */
+    fightCostAt(x: number, y: number): number | null {
+        if (!this.enemies.some((enemy) => enemy.x === x && enemy.y === y)) return null;
+        return fightCost(this.stats, CONFIG.enemy);
     }
 
     /** The events since the last call, oldest first; the internal list is emptied. */

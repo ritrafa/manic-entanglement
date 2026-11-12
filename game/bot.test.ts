@@ -63,6 +63,16 @@ describe("playBot", () => {
     }
   });
 
+  it("reaches level 2 or deeper in at least 34 of 40 seeds at 4 moves a second", () => {
+    let reachedDepth2 = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const run = new Run({ seed });
+      const deepest = playBot(run, 4, 5000);
+      if (deepest >= 2) reachedDepth2++;
+    }
+    expect(reachedDepth2).toBeGreaterThanOrEqual(34);
+  });
+
   it("starts a ready run and returns the deepest level reached", () => {
     const run = new Run({ seed: 42 });
     const deepest = playBot(run, 10, 200);

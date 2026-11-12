@@ -6,9 +6,10 @@ describe("eventMessage", () => {
     expect(eventMessage({ type: "pickup", item: "energy", text: "+25 Energy", x: 1, y: 1 })).toBe("+25 Energy");
   });
 
-  it("rounds the fight cost to two decimals", () => {
-    expect(eventMessage({ type: "fight", cost: 90.1234, x: 0, y: 0 })).toBe("-90.12 Energy to Defeat");
-    expect(eventMessage({ type: "fight", cost: 90, x: 0, y: 0 })).toBe("-90 Energy to Defeat");
+  it("floats the whole fight cost as -<cost> Energy", () => {
+    expect(eventMessage({ type: "fight", cost: 15, x: 0, y: 0 })).toBe("-15 Energy");
+    expect(eventMessage({ type: "fight", cost: 1, x: 0, y: 0 })).toBe("-1 Energy");
+    expect(eventMessage({ type: "fight", cost: 999, x: 0, y: 0 })).toBe("-999 Energy");
   });
 
   it("floats nothing for the other events", () => {

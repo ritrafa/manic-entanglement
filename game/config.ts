@@ -31,6 +31,6 @@ export const CONFIG = {
         /** Storage (and energy) gained by "backpack". */
         backpack: 5,
     },
-    /** Fight maths: cost = hp / attack * (power - defense). */
-    enemy: { hp: 10, power: 10 },
+    /** Fight maths: cost = round(hp / max(0.1, attack) * max(1, power - defense)) clamped to 1..999 (game/combat.ts). */
+    enemy: { hp: 3, power: 6 },
 } as const;
