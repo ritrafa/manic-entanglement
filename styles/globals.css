@@ -9,6 +9,7 @@ body {
   color: white;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .game-container {
@@ -35,6 +36,9 @@ body {
   justify-content: center;
   border-radius: 10px 10px 0px 0px;
   overflow: hidden;
+  /* Touches on the board belong to the game: no browser pan, zoom or double-tap. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 #maze {
   position: relative;

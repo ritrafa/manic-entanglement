@@ -4,39 +4,19 @@ import React, { useEffect, useState, useCallback } from 'react';
 import Player from '../lib/player';
 import GameState from '../lib/GameState';
 import Hud from '../components/Hud';
-import MobileSwiper from '../components/mobile-swiper';
+import TouchLayer from '../components/TouchLayer';
 import '../styles/globals.css';
 import { Analytics } from "@vercel/analytics/react"
-
-interface SwipeEvent {
-    deltaX: number;
-    deltaY: number;
-}
 
 const Page: React.FC = () => {
     const [player, setPlayer] = useState<Player | null>(null);
     const [gameState, setGameState] = useState<GameState | null>(null);
 
-    const handleSwipe = useCallback(({ deltaX, deltaY }: SwipeEvent) => {
+    // One recognised swipe is one move; taps never come here — the browser's
+    // own click drives the title and the game-over panel.
+    const handleSwipe = useCallback((dx: -1 | 0 | 1, dy: -1 | 0 | 1) => {
         if (!gameState) return;
-
-        if (deltaX == 0 && deltaY == 0 && !gameState.active) {
-            gameState.startGame()
-        }
-
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
-            if (deltaX > 0) {
-                gameState.movePlayer(1, 0);
-            } else {
-                gameState.movePlayer(-1, 0);
-            }
-        } else {
-            if (deltaY > 0) {
-                gameState.movePlayer(0, 1);
-            } else {
-                gameState.movePlayer(0, -1);
-            }
-        }
+        gameState.movePlayer(dx, dy);
     }, [gameState]);
 
     useEffect(() => {
@@ -71,7 +51,7 @@ const Page: React.FC = () => {
 
     return (
         <>
-        <MobileSwiper onSwipe={handleSwipe}>
+        <TouchLayer onSwipe={handleSwipe}>
         <div className="game-container">
             
             <div id="maze-container">
@@ -87,7 +67,7 @@ const Page: React.FC = () => {
             
             {gameState && (<Hud player={player} gameState={gameState} />)}
         </div>
-        </MobileSwiper>
+        </TouchLayer>
         <Analytics/>
         </>
     );
