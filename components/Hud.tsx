@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Player } from '../lib/types';
+import Player from '../lib/player';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { getRelatedAssetsByOwner } from '../lib/helius';
 import { useWallet } from '@solana/wallet-adapter-react';

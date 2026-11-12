@@ -1,60 +1,65 @@
 import Player from './player';
-import { Item, Enemy } from './maze';
-import { Maze } from '@/game/maze';
-import { createRng, type Rng } from '@/game/rng';
+import { Run } from '@/game/run';
+import type { GameEvent } from '@/game/events';
+import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 
-const INITIAL_MAZE_SIZE = 5;
-const INITIAL_MAZE_LEVEL = 1;
-const POWERUP_COUNT = [2, 5];
-const ENEMY_COUNT = [1, 3];
-const SHUFFLE_COUNT = 15;
 const SPRITE_FRAME_MS = 150;
-let energyInterval: NodeJS.Timeout;
-//const SOUND = {pickup: new Audio('pickup.wav'), background: new Audio('standoff-loop.mp3'), fight: new Audio('fight.wav'), playbackRate: 0.7};
+const CLOCK_TICK_MS = 50;
+const BASE_PLAYBACK_RATE = 0.7;
+const PLAYBACK_RATE_PER_LEVEL = 0.03;
 
 class GameState {
-    public maze: Maze;
-    private rng: Rng;
+    public run: Run;
     public player: Player;
-    public powerups: { x: number, y: number, type: string }[];
-    public enemies: { x: number, y: number }[];
-    public exit: { x: number, y: number };
-    public active: boolean;
+    public highScore: number = 0;
     public sound: HTMLAudioElement;
     public lost: HTMLAudioElement;
     public levelup: HTMLAudioElement;
     public countdown: HTMLAudioElement;
+    public pickupSound: HTMLAudioElement;
+    public fightSound: HTMLAudioElement;
     private look: Look;
     private playerElement: HTMLElement | null = null;
     private layerImages: HTMLImageElement[] = [];
     private preloadedUrls: Set<string> = new Set();
     private spriteInterval: ReturnType<typeof setInterval> | null = null;
-    
+    private clockInterval: ReturnType<typeof setInterval> | null = null;
+    private lastTickAt: number = 0;
+    private starting: boolean = false;
 
     constructor() {
-        this.rng = createRng(Date.now());
-        this.maze = new Maze(INITIAL_MAZE_SIZE, INITIAL_MAZE_SIZE, this.rng);
         this.player = new Player();
-        this.player.maze_level = 1;
-        this.player.energy = 100;
-        this.player.points = 0;
-        this.player.high_score = 0;
-        this.powerups = [];
-        this.enemies = [];
-        this.exit = { x: 0, y: 0 };
-        this.active = false;
+        this.run = new Run({
+            seed: Date.now(),
+            stats: {
+                attack: this.player.attack,
+                defense: this.player.defense,
+                speed: this.player.speed,
+                consumption: this.player.consumption,
+                storage: this.player.energy_storage,
+            },
+        });
         this.sound = new Audio('/standoff-loop.mp3');
         this.sound.loop = true;
-        this.sound.playbackRate = 0.7;
+        this.sound.playbackRate = BASE_PLAYBACK_RATE;
         this.sound.play();
         this.lost = new Audio('/lost.mp3');
         this.levelup = new Audio('/levelup.wav');
         this.countdown = new Audio('/beep.mp3');
         this.countdown.playbackRate = 1.5;
+        this.pickupSound = new Audio('/pickup.wav');
+        this.pickupSound.playbackRate = 1;
+        this.fightSound = new Audio('/fight.wav');
+        this.fightSound.playbackRate = 2;
         this.look = this.lookFromPlayer();
         this.preloadLook();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
+    }
+
+    /** True while the run accepts steps: the page uses it for the tap-to-start gesture. */
+    get active(): boolean {
+        return this.run.phase === 'playing';
     }
 
     /** The look starts from the Player's five trait fields, sanitized. */
@@ -118,204 +123,6 @@ class GameState {
         });
     }
 
-    initGame(size: number = INITIAL_MAZE_SIZE): Player {
-        this.active = true;
-        this.sound.play();
-        this.maze = new Maze(size, size, this.rng);
-
-        const mazeElement = document.getElementById('maze');
-        if (!mazeElement) return this.player;
-        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.9 : window.innerHeight * 0.7;
-        mazeElement.style.width = `${containerSize}px`;
-        mazeElement.style.height = `${containerSize}px`;
-
-        const hudElement = document.getElementById('hud');
-        if (!hudElement) return this.player;
-        hudElement.style.width = `${containerSize}px`;
-    
-        const cellSize = Math.floor(containerSize / (size * 2 + 1));
-        document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
-        document.documentElement.style.setProperty('--item-size', `${cellSize}px`);
-        document.documentElement.style.setProperty('--grid-size', `${size * 2 + 1}`);
-
-
-        this.player.x = Math.floor(this.maze.width / 2);
-        this.player.y = this.maze.height - 1;
-        this.player.energy = Math.max(100, this.player.energy_storage);
-        this.exit = { x: Math.floor(this.maze.width / 2), y: 0 };
-
-        this.placePowerups();
-        this.placeEnemies();
-        this.renderMaze();
-        this.updateStatus();
-
-        // Start the background music
-        //SOUND.background.playbackRate = SOUND.playbackRate;
-        //SOUND.background.loop = true;
-        //SOUND.background.play();
-        
-
-        clearInterval(energyInterval);
-        energyInterval = setInterval(() => {
-            this.player.energy--;
-            this.updateStatus();
-            if (this.player.energy <= 0) {
-                clearInterval(energyInterval);
-                this.player.high_score = Math.max(this.player.points, this.player.high_score);
-                this.gameOver();
-                this.player.points = 0;
-                this.player.maze_level = 1;
-                this.sound.playbackRate = 0.7;
-            }
-        }, this.player.speed * 150);
-
-        return this.player;
-    }
-
-    placePowerups(): void {
-        const itemTypes = ['energy', 'boots', 'gloves', 'shield', 'speed', 'backpack'];
-        this.powerups = [];
-        const powerupCount = Math.floor(Math.random() * (POWERUP_COUNT[1] - POWERUP_COUNT[0] + 1)) + POWERUP_COUNT[0];
-        for (let i = 0; i < powerupCount; i++) {
-            let x: number, y: number;
-            let itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
-            do {
-                x = Math.floor(Math.random() * this.maze.width);
-                y = Math.floor(Math.random() * this.maze.height);
-            } while ((x === this.player.x && y === this.exit.y) || (x === this.exit.x && y === this.exit.y) || this.powerups.some(p => p.x === x && p.y === y));
-            this.powerups.push({ x, y, type: itemType });
-        }
-    }
-
-    placeEnemies(): void {
-        this.enemies = [];
-        const enemyCount = Math.floor(Math.random() * (ENEMY_COUNT[1] - ENEMY_COUNT[0] + 1)) + ENEMY_COUNT[0];
-        for (let i = 0; i < enemyCount; i++) {
-            let x: number, y: number;
-            do {
-                x = Math.floor(Math.random() * this.maze.width);
-                y = Math.floor(Math.random() * this.maze.height);
-            } while ((x === this.player.x && y === this.player.y) || (x === this.exit.x && y === this.exit.y) || this.powerups.some(p => p.x === x && p.y === y) || this.enemies.some(p => p.x === x && p.y === y));
-            this.enemies.push({ x, y });
-        }
-    }
-
-    renderMaze(): void {
-        const mazeElement = document.getElementById('maze');
-        if (!mazeElement) return;
-        mazeElement.innerHTML = '';
-        this.playerElement = null;
-        this.layerImages = [];
-
-        for (let y = 0; y < this.maze.height * 2 + 1; y++) {
-            for (let x = 0; x < this.maze.width * 2 + 1; x++) {
-                const cell = document.createElement('div');
-                cell.className = 'cell';
-
-                const wallImage = document.createElement('img');
-                wallImage.src = `images/${this.maze.wallGrid[y][x]}.png`;
-                wallImage.className = 'wall-image';
-                cell.appendChild(wallImage);
-
-                // Add player, exit, powerups, and enemies
-                if (y % 2 === 1 && x % 2 === 1) {
-                    const cellX = (x - 1) / 2;
-                    const cellY = (y - 1) / 2;
-                    if (cellX === this.player.x && cellY === this.player.y) {
-                        const playerElement = document.createElement('div');
-                        playerElement.className = `player${this.player.facing_left ? ' flip-horizontal' : ''}`;
-                        this.attachSprite(playerElement);
-                        cell.appendChild(playerElement);
-                    } else if (cellX === this.exit.x && cellY === this.exit.y) {
-                        const exitElement = document.createElement('div');
-                        exitElement.className = 'exit';
-                        cell.appendChild(exitElement);
-                    } else {
-                        const powerup = this.powerups.find(p => p.x === cellX && p.y === cellY);
-                        if (powerup) {
-                            const powerupElement = document.createElement('div');
-                            powerupElement.className = `powerup item_${powerup.type}`;
-                            cell.appendChild(powerupElement);
-                        }
-                        const enemy = this.enemies.find(p => p.x === cellX && p.y === cellY);
-                        if (enemy) {
-                            const enemyElement = document.createElement('div');
-                            enemyElement.className = `enemy`;
-                            cell.appendChild(enemyElement);
-                        }
-                    }
-                }
-
-                mazeElement.appendChild(cell);
-            }
-        }
-        // Add the overlay
-        this.addOverlay(this.maze.origin.x * 2 + 1, this.maze.origin.y * 2 + 1);
-    }
-
-    /** Draw the fade overlay centred on the given wall-grid tile. */
-    private addOverlay(x: number, y: number): void {
-        const mazeElement = document.getElementById('maze');
-        if (!mazeElement) return;
-
-        const overlay = document.createElement('div');
-        overlay.className = 'fade-overlay';
-        overlay.style.width = '400px';
-        overlay.style.height = '400px';
-        overlay.style.left = `${x * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
-        overlay.style.top = `${y * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
-        mazeElement.appendChild(overlay);
-    }
-
-    updateStatus(): void {
-        const energyBar = document.getElementById('energy-bar-inner');
-        if (energyBar) {
-            energyBar.style.width = `${100 * this.player.energy / this.player.energy_storage}%`;
-        }
-        const progressBar = document.getElementById('progress-bar-inner');
-        if (progressBar) {
-            const progress = Math.min((this.player.points / this.player.high_score) * 100, 100);
-            progressBar.style.width = `${progress}%`;
-        }
-
-        const scoreElement = document.getElementById('stat-score');
-        if (scoreElement) {
-            scoreElement.textContent = `Score: ${this.player.points}`;
-        }
-        const energyElement = document.getElementById('stat-energy');
-        if (energyElement) {
-            energyElement.textContent = `Energy: ${Math.round(this.player.energy * 100) / 100}`;
-        }
-        /*
-        const highScoreElement = document.getElementById('high-score');
-        if (highScoreElement) {
-            highScoreElement.textContent = `High Score: ${this.player.high_score}`;
-        }
-        */
-        const levelElement = document.getElementById('stat-level');
-        if (levelElement) {
-            levelElement.textContent = `${this.player.maze_level}`;
-        }
-        const attackElement = document.getElementById('stat-attack');
-        if (attackElement) {
-            attackElement.textContent = `${Math.round(this.player.attack*10)/10}`;
-        }
-        const defenseElement = document.getElementById('stat-defense');
-        if (defenseElement) {
-            defenseElement.textContent = `${Math.round(this.player.defense*10)/10}`;
-        }
-        const speedElement = document.getElementById('stat-speed');
-        if (speedElement) {
-            speedElement.textContent = `${Math.round(this.player.speed * 100)}%`;
-        }
-        const consumptionElement = document.getElementById('stat-consumption');
-        if (consumptionElement) {
-            consumptionElement.textContent = `${Math.round(this.player.consumption * 100)}%`;
-        }
-    }
-
-
-
     handleKeyPress(event: KeyboardEvent): void {
         switch (event.key) {
             case 'ArrowUp':
@@ -337,76 +144,254 @@ class GameState {
         }
     }
 
+    /** One step: the run decides everything; the shell only turns its events into feedback. */
     movePlayer(dx: number, dy: number): void {
-        let message = '';
-        const newX = this.player.x + dx;
-        const newY = this.player.y + dy;
+        this.run.move(dx, dy);
+        this.handleEvents();
+        this.renderMaze();
+        this.updateStatus();
+    }
 
-        if (this.player.energy > 0 && this.maze.canMove(this.player.x, this.player.y, dx, dy)) {
-                if (dx === -1) {
-                    this.player.facing_left = true;
-                } else if (dx === 1) {
-                    this.player.facing_left = false;
-                }
+    startGame(): void {
+        if (this.starting) return;
+        if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return;
+        const mazeContainerElement = document.getElementById('maze-container');
+        const titleElement = document.getElementById('title-screen');
+        if (!titleElement) return;
+        this.starting = true;
+        titleElement.style.opacity = '0.5';
+        const countdownElement = document.createElement('p');
+        countdownElement.className = 'title-screen-countdown';
+        countdownElement.textContent = '3';
+        mazeContainerElement?.appendChild(countdownElement);
+        this.countdown.play();
 
-                this.player.x = newX;
-                this.player.y = newY;
-                this.player.energy -= 1 * this.player.consumption;
-                this.player.points++;
+        setTimeout(() => {
+            countdownElement.textContent = '2';
+            this.countdown.play();
+        }, 1000);
 
-                for (let i = 0; i < SHUFFLE_COUNT; i++) {
-                    this.maze.shift(this.rng);
-                }
+        setTimeout(() => {
+            countdownElement.textContent = '1';
+            this.countdown.play();
+        }, 2000);
 
-                const powerupIndex = this.powerups.findIndex(p => p.x === this.player.x && p.y === this.player.y);
-                if (powerupIndex !== -1) {
-                    const item = new Item(this.powerups[powerupIndex].type);
-                    message = item.useItem(this.player);
-                    this.powerups.splice(powerupIndex, 1);
-                }
-                const enemiesIndex = this.enemies.findIndex(p => p.x === this.player.x && p.y === this.player.y);
-                if (enemiesIndex !== -1) {
-                    const enemy = new Enemy();
-                    message = enemy.attackEnemy(this.player);
-                    this.enemies.splice(enemiesIndex, 1);
-                }
+        setTimeout(() => {
+            countdownElement.remove();
+            titleElement.style.display = 'none';
+            this.starting = false;
+            this.beginRun();
+        }, 3000);
+    }
 
-                this.renderMaze();
-                this.updateStatus();
+    /** Start (or restart) the run at level 1 and set the clock going. */
+    private beginRun(): void {
+        this.stopClock();
+        this.run.start();
+        this.handleEvents();
+        this.sound.play();
+        this.startClock();
+    }
 
-                if (message) {
-                    setTimeout(() => this.displayMessage(this.player, message), 0);
-                }
+    /** One interval drives the energy clock with the real elapsed time. */
+    private startClock(): void {
+        if (this.clockInterval !== null) return;
+        this.lastTickAt = Date.now();
+        this.clockInterval = setInterval(() => {
+            const now = Date.now();
+            const elapsedMs = now - this.lastTickAt;
+            this.lastTickAt = now;
+            this.run.tick(elapsedMs);
+            this.handleEvents();
+            this.updateStatus();
+            if (this.run.phase !== 'playing') this.stopClock();
+        }, CLOCK_TICK_MS);
+    }
 
-                if (this.player.x === this.exit.x && this.player.y === this.exit.y) {
-                    this.levelup.play();
-                    this.triggerLevelCompleteAnimation(() => {
-                        this.player.high_score = Math.max(this.player.points, this.player.high_score);
-                        this.player.maze_level += 1
-                        this.initGame(this.maze.width + 2);
-                        this.sound.playbackRate += 0.03;
-                    });
-                    return;
-                }
-
-                if (this.player.energy <= 0) {
-                    clearInterval(energyInterval);
-                    this.player.high_score = Math.max(this.player.points, this.player.high_score);
-                    this.gameOver();
-                    this.player.points = 0;
-                    this.player.maze_level = 1;
-                    this.sound.playbackRate = 0.7;
-                    return;
-                }
+    private stopClock(): void {
+        if (this.clockInterval !== null) {
+            clearInterval(this.clockInterval);
+            this.clockInterval = null;
         }
     }
 
-    displayMessage(player: Player, message: string): void {
+    /** Turn the run's queued events into sound, drawing and messages, oldest first. */
+    private handleEvents(): void {
+        for (const event of this.run.takeEvents()) {
+            switch (event.type) {
+                case 'pickup':
+                    this.pickupSound.play();
+                    this.floatMessage(event);
+                    break;
+                case 'fight':
+                    this.fightSound.play();
+                    this.floatMessage(event);
+                    break;
+                case 'levelClear':
+                    this.levelup.play();
+                    this.stopClock();
+                    this.highScore = Math.max(this.run.score, this.highScore);
+                    this.triggerLevelCompleteAnimation(() => {
+                        this.run.nextLevel();
+                        this.handleEvents();
+                        this.startClock();
+                    });
+                    break;
+                case 'levelStart':
+                    this.sizeBoard(event.size);
+                    this.sound.playbackRate = BASE_PLAYBACK_RATE + (event.level - 1) * PLAYBACK_RATE_PER_LEVEL;
+                    this.renderMaze();
+                    this.updateStatus();
+                    break;
+                case 'dead':
+                    this.stopClock();
+                    this.highScore = Math.max(this.run.score, this.highScore);
+                    this.gameOver();
+                    break;
+            }
+        }
+    }
+
+    /** Size the maze and HUD elements and the CSS grid for a board of the given side. */
+    private sizeBoard(size: number): void {
+        const mazeElement = document.getElementById('maze');
+        if (!mazeElement) return;
+        const containerSize = window.innerWidth < window.innerHeight ? window.innerWidth * 0.9 : window.innerHeight * 0.7;
+        mazeElement.style.width = `${containerSize}px`;
+        mazeElement.style.height = `${containerSize}px`;
+
+        const hudElement = document.getElementById('hud');
+        if (hudElement) hudElement.style.width = `${containerSize}px`;
+
+        const cellSize = Math.floor(containerSize / (size * 2 + 1));
+        document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
+        document.documentElement.style.setProperty('--item-size', `${cellSize}px`);
+        document.documentElement.style.setProperty('--grid-size', `${size * 2 + 1}`);
+    }
+
+    renderMaze(): void {
+        const mazeElement = document.getElementById('maze');
+        if (!mazeElement) return;
+        mazeElement.innerHTML = '';
+        this.playerElement = null;
+        this.layerImages = [];
+
+        const run = this.run;
+
+        for (let y = 0; y < run.maze.height * 2 + 1; y++) {
+            for (let x = 0; x < run.maze.width * 2 + 1; x++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+
+                const wallImage = document.createElement('img');
+                wallImage.src = `images/${run.maze.wallGrid[y][x]}.png`;
+                wallImage.className = 'wall-image';
+                cell.appendChild(wallImage);
+
+                // Add player, exit, items, and enemies
+                if (y % 2 === 1 && x % 2 === 1) {
+                    const cellX = (x - 1) / 2;
+                    const cellY = (y - 1) / 2;
+                    if (cellX === run.player.x && cellY === run.player.y) {
+                        const playerElement = document.createElement('div');
+                        playerElement.className = `player${run.player.facingLeft ? ' flip-horizontal' : ''}`;
+                        this.attachSprite(playerElement);
+                        cell.appendChild(playerElement);
+                    } else if (cellX === run.exit.x && cellY === run.exit.y) {
+                        const exitElement = document.createElement('div');
+                        exitElement.className = 'exit';
+                        cell.appendChild(exitElement);
+                    } else {
+                        const item = run.items.find((p) => p.x === cellX && p.y === cellY);
+                        if (item) {
+                            const itemElement = document.createElement('div');
+                            itemElement.className = `powerup item_${item.type}`;
+                            cell.appendChild(itemElement);
+                        }
+                        const enemy = run.enemies.find((p) => p.x === cellX && p.y === cellY);
+                        if (enemy) {
+                            const enemyElement = document.createElement('div');
+                            enemyElement.className = `enemy`;
+                            cell.appendChild(enemyElement);
+                        }
+                    }
+                }
+
+                mazeElement.appendChild(cell);
+            }
+        }
+        // Add the overlay
+        this.addOverlay(run.maze.origin.x * 2 + 1, run.maze.origin.y * 2 + 1);
+    }
+
+    /** Draw the fade overlay centred on the given wall-grid tile. */
+    private addOverlay(x: number, y: number): void {
+        const mazeElement = document.getElementById('maze');
+        if (!mazeElement) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'fade-overlay';
+        overlay.style.width = '400px';
+        overlay.style.height = '400px';
+        overlay.style.left = `${x * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        overlay.style.top = `${y * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size')) - 176}px`;
+        mazeElement.appendChild(overlay);
+    }
+
+    updateStatus(): void {
+        const run = this.run;
+        const energyBar = document.getElementById('energy-bar-inner');
+        if (energyBar) {
+            energyBar.style.width = `${100 * run.energy / run.stats.storage}%`;
+        }
+        const progressBar = document.getElementById('progress-bar-inner');
+        if (progressBar) {
+            const progress = this.highScore > 0 ? Math.min((run.score / this.highScore) * 100, 100) : 0;
+            progressBar.style.width = `${progress}%`;
+        }
+
+        const scoreElement = document.getElementById('stat-score');
+        if (scoreElement) {
+            scoreElement.textContent = `Score: ${run.score}`;
+        }
+        const energyElement = document.getElementById('stat-energy');
+        if (energyElement) {
+            energyElement.textContent = `Energy: ${Math.round(run.energy * 100) / 100}`;
+        }
+        const levelElement = document.getElementById('stat-level');
+        if (levelElement) {
+            levelElement.textContent = `${run.level}`;
+        }
+        const attackElement = document.getElementById('stat-attack');
+        if (attackElement) {
+            attackElement.textContent = `${Math.round(run.stats.attack * 10) / 10}`;
+        }
+        const defenseElement = document.getElementById('stat-defense');
+        if (defenseElement) {
+            defenseElement.textContent = `${Math.round(run.stats.defense * 10) / 10}`;
+        }
+        const speedElement = document.getElementById('stat-speed');
+        if (speedElement) {
+            speedElement.textContent = `${Math.round(run.stats.speed * 100)}%`;
+        }
+        const consumptionElement = document.getElementById('stat-consumption');
+        if (consumptionElement) {
+            consumptionElement.textContent = `${Math.round(run.stats.consumption * 100)}%`;
+        }
+    }
+
+    /** Float the message an event carries above the player, if any. */
+    private floatMessage(event: GameEvent): void {
+        const message = eventMessage(event);
+        if (message) setTimeout(() => this.displayMessage(message), 0);
+    }
+
+    displayMessage(message: string): void {
         const playerElement = document.querySelector('.player');
         if (!playerElement) return;
 
         const messageElement = document.createElement('div');
-        
+
         messageElement.className = 'message';
         messageElement.textContent = message;
         playerElement.parentElement?.appendChild(messageElement);
@@ -422,7 +407,7 @@ class GameState {
         if(!animationOverlay) return;
         animationOverlay.style.opacity = '1';
         animationOverlay.style.transform = 'scale(20)';
-    
+
         setTimeout(() => {
             animationOverlay.style.opacity = '0';
             animationOverlay.style.transform = 'scale(1)';
@@ -430,57 +415,27 @@ class GameState {
         }, 300);
     }
 
-    startGame() {
-        const mazeContainerElement = document.getElementById('maze-container');
-        const titleElement = document.getElementById('title-screen');
-        if (!titleElement) return;
-        titleElement.style.opacity = '0.5';
-        const countdownElement = document.createElement('p');
-        countdownElement.className = 'title-screen-countdown';
-        countdownElement.textContent = '3';
-        mazeContainerElement?.appendChild(countdownElement);
-        this.countdown.play();
-
-
-        setTimeout(() => {
-            countdownElement.textContent = '2';
-            this.countdown.play();
-            
-        }, 1000);
-
-        setTimeout(() => {
-            countdownElement.textContent = '1';
-            this.countdown.play();
-        }, 2000);
-
-        setTimeout(() => {
-            countdownElement.remove();
-            titleElement.style.display = 'none';
-            this.initGame(INITIAL_MAZE_SIZE);
-        }, 3000);
-
-    }
-
-
     gameOver(): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         this.sound.pause();
         this.lost.play();
         mazeElement.style.backgroundColor = 'rgba(255, 0, 0, 0.5)'; // Red overlay
+        const score = this.run.score;
         const gameOverMessage = document.createElement('div');
         gameOverMessage.className = 'game-over-message';
         const gameOverMessageText = document.createElement('p');
         gameOverMessageText.textContent = `You lost -- but the game's not over!`;
         gameOverMessage.appendChild(gameOverMessageText);
         const gameOverMessageText2 = document.createElement('p');
-        gameOverMessageText2.textContent = `You ran out of energy, but you scored ${this.player.points} points${this.player.points == this.player.high_score ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
+        gameOverMessageText2.textContent = `You ran out of energy, but you scored ${score} points${score == this.highScore ? ' and set a new high score 🏆!' : '.'} Play again now that you are stronger.`;
         gameOverMessage.appendChild(gameOverMessageText2);
         mazeElement.appendChild(gameOverMessage);
 
         gameOverMessage.addEventListener('click', () => {
             gameOverMessage.remove();
-            this.initGame(INITIAL_MAZE_SIZE);
+            mazeElement.style.backgroundColor = '';
+            this.beginRun();
         });
     }
 
@@ -492,13 +447,13 @@ class GameState {
         mazeElement.style.height = `${containerSize}px`;
 
         const hudElement = document.getElementById('hud');
-        if (!hudElement) return this.player;
+        if (!hudElement) return;
         hudElement.style.width = `${containerSize}px`;
-    
-        const cellSize = containerSize / (this.maze.width * 2 + 1);
-        document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
-        document.documentElement.style.setProperty('--item-size', `${cellSize}px`);
-        document.documentElement.style.setProperty('--grid-size', `${this.maze.width * 2 + 1}`);
+
+        const cellSize = this.run.maze.width * 2 + 1;
+        document.documentElement.style.setProperty('--cell-size', `${Math.floor(containerSize / cellSize)}px`);
+        document.documentElement.style.setProperty('--item-size', `${Math.floor(containerSize / cellSize)}px`);
+        document.documentElement.style.setProperty('--grid-size', `${cellSize}`);
     }
 }
 

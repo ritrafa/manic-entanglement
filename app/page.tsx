@@ -1,7 +1,7 @@
 "use client"; // Add this line at the top
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Player } from '../lib/types'; // Adjust the import path according to your project structure
+import Player from '../lib/player';
 import GameState from '../lib/GameState';
 import Hud from '../components/Hud';
 import MobileSwiper from '../components/mobile-swiper';
