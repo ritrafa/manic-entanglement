@@ -338,3 +338,33 @@
   twists over 300 seeds, no-mutation, the caps, the Blackout view, the Storm
   bonus and its cap, same seed same twists, and a Hoard size-5 level never
   placing more things than the 23 free cells).
+
+- Made the deploy ready: `app/layout.tsx` now exports real `metadata` — the
+  title, a one-sentence description, `metadataBase` from
+  `NEXT_PUBLIC_SITE_URL` through the new pure `siteUrl(value)` helper in
+  `app/meta.ts` (a valid absolute URL is used as-is, anything else — unset,
+  blank or unparseable — falls back to `http://localhost:3000` instead of
+  throwing, covered by `app/meta.test.ts`, whose folder `vitest.config.ts`
+  now includes), `openGraph` and `twitter` entries on `/images/title.png`
+  (the 500 x 500 title art doubling as the share image), `manifest:
+  '/manifest.webmanifest'`, a `themeColor: "#08412c"` added to the existing
+  `viewport` (pinch zoom untouched, still allowed) and a `<noscript>` line in
+  the body saying the game needs JavaScript; the new `app/manifest.ts`
+  serves the name, short name, description, `start_url: "/"`,
+  `display: "standalone"`, the game's background and theme colours and the
+  title art as a 500 x 500 icon; `app/error.tsx` (client) shows a short
+  line, the error's digest when Next passed one and a "Try again" button
+  calling `reset()`, `app/not-found.tsx` a line and a link home, both in the
+  game's colours through the new `.status-page` block in
+  `styles/globals.css`; `package.json` gained `"check": "npm run build &&
+  tsc --noEmit && vitest run"` and `.github/workflows/ci.yml` runs exactly
+  that on every push and pull request (checkout@v4, setup-node@v4 with
+  `node-version-file: .nvmrc` and npm cache, `npm ci`, `npm run check`,
+  `permissions: contents: read`, no secrets; no lint step because there is
+  no lint script); and `README.md` was rewritten around what the code holds
+  today — the two links and the CaptainLuma credit kept, the leaderboard,
+  in-game minting and gear-written-to-the-NFT claims gone, how to play
+  (controls, energy, the Knot and its forecast, enemies, gear, tools, modes,
+  feats and wardrobe), the optional read-only wallet, Develop, Project
+  layout, Environment variables (`NEXT_PUBLIC_SITE_URL` only) and Deploy
+  (Vercel, merge to `main` publishes, check the preview) added.

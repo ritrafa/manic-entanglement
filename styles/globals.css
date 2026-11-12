@@ -1645,3 +1645,51 @@ body {
   background-color: rgba(255, 255, 255, 0.25);
   outline: 2px solid rgba(255, 255, 255, 0.7);
 }
+
+/* --- Status pages (app/error.tsx, app/not-found.tsx) ------------------------
+   The crash and 404 routes render inside the same body, so they inherit the
+   game's gradient and centring; this only shapes the panel and its button. */
+.status-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 1rem;
+  max-width: 420px;
+  text-align: center;
+}
+.status-title {
+  margin: 0;
+  color: #ffd700;
+  font-size: 26px;
+}
+.status-line {
+  margin: 0;
+  opacity: 0.85;
+}
+.status-digest {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.7;
+}
+.status-digest code {
+  color: #1bbf85;
+  word-break: break-all;
+}
+.status-button,
+.status-button:visited {
+  font: inherit;
+  font-size: 18px;
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  text-decoration: none;
+  cursor: pointer;
+}
+.status-button:hover,
+.status-button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}

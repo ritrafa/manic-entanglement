@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check": "npm run build && tsc --noEmit && vitest run"
   },
   "dependencies": {
     "@solana/wallet-adapter-react": "^0.15.40",
