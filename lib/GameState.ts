@@ -4,6 +4,7 @@ import type { GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { blobRect, boardLayout } from '@/game/layout';
+import { clampDt } from '@/game/clock';
 
 const SPRITE_FRAME_MS = 150;
 const CLOCK_TICK_MS = 50;
@@ -27,7 +28,10 @@ class GameState {
     private spriteInterval: ReturnType<typeof setInterval> | null = null;
     private clockInterval: ReturnType<typeof setInterval> | null = null;
     private lastTickAt: number = 0;
-    private starting: boolean = false;
+    /** The pending 3-2-1 timers while a countdown runs; null when no countdown is running. */
+    private countdownTimers: ReturnType<typeof setTimeout>[] | null = null;
+    /** Every timeout the shell scheduled, so dispose() can leave nothing that may fire. */
+    private timeouts: Set<ReturnType<typeof setTimeout>> = new Set();
     /** The wall-grid tile size in whole pixels, set by sizeBoard and used to place the blob. */
     private cellSize: number = 4;
 
@@ -58,11 +62,26 @@ class GameState {
         this.look = this.lookFromPlayer();
         this.preloadLook();
         this.spriteInterval = setInterval(() => this.refreshSprite(), SPRITE_FRAME_MS);
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
 
     /** True while the run accepts steps: the page uses it for the tap-to-start gesture. */
     get active(): boolean {
-        return this.run.phase === 'playing';
+        return this.run.phase === 'playing' || this.run.phase === 'clear';
+    }
+
+    /** A hidden tab must not drain the run: ticking stops, and the measurement restarts on return. */
+    private handleVisibilityChange = (): void => {
+        if (!document.hidden) this.lastTickAt = Date.now();
+    };
+
+    /** Schedule a timeout the shell can still cancel after dispose(). */
+    private after(ms: number, fn: () => void): void {
+        const id = setTimeout(() => {
+            this.timeouts.delete(id);
+            fn();
+        }, ms);
+        this.timeouts.add(id);
     }
 
     /** The look starts from the Player's five trait fields, sanitized. */
@@ -156,12 +175,13 @@ class GameState {
     }
 
     startGame(): void {
-        if (this.starting) return;
+        // One countdown at a time: a second request while one runs is ignored,
+        // so the page never ends up with two countdown elements or two starts.
+        if (this.countdownTimers !== null) return;
         if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return;
         const mazeContainerElement = document.getElementById('maze-container');
         const titleElement = document.getElementById('title-screen');
         if (!titleElement) return;
-        this.starting = true;
         titleElement.style.opacity = '0.5';
         const countdownElement = document.createElement('p');
         countdownElement.className = 'title-screen-countdown';
@@ -169,22 +189,33 @@ class GameState {
         mazeContainerElement?.appendChild(countdownElement);
         this.countdown.play();
 
-        setTimeout(() => {
+        const timers: ReturnType<typeof setTimeout>[] = [];
+        timers.push(setTimeout(() => {
             countdownElement.textContent = '2';
             this.countdown.play();
-        }, 1000);
+        }, 1000));
 
-        setTimeout(() => {
+        timers.push(setTimeout(() => {
             countdownElement.textContent = '1';
             this.countdown.play();
-        }, 2000);
+        }, 2000));
 
-        setTimeout(() => {
+        timers.push(setTimeout(() => {
+            this.countdownTimers = null;
             countdownElement.remove();
             titleElement.style.display = 'none';
-            this.starting = false;
             this.beginRun();
-        }, 3000);
+        }, 3000));
+
+        this.countdownTimers = timers;
+    }
+
+    /** Cancel a running countdown, leaving no timer behind. */
+    private cancelCountdown(): void {
+        if (this.countdownTimers === null) return;
+        this.countdownTimers.forEach(clearTimeout);
+        this.countdownTimers = null;
+        document.querySelector('.title-screen-countdown')?.remove();
     }
 
     /** Start (or restart) the run at level 1 and set the clock going. */
@@ -201,8 +232,10 @@ class GameState {
         if (this.clockInterval !== null) return;
         this.lastTickAt = Date.now();
         this.clockInterval = setInterval(() => {
+            // A throttled or suspended hidden tab must never hand the run one huge step.
+            if (document.hidden) return;
             const now = Date.now();
-            const elapsedMs = now - this.lastTickAt;
+            const elapsedMs = clampDt(now - this.lastTickAt);
             this.lastTickAt = now;
             this.run.tick(elapsedMs);
             this.handleEvents();
@@ -216,6 +249,24 @@ class GameState {
             clearInterval(this.clockInterval);
             this.clockInterval = null;
         }
+    }
+
+    /** Release everything the shell scheduled: after dispose() nothing it owns may fire. */
+    dispose(): void {
+        this.stopClock();
+        this.cancelCountdown();
+        if (this.spriteInterval !== null) {
+            clearInterval(this.spriteInterval);
+            this.spriteInterval = null;
+        }
+        this.timeouts.forEach(clearTimeout);
+        this.timeouts.clear();
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        [this.sound, this.lost, this.levelup, this.countdown, this.pickupSound, this.fightSound]
+            .forEach((audio) => {
+                audio.pause();
+                audio.currentTime = 0;
+            });
     }
 
     /** Turn the run's queued events into sound, drawing and messages, oldest first. */
@@ -389,7 +440,7 @@ class GameState {
     /** Float the message an event carries above the player, if any. */
     private floatMessage(event: GameEvent): void {
         const message = eventMessage(event);
-        if (message) setTimeout(() => this.displayMessage(message), 0);
+        if (message) this.after(0, () => this.displayMessage(message));
     }
 
     displayMessage(message: string): void {
@@ -403,9 +454,9 @@ class GameState {
         playerElement.parentElement?.appendChild(messageElement);
 
         // Remove the message after the animation completes
-        setTimeout(() => {
+        this.after(2500, () => {
             messageElement.remove();
-        }, 2500);
+        });
     }
 
     triggerLevelCompleteAnimation(callback: { (): void; }) {
@@ -414,11 +465,11 @@ class GameState {
         animationOverlay.style.opacity = '1';
         animationOverlay.style.transform = 'scale(20)';
 
-        setTimeout(() => {
+        this.after(300, () => {
             animationOverlay.style.opacity = '0';
             animationOverlay.style.transform = 'scale(1)';
-            setTimeout(callback, 100); // Wait for the animation to complete before starting the new level
-        }, 300);
+            this.after(100, callback); // Wait for the animation to complete before starting the new level
+        });
     }
 
     gameOver(): void {

@@ -49,6 +49,8 @@ const Page: React.FC = () => {
 
         return () => {
             window.removeEventListener('keydown', handleKeyPress);
+            // Release every timer, listener and sound the shell owns.
+            newGameState.dispose();
         };
     }, []);
 
