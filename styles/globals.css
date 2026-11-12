@@ -4,26 +4,39 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
+  /* viewportFit=cover runs the page under notches and browser bars: the page
+     itself keeps its content inside the safe area. */
+  box-sizing: border-box;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
   background: linear-gradient(135deg, #08412c, #40154f);
   color: white;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .game-container {
   display: contents;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
 }
+/* The drifting galaxy moves by transform only (translate + scale), so the
+   compositor slides a layer instead of repainting the board every frame. The
+   picture lives on #maze::before, a layer larger than the board, so neither
+   the drift nor the scale ever exposes an edge. */
 @keyframes moveBackground {
   0% {
-    background-position: 0 0;
-    background-size: 600%;
+    transform: translate(0, 0) scale(1);
   }
-  100% { 
-    background-position: -1000px -500px; 
-    background-size: 300%;
+  100% {
+    transform: translate(-80px, -50px) scale(0.92);
   }
 }
 #maze-container {
@@ -33,11 +46,33 @@ body {
   justify-content: center;
   border-radius: 10px 10px 0px 0px;
   overflow: hidden;
+  /* Touches on the board belong to the game: no browser pan, zoom or double-tap. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 #maze {
   position: relative;
+  /* Its own stacking context, so the galaxy layer (z-index: -1) stays behind
+     the tiles but inside the board. */
+  isolation: isolate;
+}
+#maze::before {
+  content: '';
+  position: absolute;
+  /* Half the board beyond every edge: the slow drift never uncovers a side. */
+  inset: -50%;
+  z-index: -1;
+  /* One picture per board (50% of this twice-as-large layer), tiled. */
   background: url('/images/galaxy2.jpg') repeat;
+  background-size: 50% 50%;
   animation: moveBackground 45s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* The board's three layers, built once by lib/board.ts: the tile grid, the
+   gliding entities and the effects. Only tiles whose picture changed and the
+   entities' transforms are touched per move. */
+.tiles {
   display: grid;
   grid-template-columns: repeat(var(--grid-size), var(--cell-size));
   grid-template-rows: repeat(var(--grid-size), var(--cell-size));
@@ -45,49 +80,280 @@ body {
   align-content: center;
 }
 
-#title-screen {
+.entities, .fx {
   position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* The title menu (components/Menu.tsx): the title art as the background of the
+   board area, a dark gradient over its lower half so the painted START in the
+   picture is covered, and the menu's real-text buttons stacked on top of it.
+   The art also shows behind the how-to and, dimmed, behind the countdown. */
+.title-menu {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 1;
+}
+.title-art {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* The buttons are the only interactive part of the menu; the art is scenery. */
+  pointer-events: none;
+  user-select: none;
+}
+.title-menu.dimmed .title-art {
+  /* The countdown runs over the dimmed title, as the plain picture did before. */
+  opacity: 0.5;
+}
+.title-gradient {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55%;
+  background: linear-gradient(
+    to top,
+    rgba(4, 6, 12, 0.92) 0%,
+    rgba(4, 6, 12, 0.65) 45%,
+    rgba(4, 6, 12, 0) 100%
+  );
+  pointer-events: none;
+}
+.menu-buttons {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: min(260px, 70%);
+  text-align: center;
+}
+.menu-buttons button {
+  font: inherit;
+  font-size: 18px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
   cursor: pointer;
-  z-index: 1;
 }
-#title-screen img {
-  width: 80%;
-  max-width: 600px;
+.menu-buttons button:hover,
+.menu-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
 }
-.title-screen-countdown {
+.menu-best {
+  margin: 4px 0 0;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* The title menu's mode row (components/Menu.tsx, game/modes.ts): the mode's
+   name between two arrow buttons, its blurb and its best underneath. */
+.mode-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background-color: rgba(4, 6, 12, 0.45);
+  cursor: pointer;
+}
+.mode-row:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+.mode-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mode-picker button {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.mode-picker button:hover,
+.mode-picker button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+.mode-name {
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mode-blurb {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.mode-best {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* The 3-2-1 the shell drops over the dimmed title while a run starts. */
+.game-countdown {
   position: absolute;
   top: 5%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 20em;
+  font-size: min(40vw, 40vh);
   color: white;
   text-align: center;
   z-index: 2;
 }
 
-.cell {
-  position: relative;
-  width: var(--cell-size);
-  height: var(--cell-size);
+/* The how-to-play screen (components/HowTo.tsx): the lines as a list, each
+   with its sprite to the left, over the title art. */
+.howto-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background-color: rgba(8, 10, 16, 0.92);
+  color: white;
+  text-align: center;
+  overflow-y: auto;
+  z-index: 3;
+}
+.howto-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(520px, 88%);
+}
+.howto-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  font-size: 15px;
+}
+.howto-sprite {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+.howto-text {
+  flex: 1;
 }
 
-.player, .exit, .powerup, .enemy, .wall-image {
+.wall-image {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  image-rendering: pixelated;
+}
+
+/* Blackout (game/modifiers.ts, lib/board.ts): on an entangled level the tiles
+   outside the view fade to a hint of their picture and the entities standing
+   on them vanish; the shell re-marks the cells on every update. The forecast
+   marks live on the fx layer and stay visible everywhere. */
+.wall-image.unseen {
+  opacity: 0.06;
+}
+
+.entities .unseen {
+  display: none;
+}
+
+/* The entanglement banner (lib/board.ts banner): the twist's name and its
+   line as real text over the board, shown while the shell's timer runs. */
+.level-banner {
   position: absolute;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: rgba(10, 12, 28, 0.82);
+  border: 1px solid rgba(255, 215, 120, 0.55);
+  color: #ffe9a8;
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.level-banner strong {
+  font-size: 1.15em;
+  letter-spacing: 0.08em;
+}
+
+/* Entities are one persistent element each, placed with a transform by
+   lib/board.ts (left/top stay at 0 so every glide is a pure translation). */
+.player, .exit, .powerup, .enemy {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: var(--item-size);
   height: var(--item-size);
   background-size: 100% 100%;
+  image-rendering: pixelated;
 }
 
 .player {
-  background-image: url('/images/player.gif');
-  background-size: cover;
+  /* The outer element's transform carries the position; the glide is the
+     transition between the cells. The duration is the shell's step length
+     (--step-ms, set from CONFIG.stepMs in lib/GameState.ts) so the glide and
+     the cadence cannot drift apart. */
+  transition: transform var(--step-ms, 110ms) linear;
 }
 
-.player.flip-horizontal {
-  transform: scaleX(-1);
+/* The inner wrapper holds the stacked <img class="player-layer"> elements
+   (from game/sprite.ts) and carries the facing flip. The flip is a variable,
+   so the bump animation can nudge the sprite without losing the facing. */
+.player-sprite {
+  position: absolute;
+  inset: 0;
+  --sprite-flip: 1;
+  transform: scaleX(var(--sprite-flip));
+}
+
+.player-sprite.flip-horizontal {
+  --sprite-flip: -1;
+}
+
+.player-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
 }
 
 .exit {
@@ -123,15 +389,276 @@ body {
   background-image: url('/images/backpack.gif');
 }
 
+/* Tool pickups (game/tools.ts): simple SVG icons in the game's teal and gold. */
+.item_anchor {
+  background-image: url('/images/tools/anchor.svg');
+}
+
+.item_twist {
+  background-image: url('/images/tools/twist.svg');
+}
+
+.item_cut {
+  background-image: url('/images/tools/cut.svg');
+}
+
 .enemy {
   background-image: url('/images/enemy.gif');
   background-size: cover;
 }
 
+/* The kinds share the one GIF and differ by shape only: the heavy ones
+   carry rings and are drawn larger. `scale` (not `transform`) grows the sprite
+   so the position transform from lib/board.ts stays untouched. */
+.enemy-wisp {
+  /* plain */
+}
+
+.enemy-brute {
+  scale: 1.15;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.enemy-warden {
+  scale: 1.3;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.85),
+    0 0 0 5px rgba(255, 200, 60, 0.85);
+}
+
+/* The stalker (game/enemies.ts) is the same GIF with a distinct shape cue:
+   a pointed red marker above it (over the toll badge) and a faster bob, so
+   the one that follows you reads at a glance. `translate` bobs the sprite so
+   the position transform from lib/board.ts stays untouched. */
+.enemy-stalker {
+  animation: stalker-bob 0.5s ease-in-out infinite;
+}
+
+.enemy-stalker::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 13px);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 7px solid #ff3b30;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
+  pointer-events: none;
+}
+
+@keyframes stalker-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -2px;
+  }
+}
+
+[data-motion="reduced"] .enemy-stalker {
+  animation: none;
+}
+
+/* The toll badge: the energy this enemy costs right now, floating above it and
+   refreshed on every board update. */
+.toll {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+/* A toll at or above the energy left: inverted colours and a thick outline, so
+   it reads as fatal without relying on the colour alone. */
+.toll-fatal {
+  color: #000;
+  background: #fff;
+  outline: 3px solid #ff3b30;
+  font-weight: bold;
+}
+
+/* The blob: the dark aura under the Knot, CONFIG.blobTiles tiles wide and
+   centred on the origin's tile (blobRect in game/layout.ts). */
 .fade-overlay {
   position: absolute;
+  left: 0;
+  top: 0;
   pointer-events: none;
+  transition: transform 150ms linear;
   background: radial-gradient(circle, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0) 50%);
+}
+
+/* The Knot: the visible origin of the shifting, one persistent element that
+   glides with the origin (a gold ring with a teal centre, slowly pulsing).
+   lib/board.ts sizes it to one tile and moves it with a transform. */
+.knot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 3px solid #ffd700;
+  box-sizing: border-box;
+  background: radial-gradient(circle, rgba(0, 160, 160, 0.95) 0%, rgba(0, 160, 160, 0.45) 55%, rgba(0, 160, 160, 0) 75%);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+  transition: transform 150ms linear;
+  animation: knot-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes knot-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* While an Anchor holds (game/tools.ts): the Knot stops pulsing and shows a
+   dashed ring, so a frozen maze reads without any colour-only cue. */
+.knot-frozen {
+  animation: none;
+  opacity: 0.9;
+  border-style: dashed;
+  box-shadow: 0 0 10px rgba(27, 191, 133, 0.7);
+}
+
+/* The tool row in the HUD (components/ToolBar.tsx): one button per tool with
+   its icon, name, key hint and charge count; disabled at 0 charges. */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.tool-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 2px solid #1bbf85;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tool-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.tool-name {
+  font-size: calc(0.85em * var(--ui-scale, 1));
+}
+
+.tool-key {
+  font-size: calc(0.75em * var(--ui-scale, 1));
+  color: #ffd700;
+}
+
+.tool-count {
+  font-size: calc(0.85em * var(--ui-scale, 1));
+  color: #1bbf85;
+  font-weight: bold;
+}
+
+.tool-anchored {
+  font-size: calc(0.8em * var(--ui-scale, 1));
+  color: #1bbf85;
+}
+
+/* The forecast's wall marks, one .mark element per wall tile, replaced on
+   each update. The two kinds differ by shape and pattern, not only colour,
+   so they read in greyscale too: an opening wall gets a dashed gold outline
+   (the wall still shows through), a sealing wall a diagonal white hatch. */
+.marks {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.mark-open {
+  border: 2px dashed #ffd700;
+  border-radius: 3px;
+}
+
+.mark-close {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.85) 0,
+    rgba(255, 255, 255, 0.85) 2px,
+    rgba(255, 255, 255, 0) 2px,
+    rgba(255, 255, 255, 0) 6px
+  );
+}
+
+/* The stalker's intent (game/run.ts, lib/board.ts): a small chevron on the
+   cell it means to step to next, pointing from the stalker toward that cell.
+   The direction classes turn the corner of a square into the arrow head. */
+.mark-intent::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -5px 0 0 -3px;
+  border-top: 2px solid rgba(255, 59, 48, 0.95);
+  border-right: 2px solid rgba(255, 59, 48, 0.95);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
+}
+
+.mark-intent-n::after {
+  transform: rotate(-45deg);
+}
+
+.mark-intent-e::after {
+  transform: rotate(45deg);
+}
+
+.mark-intent-s::after {
+  transform: rotate(135deg);
+}
+
+.mark-intent-w::after {
+  transform: rotate(225deg);
+}
+
+[data-contrast="true"] .mark-intent::after {
+  border-top-color: #ffffff;
+  border-right-color: #ffffff;
+  width: 10px;
+  height: 10px;
 }
 
 .message{
@@ -153,49 +680,272 @@ body {
   }
 }
 
-#level-complete-animation {
-  position: absolute;
-  top: 2%;
-  width: 10%;
-  height: 10%;
-  background-image: url('/images/exit.gif');
-  background-size: cover;
-  background-position: center;
-  opacity: 0;
-  z-index: 3;
-  pointer-events: none;
-  transition: opacity 0.3s, transform 0.3s;
+/* --- Juice (game/fx.ts decides, play() in lib/board.ts draws) ---------------
+   The board answers the player: the bump nudges the sprite, pop and sparks
+   live on the fx layer, flash and fade veil the board, and shake and zoom
+   animate the board container itself. Durations arrive through --fx-ms. */
+
+.player-sprite.fx-bump {
+  animation: bump-nudge 180ms ease-out;
 }
 
-@keyframes expand-and-fade {
+@keyframes bump-nudge {
   0% {
-      transform: scale(1);
-      opacity: 1;
+    transform: scaleX(var(--sprite-flip, 1)) translate(0, 0);
+  }
+  35% {
+    transform: scaleX(var(--sprite-flip, 1)) translate(var(--bump-dx, 0px), var(--bump-dy, 0px));
   }
   100% {
-      transform: scale(1.5);
-      opacity: 0;
+    transform: scaleX(var(--sprite-flip, 1)) translate(0, 0);
   }
 }
 
-.game-over-message {
+/* The pickup's ring: one tile wide, opening and fading on the fx layer. */
+.fx-pop {
   position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell-size, 16px);
+  height: var(--cell-size, 16px);
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 215, 0, 0.9);
+  border-radius: 4px;
+  pointer-events: none;
+  animation: pop-ring var(--fx-ms, 350ms) ease-out forwards;
+}
+
+@keyframes pop-ring {
+  0% {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* The burst's particles: small squares thrown by --sx/--sy (lib/board.ts). */
+.spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  pointer-events: none;
+  animation: spark-fly var(--fx-ms, 600ms) ease-out forwards;
+}
+
+.spark-gold {
+  background: #ffd700;
+}
+
+.spark-red {
+  background: #ff3b30;
+}
+
+.spark-teal {
+  background: #1bbf85;
+}
+
+@keyframes spark-fly {
+  0% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--sx, 0px), var(--sy, 0px));
+    opacity: 0;
+  }
+}
+
+/* The veils: a colour wash (flash) or the dark stand-in the reduced-motion
+   run gets instead (fade). Both cover the board and end transparent. */
+.fx-veil {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(214, 2, 2, 0.8);
-  color: white;
+  pointer-events: none;
+  opacity: 0;
+  animation: veil var(--fx-ms, 200ms) ease-out forwards;
+}
+
+.fx-flash-gold {
+  background: rgba(255, 215, 0, 0.35);
+}
+
+.fx-flash-red {
+  background: rgba(255, 59, 48, 0.4);
+}
+
+.fx-flash-teal {
+  background: rgba(27, 191, 133, 0.35);
+}
+
+.fx-fade {
+  background: rgba(0, 0, 0, 0.65);
+  animation-name: veil-soft;
+}
+
+@keyframes veil {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes veil-soft {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Shake and zoom move the board container, not the page. */
+#maze.fx-shake {
+  animation: board-shake var(--fx-ms, 150ms) linear;
+}
+
+@keyframes board-shake {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(calc(var(--shake-px, 4px) * -1), var(--shake-px, 4px));
+  }
+  40% {
+    transform: translate(var(--shake-px, 4px), calc(var(--shake-px, 4px) * -1));
+  }
+  60% {
+    transform: translate(calc(var(--shake-px, 4px) * -1), 0);
+  }
+  80% {
+    transform: translate(var(--shake-px, 4px), var(--shake-px, 4px));
+  }
+}
+
+#maze.fx-zoom {
+  transform-origin: var(--zoom-origin, 50% 50%);
+  animation: board-zoom var(--fx-ms, 300ms) ease-in forwards;
+}
+
+@keyframes board-zoom {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.22);
+  }
+}
+
+/* Low energy: the screen breathes a warning. One cycle takes longer than a
+   second, so it can never flicker; the vignette and the energy bar breathe
+   together (lib/board.ts setLowEnergy puts the class on the board). */
+.low-energy .fade-overlay {
+  animation: vignette-breathe 1.6s ease-in-out infinite;
+}
+
+.low-energy #energy-bar-inner {
+  animation: energy-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes vignette-breathe {
+  0%, 100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes energy-breathe {
+  0%, 100% {
+    filter: none;
+  }
+  50% {
+    filter: brightness(1.6);
+  }
+}
+
+/* Players who ask for calm: the drifting galaxy stands still. The shell also
+   reads this ask through matchMedia and hands out only fades and pops. */
+@media (prefers-reduced-motion: reduce) {
+  #maze,
+  #maze::before {
+    animation: none;
+  }
+}
+
+/* The pause and game-over panels (components/Overlay.tsx): a dark sheet over the
+   board, not the old solid red one — the run stays visible behind the panel. */
+.game-over-message {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  text-align: center;
-  cursor: pointer;
-  z-index: 2;
   flex-direction: column;
+  gap: 14px;
+  background-color: rgba(8, 10, 16, 0.88);
+  color: white;
+  text-align: center;
+  z-index: 3;
 }
 .game-over-message p {
-  margin: 5%;
+  margin: 0;
+}
+.overlay-title {
+  font-size: 28px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 220px;
+  max-width: 80%;
+}
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  font-size: 16px;
+}
+.summary-label {
+  opacity: 0.75;
+}
+.summary-value {
+  font-weight: bold;
+}
+.overlay-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.overlay-buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.overlay-buttons button:hover,
+.overlay-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
 }
 
 #hud {
@@ -281,11 +1031,27 @@ body {
   border-radius: 5px;
   width: 75px;
   background-color: rgba(0, 0, 0, 0.8);
-  font-size: 0.5em;
+  font-size: 11px;
   margin-top: 10px;
   margin-right: 10px;
 }
 
+/* The HUD's carried-gear marker: shown only while the run carries pieces
+   (game/run.ts); the title text tells the player the exit keeps them. */
+.carried-marker {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 1px solid #ffd700;
+  color: #ffd700;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+/* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
+   in the wallet panel on click. */
+.wallet-open,
 .wallet-actions {
   color: white;
   background-color: rgba(0, 0, 0, 0.8);
@@ -295,6 +1061,22 @@ body {
   cursor: pointer;
   margin-top: 5px;
   width: 120px;
+}
+
+.wallet-open:disabled,
+.wallet-actions:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.wallet-status {
+  color: #cfd8dc;
+  background-color: rgba(0, 0, 0, 0.6);
+  font-size: 11px;
+  border-radius: 5px;
+  padding: 4px 6px;
+  margin-top: 5px;
+  max-width: 160px;
 }
 
 #stat-level, #stat-attack, #stat-defense, #stat-speed, #stat-consumption {
@@ -323,4 +1105,631 @@ body {
   font-size: 12px;
   padding: 0 10px;
   height: 20px;
+}
+
+/* Phones: keep the HUD short (about 200 px) so the board stays the star. */
+@media (max-width: 480px) {
+  #hud {
+    flex-direction: column;
+  }
+
+  .left-box {
+    flex-direction: row;
+    align-self: stretch;
+    padding: 6px;
+    margin: 4px 4px 0 4px;
+    width: auto;
+    height: 44px;
+    gap: 6px;
+  }
+
+  .left-box .asset-image {
+    width: 44px;
+    height: 44px;
+    left: auto;
+    right: 0;
+  }
+
+  .right-box {
+    padding: 6px 8px 8px 8px;
+  }
+
+  .bar-container {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .bar-container div:first-child {
+    margin-right: 6px;
+    width: 76px;
+  }
+
+  #energy-bar, #progress-bar {
+    height: 14px;
+  }
+
+  .stats-container {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-bottom: 0;
+  }
+
+  .stat {
+    width: auto;
+    padding: 3px 2px;
+    margin-top: 0;
+    margin-right: 0;
+  }
+
+  #stat-level, #stat-attack, #stat-defense, #stat-speed, #stat-consumption {
+    font-size: 1.3em;
+  }
+
+  /* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
+   in the wallet panel on click. */
+.wallet-open,
+.wallet-actions {
+    width: auto;
+    padding: 4px 8px;
+    margin-top: 0;
+  }
+}
+
+/* --- Settings, accessibility and the player's own asks ----------------------
+   The shell (lib/GameState.ts) puts data-motion, data-contrast and --ui-scale
+   on the root element from the sanitized settings (game/settings.ts); these
+   rules are what the player sees of them. */
+
+:root {
+  /* The HUD and panel text scale; the shell writes the player's choice. */
+  --ui-scale: 1;
+}
+
+/* Text size: the HUD and the panels grow with --ui-scale (1, 1.25 or 1.5). */
+#hud {
+  font-size: calc(1em * var(--ui-scale, 1));
+}
+
+.game-over-message,
+.settings-panel {
+  font-size: calc(1em * var(--ui-scale, 1));
+}
+
+.overlay-title {
+  font-size: calc(28px * var(--ui-scale, 1));
+}
+
+.summary-line {
+  font-size: calc(16px * var(--ui-scale, 1));
+}
+
+.stat {
+  font-size: calc(11px * var(--ui-scale, 1));
+}
+
+/* Motion: the player's own ask, not only the operating system's. The drifting
+   galaxy stands still, and nothing on the board may transition longer than
+   150 ms (the shell also hands out only fades and pops when reduced). */
+[data-motion="reduced"] #maze,
+[data-motion="reduced"] #maze::before {
+  animation: none;
+}
+
+[data-motion="reduced"] #maze-container *,
+[data-motion="reduced"] #maze-container {
+  transition-duration: 150ms !important;
+}
+
+/* Clear shapes (low vision and colour blindness): every entity the player
+   must find gets a white 2 px outline, the forecast marks draw thicker, the
+   galaxy dims to 40% and stands still, and the HUD sits pure white on solid
+   black panels. */
+[data-contrast="true"] .enemy,
+[data-contrast="true"] .powerup,
+[data-contrast="true"] .exit,
+[data-contrast="true"] .player {
+  outline: 2px solid #ffffff;
+  outline-offset: -1px;
+}
+
+[data-contrast="true"] .mark-open {
+  border-width: 4px;
+}
+
+[data-contrast="true"] .mark-close {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #ffffff 0,
+    #ffffff 4px,
+    rgba(255, 255, 255, 0) 4px,
+    rgba(255, 255, 255, 0) 8px
+  );
+}
+
+[data-contrast="true"] #maze::before {
+  animation: none;
+  /* Multiply the galaxy by 40% grey: the background dims, the tiles on top
+     keep their own brightness. */
+  background-color: #666666;
+  background-blend-mode: multiply;
+}
+
+[data-contrast="true"] #hud {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+[data-contrast="true"] .stat,
+[data-contrast="true"] .wallet-open,
+[data-contrast="true"] .wallet-actions,
+[data-contrast="true"] .game-over-message,
+[data-contrast="true"] .settings-panel,
+[data-contrast="true"] .feats-panel,
+[data-contrast="true"] .wardrobe-panel {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+[data-contrast="true"] .summary-label {
+  opacity: 1;
+}
+
+/* The settings screen (components/Settings.tsx): a panel in the same family
+   as the pause sheet, with one row per SETTING_ROWS entry. */
+.settings-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  background-color: rgba(8, 10, 16, 0.94);
+  color: white;
+  text-align: center;
+  z-index: 3;
+  overflow-y: auto;
+  padding: 16px;
+}
+.settings-panel p {
+  margin: 0;
+}
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(320px, 84%);
+  max-width: 84%;
+  text-align: left;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: calc(15px * var(--ui-scale, 1));
+}
+.settings-row label,
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.settings-row label:first-child {
+  min-width: 8em;
+}
+.settings-choice {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 6px 10px;
+  margin: 0;
+}
+.settings-choice legend {
+  padding: 0 4px;
+}
+.settings-row input[type="range"] {
+  flex: 1;
+  accent-color: #ffd700;
+}
+.settings-row input[type="checkbox"],
+.settings-row input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #ffd700;
+}
+.settings-value {
+  min-width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.settings-panel .overlay-buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.settings-panel .overlay-buttons button:hover,
+.settings-panel .overlay-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+/* The feats screen (components/Feats.tsx): a panel in the same family as the
+   settings sheet, one row per feat with its name, its line and the word
+   "Earned" or "Locked" — the state reads by word, the gold only repeats it. */
+.feats-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  background-color: rgba(8, 10, 16, 0.94);
+  color: white;
+  text-align: center;
+  z-index: 3;
+  overflow-y: auto;
+  padding: 16px;
+  font-size: calc(1em * var(--ui-scale, 1));
+}
+.feats-panel p {
+  margin: 0;
+}
+.feats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(320px, 84%);
+  max-width: 84%;
+  text-align: left;
+}
+.feats-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: calc(15px * var(--ui-scale, 1));
+}
+.feats-row.earned {
+  border-color: rgba(255, 215, 0, 0.7);
+}
+.feats-name {
+  min-width: 8em;
+  font-weight: 700;
+}
+.feats-text {
+  flex: 1;
+  opacity: 0.85;
+}
+.feats-state {
+  min-width: 4.5em;
+  text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: calc(12px * var(--ui-scale, 1));
+}
+.feats-row.earned .feats-state {
+  color: #ffd700;
+}
+.feats-panel .overlay-buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.feats-panel .overlay-buttons button:hover,
+.feats-panel .overlay-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+/* Screen-reader-only text: the HUD's polite announcements live here, on the
+   page for the reader and nowhere for the eye. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The Controls screen (components/Controls.tsx): the settings-panel family,
+   with one row per action — its label and the two key buttons beside it. */
+.controls-rows {
+  gap: 8px;
+}
+.controls-row .controls-label {
+  flex: 1;
+  min-width: 120px;
+}
+.controls-key {
+  min-width: 96px;
+  padding: 6px 10px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.controls-key:hover,
+.controls-key:focus-visible {
+  background-color: rgba(255, 255, 255, 0.22);
+  outline: 2px solid #ffd34d;
+}
+
+/* --- Touch controls: the optional D-pad and the pause button ----------------------- */
+
+/* Four 56 px buttons in a cross, below the board (settings.touch === "dpad"). */
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 56px);
+  gap: 6px;
+  margin: 8px auto 0;
+  justify-content: center;
+}
+
+.dpad-btn {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: white;
+  background: rgba(8, 65, 44, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  /* A held button belongs to the game: no pan, zoom, text selection or long-press menu. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.dpad-btn:active {
+  background: rgba(64, 21, 79, 0.85);
+}
+
+.dpad-up    { grid-column: 2; grid-row: 1; }
+.dpad-left  { grid-column: 1; grid-row: 2; }
+.dpad-right { grid-column: 3; grid-row: 2; }
+.dpad-down  { grid-column: 2; grid-row: 3; }
+
+/* The touch pause button: top right of the board, clear of the notch. */
+.pause-button {
+  position: absolute;
+  /* The body already pads with the safe-area insets; this rides inside them. */
+  top: 8px;
+  right: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  font-size: 1.1rem;
+  color: white;
+  background: rgba(8, 65, 44, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  z-index: 20;
+  touch-action: manipulation;
+}
+
+/* The armed Cut: the toolbar button glows gold and carries its hint while
+   the shell waits for the direction (lib/GameState.ts, components/ToolBar.tsx). */
+.tool-button.tool-armed {
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.75);
+  animation: tool-armed-pulse 900ms ease-in-out infinite;
+}
+
+.tool-armed-hint {
+  font-size: calc(0.7em * var(--ui-scale, 1));
+  color: #ffd700;
+}
+
+@keyframes tool-armed-pulse {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.9);
+  }
+}
+
+/* The wall a Cut opened: a brief gold flash on that tile of the wall grid
+   (lib/board.ts flashWallTile places and sizes it on the fx layer). */
+.fx-tile-flash {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  background: rgba(255, 215, 0, 0.85);
+  border-radius: 2px;
+  pointer-events: none;
+  animation: tile-flash var(--fx-ms, 450ms) ease-out forwards;
+}
+
+@keyframes tile-flash {
+  0% {
+    opacity: 0.95;
+    transform: scale(1.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* The wardrobe (components/Wardrobe.tsx): a panel in the same family as the
+   feats sheet. The preview stacks the trait layers of spriteLayers on top of
+   each other, blown up from the 48 px art and kept pixel-crisp; one row per
+   layer shows the layer's name, a previous button, the current trait's name
+   and a next button. Rows take focus so the arrow keys can cycle them. */
+.wardrobe-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  background-color: rgba(8, 10, 16, 0.94);
+  color: white;
+  text-align: center;
+  z-index: 3;
+  overflow-y: auto;
+  padding: 16px;
+  font-size: calc(1em * var(--ui-scale, 1));
+}
+.wardrobe-panel p {
+  margin: 0;
+}
+.wardrobe-preview {
+  position: relative;
+  flex: none;
+}
+.wardrobe-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.wardrobe-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: min(320px, 84%);
+  max-width: 84%;
+}
+.wardrobe-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: calc(15px * var(--ui-scale, 1));
+}
+.wardrobe-row:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+.wardrobe-layer {
+  min-width: 5em;
+  text-align: left;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: calc(12px * var(--ui-scale, 1));
+}
+.wardrobe-trait {
+  flex: 1;
+  text-align: center;
+}
+.wardrobe-row button {
+  font: inherit;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.wardrobe-row button:hover,
+.wardrobe-row button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+.wardrobe-count {
+  font-weight: 700;
+}
+.wardrobe-hint {
+  opacity: 0.85;
+  font-size: calc(13px * var(--ui-scale, 1));
+}
+.wardrobe-panel .overlay-buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  cursor: pointer;
+}
+.wardrobe-panel .overlay-buttons button:hover,
+.wardrobe-panel .overlay-buttons button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+/* --- Status pages (app/error.tsx, app/not-found.tsx) ------------------------
+   The crash and 404 routes render inside the same body, so they inherit the
+   game's gradient and centring; this only shapes the panel and its button. */
+.status-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 1rem;
+  max-width: 420px;
+  text-align: center;
+}
+.status-title {
+  margin: 0;
+  color: #ffd700;
+  font-size: 26px;
+}
+.status-line {
+  margin: 0;
+  opacity: 0.85;
+}
+.status-digest {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.7;
+}
+.status-digest code {
+  color: #1bbf85;
+  word-break: break-all;
+}
+.status-button,
+.status-button:visited {
+  font: inherit;
+  font-size: 18px;
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+  text-decoration: none;
+  cursor: pointer;
+}
+.status-button:hover,
+.status-button:focus-visible {
+  background-color: rgba(255, 255, 255, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
 }

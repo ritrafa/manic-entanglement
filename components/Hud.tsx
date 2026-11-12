@@ -1,93 +1,88 @@
-import React, { useState, useCallback } from 'react';
-import { Player } from '../lib/types';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { getRelatedAssetsByOwner } from '../lib/helius';
-import { useWallet } from '@solana/wallet-adapter-react';
+import React, { useSyncExternalStore } from 'react';
+import { rpcUrl } from '@/lib/reptile';
 import GameState from '@/lib/GameState';
-import handleGenerateGIF from '@/lib/player_generator';
-import NFTCreator from './NFTCreator';
-
+import ToolBar from './ToolBar';
+import WalletGate from './WalletGate';
 
 interface HudProps {
-    player: Player;
     gameState: GameState;
 }
 
-const Hud: React.FC<HudProps> = ({ player, gameState }) => {
-    const { publicKey } = useWallet();
-    const [assetImage, setAssetImage] = useState<string | null>(null);
+const Hud: React.FC<HudProps> = ({ gameState }) => {
+    // The whole model comes from the shell's store: one source, no getElementById,
+    // and a React re-render (e.g. a wallet connecting) can never put stale text back.
+    const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
 
-    const handleCheckAssets = useCallback(async () => {
-        if (publicKey) {
-            const assets = await getRelatedAssetsByOwner(publicKey.toBase58());
-            assets.forEach((element: {
-                file: any;
-                collection: string; data: any; 
-}) => {
-                if (element.collection == 'Dj5gDUph6CuUiQBjh31HhpmJTXhhfHzbMTNK89wNHzvz' && element.data){
-                    const data = element.data;
-                    const image = element.file;
-
-                    setAssetImage(image);
-                    player.setPlayerDetails(data);
-
-                    const selectedTraits = {
-                        Body: data.find((item: { key: any; }) => item.key === 'Body').value,
-                        Head: data.find((item: { key: any; }) => item.key === 'Head').value,
-                        Back: data.find((item: { key: any; }) => item.key === 'Back').value,
-                        Clothes: data.find((item: { key: any; }) => item.key === 'Clothes').value,
-                        Eye: data.find((item: { key: any; }) => item.key === 'Eye').value
-                    };
-                    handleGenerateGIF(selectedTraits);
-                    return;
-                }   
-            });
-        }
-    }, [publicKey]);
+    // No RPC endpoint configured: no wallet box at all (no button, no hook
+    // that would miss its context). WalletGate holds the wallet hooks behind
+    // a dynamic import so they are never called conditionally here and the
+    // wallet code stays off the first load until the button is clicked.
+    const hasWallet = rpcUrl() !== null;
 
     return (
         <div id="hud">
-            <div className="left-box">
-                <WalletMultiButton />
-                {publicKey && <button className="wallet-actions" onClick={handleCheckAssets}>🔎 Assets</button>}
-
-                {assetImage && <img src={assetImage} alt="Asset" className="asset-image" />}
-            </div>
+            {hasWallet && <WalletGate gameState={gameState} />}
             <div className="right-box">
                 <div className="bar-container">
-                    <div id="stat-energy">Energy: 0</div>
-                    <div id="energy-bar">
-                        <div id="energy-bar-inner" style={{ width: `${player.energy}%` }}></div>
+                    <div id="stat-energy">{model.energyText}</div>
+                    <div
+                        id="energy-bar"
+                        role="progressbar"
+                        aria-label="Energy"
+                        aria-valuenow={Math.round(model.energyPct)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                    >
+                        <div id="energy-bar-inner" style={{ width: `${model.energyPct}%` }}></div>
                     </div>
                 </div>
                 <div className="bar-container">
-                    <div id="stat-score">Score: 0</div>
-                    <div id="progress-bar">
-                        <div id="progress-bar-inner" style={{ width: `${(player.points / player.high_score) * 100}%` }}></div>
+                    <div id="stat-score">{model.scoreText}</div>
+                    <div
+                        id="progress-bar"
+                        role="progressbar"
+                        aria-label="Progress toward best score"
+                        aria-valuenow={Math.round(model.bestPct)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                    >
+                        <div id="progress-bar-inner" style={{ width: `${model.bestPct}%` }}></div>
                     </div>
                 </div>
                 <div className="stats-container">
                 <div className="stat">
-                        <div>🌌 Maze Level</div>
-                        <div id="stat-level">{player.maze_level}</div>
+                        <div><span aria-hidden="true">⚔️</span> Attack</div>
+                        <div id="stat-attack">{model.attack}</div>
                     </div>
                     <div className="stat">
-                        <div>⚔️ Attack</div>
-                        <div id="stat-attack">{Math.round(player.attack*10)/10}</div>
+                        <div><span aria-hidden="true">🛡️</span> Defense</div>
+                        <div id="stat-defense">{model.defense}</div>
                     </div>
                     <div className="stat">
-                        <div>🛡️ Defense</div>
-                        <div id="stat-defense">{Math.round(player.defense*10)/10}</div>
+                        <div><span aria-hidden="true">🏃‍♂️</span> Clock</div>
+                        <div id="stat-speed">{model.clockPct}%</div>
                     </div>
                     <div className="stat">
-                        <div>🏃‍♂️ Speed</div>
-                        <div id="stat-speed">{Math.round(player.speed * 100)}%</div>
-                    </div>
-                    <div className="stat">
-                        <div>⚡ Consumption</div>
-                        <div id="stat-consumption">{Math.round(player.consumption * 100)}%</div>
+                        <div><span aria-hidden="true">⚡</span> Step cost</div>
+                        <div id="stat-consumption">{model.stepPct}%</div>
                     </div>
                 </div>
+                {/* Gear picked up since the last exit: kept by reaching it, lost
+                    on death (game/run.ts). The marker shows only while something
+                    is carried. */}
+                {model.carried > 0 && (
+                    <div className="carried-marker" title="Reach the exit to keep it">
+                        Carried: {model.carried}
+                    </div>
+                )}
+            </div>
+            {/* The two tool buttons: Anchor and Twist, spent by click, tap or keys 1 and 2. */}
+            <ToolBar gameState={gameState} />
+            {/* Spoken by assistive technology when the shell has something to
+                say (game/settings.ts announcement): Energy low, Level N,
+                Paused, Game over. Invisible on screen, polite in the reader. */}
+            <div className="visually-hidden" aria-live="polite" role="status">
+                {model.announcement}
             </div>
         </div>
     );

@@ -6,20 +6,21 @@ import {
     WalletProvider,
 } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import * as web3 from "@solana/web3.js";
-import * as walletAdapterWallets from "@solana/wallet-adapter-wallets";
-
-require("@solana/wallet-adapter-react-ui/styles.css");
+import "@solana/wallet-adapter-react-ui/styles.css";
+import { rpcUrl } from "@/lib/reptile";
 
 const WalletContextProvider: FC<{ children: ReactNode }> = ({ children }) => {
-    //const endpoint = web3.clusterApiUrl("devnet");
-    const endpoint = 'https://kaila-vjymzu-fast-mainnet.helius-rpc.com';
-    const wallets = useMemo(() => {
-        return [
-            new walletAdapterWallets.PhantomWalletAdapter(),
-            new walletAdapterWallets.SolflareWalletAdapter(),
-        ];
-    }, []);
+    // The RPC host comes from NEXT_PUBLIC_RPC_URL; with no usable https://
+    // URL configured there is no endpoint to talk to, so the game renders
+    // plain children and the HUD leaves the wallet box out entirely.
+    const endpoint = rpcUrl();
+    // Phantom and Solflare register themselves through the Wallet Standard,
+    // so no explicit wallet adapters are needed here.
+    const wallets = useMemo(() => [], []);
+
+    if (endpoint === null) {
+        return <>{children}</>;
+    }
 
     return (
         <ConnectionProvider endpoint={endpoint}>

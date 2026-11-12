@@ -1,43 +1,33 @@
 {
-  "name": "nextjs",
+  "name": "manic-entanglement",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run build && tsc --noEmit && vitest run && npm run lint",
+    "lint": "eslint .",
+    "size": "node scripts/first-load.mjs --max-kb 800"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "0.30.0",
-    "@metaplex-foundation/mpl-core": "^1.0.2",
-    "@metaplex-foundation/umi": "^0.9.2",
-    "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
-    "@solana/wallet-adapter-react": "^0.15.35",
-    "@solana/wallet-adapter-react-ui": "^0.9.35",
-    "@solana/wallet-adapter-wallets": "^0.19.32",
-    "@solana/web3.js": "1.91.8",
-    "@tiplink/wallet-adapter": "^2.1.18",
-    "@vercel/analytics": "^1.3.1",
-    "axios": "^1.7.2",
-    "blob-stream": "^0.1.3",
-    "form-data": "^4.0.0",
-    "fs": "^0.0.1-security",
-    "gif.js.optimized": "^1.0.1",
-    "gifencoder": "^2.0.1",
-    "next": "^14.2.4",
-    "react": "^18",
-    "react-dom": "^18",
-    "rpc-websockets": "7.11.0"
+    "@solana/wallet-adapter-react": "^0.15.40",
+    "@solana/wallet-adapter-react-ui": "^0.9.40",
+    "@solana/web3.js": "^1.99.0",
+    "@vercel/analytics": "^2.0.1",
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.4",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.5",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
   }
 }
