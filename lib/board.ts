@@ -238,9 +238,20 @@ export class Board {
             let element = this.enemyElements.get(enemy.id);
             if (!element) {
                 element = document.createElement('div');
-                element.className = 'enemy';
+                // The badge is the one child: it rides along with the enemy's glide.
+                element.appendChild(document.createElement('div'));
                 this.enemyElements.set(enemy.id, element);
                 this.entitiesLayer?.appendChild(element);
+            }
+            // Kind classes change the shape (CSS only); the badge shows the current
+            // toll and is refreshed on every update because stats and energy move.
+            element.className = `enemy enemy-${enemy.kind}`;
+            const badge = element.firstElementChild;
+            if (badge instanceof HTMLElement) {
+                const toll = run.tollOf(enemy);
+                badge.className = 'toll';
+                badge.textContent = String(toll);
+                badge.classList.toggle('toll-fatal', toll >= run.energy);
             }
             this.place(element, enemy.x, enemy.y);
         }

@@ -1,5 +1,7 @@
 // The events a Run emits while it plays. Pure data: no DOM, no clocks, no global randomness.
 
+import type { EnemyKind } from "./enemies";
+
 export type ItemType = "energy" | "boots" | "gloves" | "shield" | "speed" | "backpack";
 
 export type DeathCause = "time" | "move" | "fight";
@@ -10,6 +12,6 @@ export type GameEvent =
     | { type: "move"; x: number; y: number; dx: number; dy: number }
     | { type: "blocked"; dx: number; dy: number }
     | { type: "pickup"; item: ItemType; text: string; x: number; y: number }
-    | { type: "fight"; cost: number; x: number; y: number }
+    | { type: "fight"; cost: number; kind: EnemyKind; x: number; y: number }
     | { type: "levelClear"; level: number; gained: number }
     | { type: "dead"; cause: DeathCause; score: number; level: number };

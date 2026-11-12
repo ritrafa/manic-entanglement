@@ -49,6 +49,23 @@ export const CONFIG = {
     },
     /** Fight maths: cost = round(hp / max(0.1, attack) * max(1, power - defense)) clamped to 1..999 (game/combat.ts). */
     enemy: { hp: 3, power: 6 },
+    /**
+     * The three enemy kinds (game/enemies.ts): the hp/power fed to the fight formula,
+     * the first depth each can be drawn at, the gear pickups it drops when beaten and
+     * the cost the fight formula gives at the default stats (attack 1, defense 1).
+     */
+    enemyKinds: {
+        wisp: { hp: 3, power: 6, fromDepth: 1, drops: 0, baseCost: 15 },
+        brute: { hp: 6, power: 6, fromDepth: 3, drops: 1, baseCost: 30 },
+        warden: { hp: 9, power: 7, fromDepth: 6, drops: 2, baseCost: 54 },
+    },
+    /** enemyFor's draw (game/enemies.ts): shares per depth band, each band summing to 1. */
+    enemyShares: {
+        /** Depths from brute.fromDepth up to warden.fromDepth. */
+        mid: { wisp: 0.7, brute: 0.3 },
+        /** Depths from warden.fromDepth on. */
+        high: { wisp: 0.5, brute: 0.35, warden: 0.15 },
+    },
 } as const;
 
 // --- Score rules (game/score.ts, owner decision Q9) -----------------------------------

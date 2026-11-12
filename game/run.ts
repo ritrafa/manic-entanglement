@@ -6,7 +6,9 @@
 import { Maze, type Dir } from "./maze";
 import { forecastOf, rollWalk, type Forecast } from "./forecast";
 import { createRng, type Rng } from "./rng";
-import { spawnLevel } from "./spawn";
+import { spawnLevel, GEAR_TYPES } from "./spawn";
+import { routeCells } from "./bot";
+import { ENEMY_KINDS, type EnemyKind } from "./enemies";
 import { levelPlan } from "./plan";
 import { CONFIG } from "./config";
 import { fightCost } from "./combat";
@@ -34,6 +36,12 @@ export interface RunEnemy {
     id: number;
     x: number;
     y: number;
+    /** Which of the three kinds this is (game/enemies.ts). */
+    kind: EnemyKind;
+    /** Hit points for the cost formula: the kind's number at spawn. */
+    hp: number;
+    /** Power for the cost formula: the kind's number at spawn. */
+    power: number;
 }
 
 /** What happened during one run, for the summary screen and later for feats. */
@@ -156,14 +164,22 @@ export class Run {
         const enemyIndex = this.enemies.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
         if (enemyIndex !== -1) {
             const enemy = this.enemies[enemyIndex];
-            const cost = fightCost(this.stats, CONFIG.enemy);
+            const cost = this.tollOf(enemy);
             this.energy -= cost;
             this.enemies.splice(enemyIndex, 1);
             this.score += KILL_SCORE;
             this.tally.kills += 1;
             this.tally.lostToFights += cost;
             fought = true;
-            this.push({ type: "fight", cost, x: enemy.x, y: enemy.y });
+            this.push({ type: "fight", cost, kind: enemy.kind, x: enemy.x, y: enemy.y });
+            // The heavy kinds pay out their gear at once, as ordinary pickups.
+            for (let i = 0; i < ENEMY_KINDS[enemy.kind].drops; i++) {
+                const type = this.rng.pick(GEAR_TYPES);
+                const text = this.applyItem(type);
+                this.score += PICKUP_SCORE;
+                this.tally.pickups += 1;
+                this.push({ type: "pickup", item: type, text, x: enemy.x, y: enemy.y });
+            }
         }
 
         if (this.player.x === this.exit.x && this.player.y === this.exit.y) {
@@ -219,8 +235,16 @@ export class Run {
      * before the fight (see game/combat.ts).
      */
     fightCostAt(x: number, y: number): number | null {
-        if (!this.enemies.some((enemy) => enemy.x === x && enemy.y === y)) return null;
-        return fightCost(this.stats, CONFIG.enemy);
+        const enemy = this.enemies.find((candidate) => candidate.x === x && candidate.y === y);
+        return enemy === undefined ? null : this.tollOf(enemy);
+    }
+
+    /**
+     * The energy defeating this enemy costs with the current stats (game/combat.ts).
+     * The number the board shows above the enemy; it moves as stats and energy do.
+     */
+    tollOf(enemy: RunEnemy): number {
+        return fightCost(this.stats, enemy);
     }
 
     /** The events since the last call, oldest first; the internal list is emptied. */
@@ -275,9 +299,22 @@ export class Run {
         this.player.y = size - 1;
         this.exit = { x: Math.floor(size / 2), y: 0 };
         this.pendingMs = 0;
-        const spawned = spawnLevel(this.rng, size, { items: plan.items, enemies: plan.enemies }, plan.energyShare);
+        // The route the level begins on: the heavy kinds are kept off it (game/spawn.ts).
+        const route = routeCells(this.maze, { x: this.player.x, y: this.player.y }, this.exit) ?? [];
+        const spawned = spawnLevel(
+            this.rng,
+            size,
+            { items: plan.items, enemies: plan.enemies },
+            plan.energyShare,
+            { depth: this.level, route },
+        );
         this.items = spawned.items.map((item) => ({ id: this.nextId++, ...item }));
-        this.enemies = spawned.enemies.map((enemy) => ({ id: this.nextId++, ...enemy }));
+        this.enemies = spawned.enemies.map((enemy) => ({
+            id: this.nextId++,
+            ...enemy,
+            hp: ENEMY_KINDS[enemy.kind].hp,
+            power: ENEMY_KINDS[enemy.kind].power,
+        }));
     }
 
     /** Roll the walk for the next move and store it as `forecast` (with its directions). */

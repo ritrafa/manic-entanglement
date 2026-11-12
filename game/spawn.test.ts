@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "@/game/rng";
-import { ITEM_TYPES, spawnLevel, startCell, exitCell } from "@/game/spawn";
+import { ITEM_TYPES, GEAR_TYPES, spawnLevel, startCell, exitCell } from "@/game/spawn";
+import { Maze } from "@/game/maze";
+import { routeCells } from "@/game/bot";
+import { ENEMY_KINDS } from "@/game/enemies";
 
 const SEEDS = Array.from({ length: 200 }, (_, i) => i * 7919 + 13);
 const SIZES = [3, 5, 9];
@@ -152,5 +155,108 @@ describe("spawnLevel energyShare", () => {
     for (const type of ITEM_TYPES) {
       expect(counts.get(type) ?? 0).toBeGreaterThan(0);
     }
+  });
+});
+
+
+describe("spawnLevel enemy kinds", () => {
+  type Cell = { x: number; y: number };
+
+  function onRouteOf(route: readonly Cell[], cell: Cell): boolean {
+    return route.some((step) => step.x === cell.x && step.y === cell.y);
+  }
+
+  it("every enemy carries a kind with its table numbers available", () => {
+    for (const seed of SEEDS.slice(0, 30)) {
+      for (const enemy of spawnLevel(createRng(seed), 9, { items: 4, enemies: 3 }, 0.4, { depth: 8 }).enemies) {
+        expect(ENEMY_KINDS[enemy.kind]).toBeDefined();
+      }
+    }
+  });
+
+  it("over 100 seeds at depths 3, 6 and 10: no brute or warden on the start-to-exit route", () => {
+    for (const depth of [3, 6, 10]) {
+      let heaviesSeen = 0;
+      for (let s = 0; s < 100; s++) {
+        const seed = s * 104729 + depth * 31 + 7;
+        const rng = createRng(seed);
+        const size = 9;
+        const maze = new Maze(size, size, rng); // the maze consumes the rng first, as in a Run
+        const route = routeCells(maze, startCell(size), exitCell(size)) ?? [];
+        const spawned = spawnLevel(rng, size, { items: 4, enemies: 5 }, 0.4, { depth, route });
+        for (const enemy of spawned.enemies) {
+          if (enemy.kind === "wisp") continue;
+          heaviesSeen += 1;
+          expect(onRouteOf(route, enemy), `depth ${depth} seed ${seed}: ${enemy.kind} on the route`).toBe(false);
+          // The usual rules still hold for a moved enemy.
+          const start = startCell(size);
+          expect(Math.abs(enemy.x - start.x) + Math.abs(enemy.y - start.y)).toBeGreaterThanOrEqual(2);
+          expect(onRouteOf(route, exitCell(size))).toBe(true); // sanity: the route spans start to exit
+        }
+      }
+      expect(heaviesSeen, `depth ${depth} never spawned a heavy kind`).toBeGreaterThan(0);
+    }
+  });
+
+  it("heavy enemies never share a cell with anything else after a route swap", () => {
+    for (const seed of SEEDS.slice(0, 60)) {
+      const rng = createRng(seed);
+      const size = 7;
+      const maze = new Maze(size, size, rng);
+      const route = routeCells(maze, startCell(size), exitCell(size)) ?? [];
+      const spawned = spawnLevel(rng, size, { items: 6, enemies: 4 }, 0.4, { depth: 8, route });
+      const placed: Cell[] = [...spawned.items, ...spawned.enemies];
+      const keys = new Set(placed.map((cell) => `${cell.x},${cell.y}`));
+      expect(keys.size).toBe(placed.length);
+    }
+  });
+
+  it("a 3x3 level where every free cell is on the route still spawns wisps and terminates", () => {
+    const size = 3;
+    const start = startCell(size);
+    const exit = exitCell(size);
+    const free: Cell[] = [];
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if ((x === start.x && y === start.y) || (x === exit.x && y === exit.y)) continue;
+        free.push({ x, y });
+      }
+    }
+    for (const seed of SEEDS.slice(0, 50)) {
+      const spawned = spawnLevel(createRng(seed), 3, { items: 3, enemies: 6 }, 0.4, { depth: 8, route: free });
+      expect(spawned.enemies.length).toBeGreaterThan(0);
+      for (const enemy of spawned.enemies) {
+        expect(enemy.kind).toBe("wisp");
+        expect(onRouteOf(free, enemy)).toBe(true);
+      }
+      expect(spawned.items.length + spawned.enemies.length).toBeLessThanOrEqual(free.length);
+    }
+  });
+
+  it("without a route option the depth draw still applies", () => {
+    const seen = new Set<string>();
+    for (const seed of SEEDS.slice(0, 100)) {
+      for (const enemy of spawnLevel(createRng(seed), 9, { items: 4, enemies: 3 }, 0.4, { depth: 6 }).enemies) {
+        seen.add(enemy.kind);
+      }
+    }
+    expect(seen.has("wisp")).toBe(true);
+    expect(seen.has("brute")).toBe(true);
+  });
+
+  it("the same seed and arguments give the same kinds", () => {
+    for (const depth of [1, 4, 8]) {
+      for (const seed of SEEDS.slice(0, 20)) {
+        const a = spawnLevel(createRng(seed), 9, { items: 4, enemies: 3 }, 0.4, { depth });
+        const b = spawnLevel(createRng(seed), 9, { items: 4, enemies: 3 }, 0.4, { depth });
+        expect(a).toEqual(b);
+      }
+    }
+  });
+
+  it("gear types are the five pickups that are not energy", () => {
+    expect([...GEAR_TYPES].sort()).toEqual(
+      ITEM_TYPES.filter((type) => type !== "energy").sort(),
+    );
   });
 });

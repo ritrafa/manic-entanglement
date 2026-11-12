@@ -4,6 +4,10 @@ import { CONFIG } from "@/game/config";
 import { levelPlan } from "@/game/plan";
 import type { GameEvent, ItemType } from "@/game/events";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "@/game/score";
+import { ENEMY_KINDS, type EnemyKind } from "@/game/enemies";
+import { fightCost } from "@/game/combat";
+import { GEAR_TYPES } from "@/game/spawn";
+import { routeCells } from "@/game/bot";
 
 const STEPS = [
   { dx: 0, dy: -1 },
@@ -39,6 +43,24 @@ function reachClear(run: Run): void {
 
 function eventsOf(run: Run, type: string): GameEvent[] {
   return run.takeEvents().filter((event) => event.type === type);
+}
+
+/** A standing enemy of the given kind, with the numbers its kind carries. */
+function enemyAt(id: number, x: number, y: number, kind: EnemyKind = "wisp") {
+  return { id, x, y, kind, hp: ENEMY_KINDS[kind].hp, power: ENEMY_KINDS[kind].power };
+}
+
+/** The stat change a gear pickup of this type must make (game/config.ts). */
+function expectGearEffect(before: Record<string, number>, after: Record<string, number>, type: string): void {
+  const expected = { ...before };
+  if (type === "boots") expected.consumption *= CONFIG.pickups.boots;
+  else if (type === "gloves") expected.attack += CONFIG.pickups.gloves;
+  else if (type === "shield") expected.defense += CONFIG.pickups.shield;
+  else if (type === "speed") expected.speed *= CONFIG.pickups.speed;
+  else if (type === "backpack") {
+    expected.storage += CONFIG.pickups.backpack;
+  }
+  expect(after).toEqual(expected);
 }
 
 describe("Run phases", () => {
@@ -283,12 +305,12 @@ describe("Fights", () => {
     run.enemies = [];
     const step = openStep(run);
     const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
-    run.enemies = [{ id: 910, x: target.x, y: target.y }];
+    run.enemies = [enemyAt(910, target.x, target.y)];
     run.move(step.dx, step.dy);
     expect(run.energy).toBeCloseTo(100 - 1 - 15, 10);
     expect(run.enemies).toEqual([]);
     expect(run.phase).toBe("playing");
-    expect(run.takeEvents()).toContainEqual({ type: "fight", cost: 15, x: target.x, y: target.y });
+    expect(run.takeEvents()).toContainEqual({ type: "fight", cost: 15, kind: "wisp", x: target.x, y: target.y });
   });
 
   it("a fight that drains the energy ends the run with cause fight", () => {
@@ -296,7 +318,7 @@ describe("Fights", () => {
     run.items = [];
     run.enemies = [];
     const step = openStep(run);
-    run.enemies = [{ id: 911, x: run.player.x + step.dx, y: run.player.y + step.dy }];
+    run.enemies = [enemyAt(911, run.player.x + step.dx, run.player.y + step.dy)];
     run.energy = 10; // the move (1) plus the fight (15) take it below 0
     run.move(step.dx, step.dy);
     expect(run.phase).toBe("dead");
@@ -312,7 +334,7 @@ describe("Fights", () => {
     const step = openStep(run);
     const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
     expect(run.fightCostAt(target.x, target.y)).toBeNull();
-    run.enemies = [{ id: 913, x: target.x, y: target.y }];
+    run.enemies = [enemyAt(913, target.x, target.y)];
     expect(run.fightCostAt(target.x, target.y)).toBe(15);
     run.stats.attack = 3;
     expect(run.fightCostAt(target.x, target.y)).toBe(5);
@@ -326,12 +348,13 @@ describe("Fights", () => {
     run.items = [];
     run.enemies = [];
     const step = openStep(run);
-    run.enemies = [{ id: 912, x: run.player.x + step.dx, y: run.player.y + step.dy }];
+    run.enemies = [enemyAt(912, run.player.x + step.dx, run.player.y + step.dy)];
     run.move(step.dx, step.dy);
     // cost = round(3 / 2 * max(1, 6 - 5)) = 2
     expect(run.takeEvents()).toContainEqual({
       type: "fight",
       cost: 2,
+      kind: "wisp",
       x: run.player.x,
       y: run.player.y,
     });
@@ -549,7 +572,7 @@ describe("Score and tally", () => {
     run.items = [];
     run.enemies = [];
     const step = openStep(run);
-    run.enemies = [{ id: 921, x: run.player.x + step.dx, y: run.player.y + step.dy }];
+    run.enemies = [enemyAt(921, run.player.x + step.dx, run.player.y + step.dy)];
     const cost = run.fightCostAt(run.player.x + step.dx, run.player.y + step.dy)!;
     run.move(step.dx, step.dy);
     expect(run.score).toBe(KILL_SCORE);
@@ -601,7 +624,7 @@ describe("Score and tally", () => {
     run.items = [];
     run.enemies = [];
     const step = openStep(run);
-    run.enemies = [{ id: 922, x: run.player.x + step.dx, y: run.player.y + step.dy }];
+    run.enemies = [enemyAt(922, run.player.x + step.dx, run.player.y + step.dy)];
     run.move(step.dx, step.dy);
     run.tick(999999);
     expect(run.phase).toBe("dead");
@@ -627,3 +650,136 @@ describe("Score and tally", () => {
     expect(run.tally.cleared).toBe(1);
   });
 });
+
+describe("Enemy kinds and tolls", () => {
+  it("spawned enemies carry the kind with its hp and power", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const run = startedRun(seed);
+      for (const enemy of run.enemies) {
+        expect(ENEMY_KINDS[enemy.kind]).toBeDefined();
+        expect(enemy.hp).toBe(ENEMY_KINDS[enemy.kind].hp);
+        expect(enemy.power).toBe(ENEMY_KINDS[enemy.kind].power);
+      }
+    }
+  });
+
+  it("tollOf equals fightCost with the current stats and drops when attack rises", () => {
+    const run = startedRun(50);
+    run.items = [];
+    run.enemies = [];
+    const enemy = enemyAt(940, run.player.x, run.player.y, "brute");
+    run.enemies = [enemy];
+    expect(run.tollOf(enemy)).toBe(fightCost(run.stats, enemy));
+    expect(run.tollOf(enemy)).toBe(30); // default stats
+    const before = run.tollOf(enemy);
+    run.stats.attack += 0.5;
+    expect(run.tollOf(enemy)).toBeLessThan(before);
+    expect(run.tollOf(enemy)).toBe(fightCost(run.stats, enemy));
+    expect(run.fightCostAt(enemy.x, enemy.y)).toBe(run.tollOf(enemy));
+  });
+
+  it("beating a brute emits fight then exactly one gear pickup that changes the stats", () => {
+    const run = startedRun(51);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
+    run.enemies = [enemyAt(941, target.x, target.y, "brute")];
+    const statsBefore = { ...run.stats };
+    const scoreBefore = run.score;
+    run.move(step.dx, step.dy);
+    const events = run.takeEvents();
+    const fights = events.filter((event) => event.type === "fight");
+    expect(fights).toEqual([
+      { type: "fight", cost: fightCost(statsBefore, ENEMY_KINDS.brute), kind: "brute", x: target.x, y: target.y },
+    ]);
+    const pickups = events.filter((event) => event.type === "pickup");
+    expect(pickups).toHaveLength(1);
+    const item = (pickups as unknown as [{ item: ItemType }])[0].item;
+    expect(GEAR_TYPES).toContain(item);
+    expectGearEffect(statsBefore, { ...run.stats } as unknown as Record<string, number>, item);
+    expect(run.score).toBe(scoreBefore + KILL_SCORE + PICKUP_SCORE);
+    expect(run.tally.kills).toBe(1);
+    expect(run.tally.pickups).toBe(1);
+  });
+
+  it("beating a warden emits fight then exactly two gear pickups", () => {
+    const run = startedRun(52);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    const target = { x: run.player.x + step.dx, y: run.player.y + step.dy };
+    run.enemies = [enemyAt(942, target.x, target.y, "warden")];
+    const statsBefore = { ...run.stats };
+    run.move(step.dx, step.dy);
+    const events = run.takeEvents();
+    const fights = events.filter((event) => event.type === "fight");
+    expect(fights).toHaveLength(1);
+    expect(fights[0]).toMatchObject({ type: "fight", kind: "warden", x: target.x, y: target.y });
+    const pickups = events.filter((event) => event.type === "pickup");
+    expect(pickups).toHaveLength(2);
+    for (const pickup of pickups as unknown as [{ item: ItemType; x: number; y: number }, { item: ItemType; x: number; y: number }]) {
+      expect(GEAR_TYPES).toContain(pickup.item);
+      expect(pickup.x).toBe(target.x);
+      expect(pickup.y).toBe(target.y);
+    }
+    // The two drops together move the stats like two ordinary pickups of those types.
+    const expected = { ...statsBefore } as unknown as Record<string, number>;
+    for (const pickup of pickups as unknown as [{ item: ItemType }]) {
+      const type = pickup.item;
+      if (type === "boots") expected.consumption *= CONFIG.pickups.boots;
+      else if (type === "gloves") expected.attack += CONFIG.pickups.gloves;
+      else if (type === "shield") expected.defense += CONFIG.pickups.shield;
+      else if (type === "speed") expected.speed *= CONFIG.pickups.speed;
+      else if (type === "backpack") expected.storage += CONFIG.pickups.backpack;
+    }
+    expect(run.stats as unknown as Record<string, number>).toEqual(expected);
+    expect(run.tally.pickups).toBe(2);
+  });
+
+  it("beating a wisp emits fight and no pickup", () => {
+    const run = startedRun(53);
+    run.items = [];
+    run.enemies = [];
+    const step = openStep(run);
+    run.enemies = [enemyAt(943, run.player.x + step.dx, run.player.y + step.dy, "wisp")];
+    run.move(step.dx, step.dy);
+    const events = run.takeEvents();
+    expect(events.filter((event) => event.type === "fight")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "pickup")).toHaveLength(0);
+  });
+
+  it("over 30 seeds at levels 3, 6 and 10 no heavy kind sits on the opening route", () => {
+    for (let seed = 100; seed < 130; seed++) {
+      const run = new Run({ seed });
+      run.start();
+      for (let level = 1; level < 10; level++) {
+        if (level >= 3) {
+          const route = routeCells(run.maze, { x: run.player.x, y: run.player.y }, run.exit) ?? [];
+          for (const enemy of run.enemies) {
+            if (enemy.kind === "wisp") continue;
+            const onRoute = route.some((cell) => cell.x === enemy.x && cell.y === enemy.y);
+            expect(onRoute, `seed ${seed} level ${level}: ${enemy.kind} on the route`).toBe(false);
+          }
+        }
+        run.energy = run.stats.storage; // survive the walk to the exit
+        reachClear(run);
+        run.takeEvents();
+        run.nextLevel();
+        run.takeEvents();
+      }
+    }
+  });
+
+  it("the same seed gives the same enemies", () => {
+    for (const seed of [1, 2, 3, 42, 99]) {
+      const a = new Run({ seed });
+      a.start();
+      const b = new Run({ seed });
+      b.start();
+      expect(a.enemies).toEqual(b.enemies);
+      expect(a.items).toEqual(b.items);
+    }
+  });
+});
+

@@ -21,13 +21,25 @@ const STEPS: readonly Step[] = [
     { dx: -1, dy: 0 },
 ];
 
-/** The first step of a shortest path from the player to the exit, or null when there is none. */
-export function nextStep(run: Run): Step | null {
-    const { maze, player, exit } = run;
-    if (player.x === exit.x && player.y === exit.y) return null;
+/** The part of the board a route is searched on: the breadth-first walk only asks these. */
+export interface RouteMaze {
+    width: number;
+    canMove(x: number, y: number, dx: number, dy: number): boolean;
+}
 
+export interface Cell {
+    x: number;
+    y: number;
+}
+
+/**
+ * The cells of a shortest route from `from` to `to` in the maze as it is now, both
+ * ends included, or null when there is none (breadth-first over the open walls).
+ * The spawner uses it to keep the heavy kinds off the route a fresh level begins on.
+ */
+export function routeCells(maze: RouteMaze, from: Cell, to: Cell): Cell[] | null {
     const key = (x: number, y: number) => y * maze.width + x;
-    const startKey = key(player.x, player.y);
+    const startKey = key(from.x, from.y);
     const previous = new Map<number, number>();
     const seen = new Set<number>([startKey]);
     const queue: number[] = [startKey];
@@ -36,17 +48,15 @@ export function nextStep(run: Run): Step | null {
         const current = queue[head];
         const x = current % maze.width;
         const y = Math.floor(current / maze.width);
-        if (x === exit.x && y === exit.y) {
-            // Walk the parent chain back to the player; the last cell before the start is the first step.
-            let stepKey = current;
-            let parent = previous.get(stepKey);
-            while (parent !== undefined && parent !== startKey) {
-                stepKey = parent;
-                parent = previous.get(stepKey);
+        if (x === to.x && y === to.y) {
+            // Walk the parent chain back to the start; that is the route, start to end.
+            const path: Cell[] = [];
+            let cellKey: number | undefined = current;
+            while (cellKey !== undefined) {
+                path.unshift({ x: cellKey % maze.width, y: Math.floor(cellKey / maze.width) });
+                cellKey = previous.get(cellKey);
             }
-            const sx = stepKey % maze.width;
-            const sy = Math.floor(stepKey / maze.width);
-            return { dx: sx - player.x, dy: sy - player.y };
+            return path;
         }
         for (const step of STEPS) {
             if (!maze.canMove(x, y, step.dx, step.dy)) continue;
@@ -58,6 +68,15 @@ export function nextStep(run: Run): Step | null {
         }
     }
     return null;
+}
+
+/** The first step of a shortest path from the player to the exit, or null when there is none. */
+export function nextStep(run: Run): Step | null {
+    const { maze, player, exit } = run;
+    if (player.x === exit.x && player.y === exit.y) return null;
+    const path = routeCells(maze, { x: player.x, y: player.y }, { x: exit.x, y: exit.y });
+    if (path === null || path.length < 2) return null;
+    return { dx: path[1].x - player.x, dy: path[1].y - player.y };
 }
 
 /**

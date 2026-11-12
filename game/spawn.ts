@@ -5,12 +5,13 @@
 
 import type { Rng } from "./rng";
 import type { ItemType } from "./events";
+import { enemyFor, type EnemyKind } from "./enemies";
 
 /** The six pickup kinds. */
 export const ITEM_TYPES: readonly ItemType[] = ["energy", "boots", "gloves", "shield", "speed", "backpack"];
 
-/** The five kinds that are not "energy"; they share whatever "energy" does not take. */
-const OTHER_ITEM_TYPES: readonly ItemType[] = ITEM_TYPES.filter((type) => type !== "energy");
+/** The five gear pickups (everything but "energy"); they share whatever "energy" does not take. */
+export const GEAR_TYPES: readonly ItemType[] = ITEM_TYPES.filter((type) => type !== "energy");
 
 /** A whole number the caller rolled, or a range [min, max] (inclusive on both ends) to roll from. */
 export type Count = number | { min: number; max: number } | readonly [number, number];
@@ -29,11 +30,23 @@ export interface SpawnedItem {
 export interface SpawnedEnemy {
     x: number;
     y: number;
+    kind: EnemyKind;
 }
 
 export interface SpawnedLevel {
     items: SpawnedItem[];
     enemies: SpawnedEnemy[];
+}
+
+export interface SpawnOptions {
+    /** Depth the kinds are drawn for (game/enemies.ts enemyFor); defaults to 1, so only wisps. */
+    depth?: number;
+    /**
+     * The cells of the route from the start to the exit in the maze as it is at level
+     * start. Brutes and wardens are never placed on it: when no free cell off the
+     * route exists, such an enemy becomes a wisp instead.
+     */
+    route?: readonly { x: number; y: number }[];
 }
 
 /** The cell the player starts on for a level of the given size. */
@@ -69,7 +82,7 @@ function shuffle<T>(items: T[], rng: Rng): void {
 function pickType(rng: Rng, energyShare: number): ItemType {
     const share = Math.min(1, Math.max(0, energyShare));
     if (rng.next() < share) return "energy";
-    return rng.pick(OTHER_ITEM_TYPES);
+    return rng.pick(GEAR_TYPES);
 }
 
 /**
@@ -87,11 +100,19 @@ export function spawnLevel(
     size: number,
     counts: SpawnCounts,
     energyShare: number = 1 / ITEM_TYPES.length,
+    options: SpawnOptions = {},
 ): SpawnedLevel {
     const start = startCell(size);
     const exit = exitCell(size);
+    const depth = options.depth ?? 1;
+    const route = options.route ?? [];
     const enemyCount = rollCount(rng, counts.enemies);
     const itemCount = rollCount(rng, counts.items);
+
+    const onRoute = (cell: { x: number; y: number }): boolean =>
+        route.some((step) => step.x === cell.x && step.y === cell.y);
+    const farFromStart = (cell: { x: number; y: number }): boolean =>
+        Math.abs(cell.x - start.x) + Math.abs(cell.y - start.y) >= 2;
 
     const cells: { x: number; y: number }[] = [];
     for (let y = 0; y < size; y++) {
@@ -103,12 +124,29 @@ export function spawnLevel(
     }
     shuffle(cells, rng);
 
-    const enemies: SpawnedEnemy[] = [];
+    const enemyCells: { x: number; y: number }[] = [];
     const left: { x: number; y: number }[] = [];
     for (const cell of cells) {
-        const farFromStart = Math.abs(cell.x - start.x) + Math.abs(cell.y - start.y) >= 2;
-        if (enemies.length < enemyCount && farFromStart) enemies.push({ x: cell.x, y: cell.y });
+        if (enemyCells.length < enemyCount && farFromStart(cell)) enemyCells.push({ x: cell.x, y: cell.y });
         else left.push(cell);
+    }
+
+    // Give each enemy its kind. A brute or warden dealt onto the opening route is
+    // moved to a free cell off it; when none is free it becomes a wisp instead.
+    const enemies: SpawnedEnemy[] = [];
+    for (const cell of enemyCells) {
+        const kind = enemyFor(depth, rng);
+        if (kind === "wisp" || !onRoute(cell)) {
+            enemies.push({ x: cell.x, y: cell.y, kind });
+            continue;
+        }
+        const swapIndex = left.findIndex((candidate) => !onRoute(candidate) && farFromStart(candidate));
+        if (swapIndex === -1) {
+            enemies.push({ x: cell.x, y: cell.y, kind: "wisp" });
+        } else {
+            const [swap] = left.splice(swapIndex, 1);
+            enemies.push({ x: swap.x, y: swap.y, kind });
+        }
     }
 
     const items: SpawnedItem[] = [];

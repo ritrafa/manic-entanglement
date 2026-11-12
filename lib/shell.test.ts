@@ -7,9 +7,9 @@ describe("eventMessage", () => {
   });
 
   it("floats the whole fight cost as -<cost> Energy", () => {
-    expect(eventMessage({ type: "fight", cost: 15, x: 0, y: 0 })).toBe("-15 Energy");
-    expect(eventMessage({ type: "fight", cost: 1, x: 0, y: 0 })).toBe("-1 Energy");
-    expect(eventMessage({ type: "fight", cost: 999, x: 0, y: 0 })).toBe("-999 Energy");
+    expect(eventMessage({ type: "fight", cost: 15, kind: "wisp", x: 0, y: 0 })).toBe("-15 Energy");
+    expect(eventMessage({ type: "fight", cost: 1, kind: "wisp", x: 0, y: 0 })).toBe("-1 Energy");
+    expect(eventMessage({ type: "fight", cost: 999, kind: "wisp", x: 0, y: 0 })).toBe("-999 Energy");
   });
 
   it("floats nothing for the other events", () => {
