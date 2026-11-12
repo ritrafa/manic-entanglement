@@ -5,6 +5,7 @@
 
 import type { Rng } from "./rng";
 import type { ItemType } from "./events";
+import { TOOL_IDS, type ToolId } from "./tools";
 import { enemyFor, type EnemyKind } from "./enemies";
 
 /** The six pickup kinds. */
@@ -19,12 +20,15 @@ export type Count = number | { min: number; max: number } | readonly [number, nu
 export interface SpawnCounts {
     items: Count;
     enemies: Count;
+    /** Tool pickups (game/tools.ts), placed separately from the normal pickup count. */
+    tools?: Count;
 }
 
 export interface SpawnedItem {
     x: number;
     y: number;
-    type: ItemType;
+    /** One of the six gear pickups, or a tool pickup (game/tools.ts). */
+    type: ItemType | ToolId;
 }
 
 export interface SpawnedEnemy {
@@ -152,6 +156,16 @@ export function spawnLevel(
     const items: SpawnedItem[] = [];
     for (let i = 0; i < itemCount && i < left.length; i++) {
         items.push({ x: left[i].x, y: left[i].y, type: pickType(rng, energyShare) });
+    }
+
+    // Tool pickups come after the gear: the cells the items did not take, with each
+    // type drawn from TOOL_IDS. The count is rolled last, so leaving `tools` out of
+    // the call changes neither the enemies' nor the items' placement.
+    const toolCount = rollCount(rng, counts.tools ?? 0);
+    const firstFreeCell = Math.min(itemCount, left.length);
+    for (let i = 0; i < toolCount && firstFreeCell + i < left.length; i++) {
+        const cell = left[firstFreeCell + i];
+        items.push({ x: cell.x, y: cell.y, type: rng.pick(TOOL_IDS) });
     }
 
     return { items, enemies };

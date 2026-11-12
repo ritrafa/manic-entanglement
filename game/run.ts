@@ -13,7 +13,8 @@ import { levelPlan } from "./plan";
 import { CONFIG } from "./config";
 import { fightCost } from "./combat";
 import { KILL_SCORE, PICKUP_SCORE, levelScore } from "./score";
-import type { DeathCause, GameEvent, ItemType } from "./events";
+import type { DeathCause, GameEvent, ItemType, PickupType } from "./events";
+import { TOOL_INFO, TOOL_IDS, isToolType, type ToolId } from "./tools";
 
 export type RunPhase = "ready" | "playing" | "clear" | "dead";
 
@@ -29,7 +30,8 @@ export interface RunItem {
     id: number;
     x: number;
     y: number;
-    type: ItemType;
+    /** One of the six gear pickups, or a tool pickup (game/tools.ts). */
+    type: PickupType;
 }
 
 export interface RunEnemy {
@@ -96,6 +98,17 @@ export class Run {
      * it unchanged.
      */
     forecast: Forecast = { walk: [], opens: [], closes: [] };
+    /**
+     * Charges carried per tool (game/tools.ts): 0 at start(), kept from level to
+     * level, at most CONFIG.toolMax of each — a pickup beyond the cap is still
+     * removed and scores, but adds nothing.
+     */
+    tools: Record<ToolId, number> = { anchor: 0, twist: 0 };
+    /**
+     * Successful moves the Anchor still freezes the maze for, 0 when nothing is
+     * anchored. While it is above 0 the forecast stays empty and no shift is applied.
+     */
+    anchored = 0;
 
     private rng: Rng;
     /** The directions behind the current forecast, applied with maze.step on the next move. */
@@ -121,6 +134,8 @@ export class Run {
         this.level = 1;
         this.score = 0;
         this.tally = freshTally();
+        this.tools = { anchor: 0, twist: 0 };
+        this.anchored = 0;
         this.energy = Math.max(CONFIG.startEnergy, this.stats.storage);
         this.buildLevel();
         this.rollForecast();
@@ -164,7 +179,7 @@ export class Run {
         const itemIndex = this.items.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
         if (itemIndex !== -1) {
             const item = this.items[itemIndex];
-            const text = this.applyItem(item.type);
+            const text = isToolType(item.type) ? this.applyToolPickup(item.type) : this.applyItem(item.type);
             this.items.splice(itemIndex, 1);
             this.score += PICKUP_SCORE;
             this.tally.pickups += 1;
@@ -206,7 +221,12 @@ export class Run {
         if (this.energy <= 0) {
             this.die(fought ? "fight" : "move");
         }
-        if (this.phase === "playing") this.rollForecast();
+        if (this.phase === "playing") {
+            // A successful move spends one anchored move; when the last one is
+            // spent, the walk for the next move is rolled again.
+            if (this.anchored > 0) this.anchored -= 1;
+            this.rollForecast();
+        }
         return true;
     }
 
@@ -258,6 +278,26 @@ export class Run {
         return fightCost(this.stats, enemy);
     }
 
+    /**
+     * Use one charge of a tool (game/tools.ts), true when it took effect. Only
+     * while playing and only with a charge to spend; both tools are refused
+     * while an Anchor still holds, so a refused use costs nothing and emits
+     * nothing. A successful use emits a "tool" event: the Anchor freezes the
+     * maze for the next CONFIG.anchorMoves successful moves, the Twist rolls a
+     * fresh walk for the next move.
+     */
+    useTool(id: ToolId): boolean {
+        if (this.phase !== "playing") return false;
+        if (!TOOL_IDS.includes(id)) return false;
+        if (this.tools[id] <= 0) return false;
+        if (this.anchored > 0) return false;
+        this.tools[id] -= 1;
+        this.push({ type: "tool", id });
+        if (id === "anchor") this.anchored = CONFIG.anchorMoves;
+        this.rollForecast();
+        return true;
+    }
+
     /** The events since the last call, oldest first; the internal list is emptied. */
     takeEvents(): GameEvent[] {
         const events = this.events;
@@ -301,6 +341,12 @@ export class Run {
         }
     }
 
+    /** Take a tool pickup: one charge, never above the cap; the text floats as it goes. */
+    private applyToolPickup(id: ToolId): string {
+        this.tools[id] = Math.min(CONFIG.toolMax, this.tools[id] + 1);
+        return `+1 ${TOOL_INFO[id].name}`;
+    }
+
     /** Build the maze, start, exit, pickups and enemies for the current level from its plan. */
     private buildLevel(): void {
         const plan = levelPlan(this.level);
@@ -315,7 +361,7 @@ export class Run {
         const spawned = spawnLevel(
             this.rng,
             size,
-            { items: plan.items, enemies: plan.enemies },
+            { items: plan.items, enemies: plan.enemies, tools: plan.tools },
             plan.energyShare,
             { depth: this.level, route },
         );
@@ -328,8 +374,18 @@ export class Run {
         }));
     }
 
-    /** Roll the walk for the next move and store it as `forecast` (with its directions). */
+    /**
+     * Roll the walk for the next move and store it as `forecast` (with its
+     * directions). While an Anchor holds, nothing is rolled: the stored walk is
+     * empty and the forecast shows no opens or closes, so the next moves apply
+     * no shift at all.
+     */
     private rollForecast(): void {
+        if (this.anchored > 0) {
+            this.forecastDirs = [];
+            this.forecast = { walk: [], opens: [], closes: [] };
+            return;
+        }
         this.forecastDirs = rollWalk(this.maze, this.rng, levelPlan(this.level).shifts);
         this.forecast = forecastOf(this.maze, this.forecastDirs);
     }

@@ -60,6 +60,7 @@ export const HOWTO: HowToLine[] = [
     { text: "Gear makes you stronger: gloves hit harder, a shield blunts the toll.", image: "/images/gloves.gif" },
     { text: "Boots make each step cheaper and speed slows the energy clock.", image: "/images/boots.gif" },
     { text: "A backpack carries more energy.", image: "/images/backpack.gif" },
+    { text: "Anchor freezes the maze for six moves; Twist rerolls the forecast. Keys 1 and 2.", image: "/images/tools/anchor.svg" },
     { text: "Arrows or WASD to move, hold to run; on touch, swipe.", image: null },
     { text: "Esc pauses the run, M mutes the sound.", image: null },
 ];

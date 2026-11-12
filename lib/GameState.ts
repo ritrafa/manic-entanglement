@@ -14,6 +14,7 @@ import { defaultSave, loadSave, writeSave, type SaveData, type StorageLike } fro
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
+import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
 import { beepVoices, sfxFor, warnVoices } from '@/game/audio/sfx';
@@ -35,6 +36,15 @@ export interface GameSnapshot extends HudModel {
     settings: Settings;
     /** The latest spoken announcement (game/settings.ts), shown by the live region. */
     announcement: string | null;
+    /** Charges carried per tool (game/tools.ts); the ToolBar shows and spends them. */
+    tools: Record<ToolId, number>;
+    /** Successful moves the Anchor still freezes the maze for, 0 when not anchored. */
+    anchored: number;
+}
+
+/** True when two tool charge records show the same counts. */
+function sameTools(a: Record<ToolId, number>, b: Record<ToolId, number>): boolean {
+    return TOOL_IDS.every((id) => a[id] === b[id]);
 }
 
 const SPRITE_FRAME_MS = 150;
@@ -126,7 +136,7 @@ class GameState {
             },
         });
         this.bestBeforeRun = this.highScore;
-        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null };
+        this.hudSnapshot = { ...hudModel(this.run, this.bestBeforeRun), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -273,6 +283,10 @@ class GameState {
             this.toggleMute();
         } else if (action === 'pause') {
             this.dispatch('pause');
+        } else if (action === 'tool1') {
+            this.useTool('anchor');
+        } else if (action === 'tool2') {
+            this.useTool('twist');
         }
     }
 
@@ -592,6 +606,22 @@ class GameState {
         this.publishHud();
     }
 
+    /**
+     * Use one charge of a tool (game/tools.ts): the toolbar's tap and the tool1
+     * and tool2 keys both come through here. The run decides (playing, a charge,
+     * not already anchored); true when the use took effect. A successful use
+     * re-draws the board — the forecast marks vanish under an Anchor and change
+     * under a Twist — and wakes the HUD for the new charge count.
+     */
+    useTool(id: ToolId): boolean {
+        const used = this.run.useTool(id);
+        if (!used) return false;
+        this.handleEvents();
+        this.board.update(this.run);
+        this.publishHud();
+        return true;
+    }
+
     /** The 3-2-1 countdown; true when it started, false when the request was refused. */
     startGame(): boolean {
         // One countdown at a time: a second request while one runs is ignored,
@@ -751,6 +781,8 @@ class GameState {
             howtoFromPlay: this.howtoFromPlay,
             settings: this.settings,
             announcement: said ?? this.hudSnapshot.announcement,
+            tools: { ...this.run.tools },
+            anchored: this.run.anchored,
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -758,7 +790,9 @@ class GameState {
             && this.hudSnapshot.best === next.best
             && this.hudSnapshot.howtoFromPlay === next.howtoFromPlay
             && this.hudSnapshot.settings === next.settings
-            && this.hudSnapshot.announcement === next.announcement) {
+            && this.hudSnapshot.announcement === next.announcement
+            && sameTools(this.hudSnapshot.tools, next.tools)
+            && this.hudSnapshot.anchored === next.anchored) {
             return;
         }
         this.hudSnapshot = next;

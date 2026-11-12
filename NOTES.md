@@ -125,3 +125,26 @@
   (`device-width`, `initialScale: 1`, `viewportFit: "cover"`, zoom untouched) and
   `styles/globals.css` pads the page with `env(safe-area-inset-*)` and styles the D-pad
   and the pause button.
+- Shipped the first two promised items (owner decision Q16: hand-drawn SVG icons in the
+  game's teal and gold): `game/tools.ts` defines the `ToolId` pair `anchor`/`twist` with
+  `TOOL_IDS` and `TOOL_INFO` (name plus one-line hint), and `game/config.ts` gained
+  `anchorMoves: 6` and `toolMax: 3`. `game/plan.ts` puts `tools` in the level plan
+  (one at depth 1 and every even depth, none otherwise) and `game/spawn.ts` places that
+  many tool pickups from the cells the gear did not take, each type drawn from the rng
+  after the gear so leaving `tools` out of a call changes nothing else. `game/run.ts`
+  carries `tools` charges (0 at `start()`, kept across levels, capped; a pickup beyond
+  the cap still scores and emits its `+1 Anchor` / `+1 Twist` pickup event) and
+  `useTool(id)`: the Anchor empties the forecast and freezes the maze for the next six
+  successful moves (`run.anchored` counts them down; blocked moves do not spend one),
+  the Twist rerolls the walk for the next move; both need a charge, only run while
+  playing, refuse while an Anchor holds, and a successful use emits `tool { id }`
+  (`game/events.ts`). `game/keys.ts` binds `tool1`/`tool2` to Digit1/Digit2,
+  `game/audio/sfx.ts` gives the tool event its sound, and `game/menu.ts` explains the
+  pair in one how-to line. The shell's snapshot carries `tools` and `anchored`; the new
+  `components/ToolBar.tsx` in the HUD shows icon, name, key hint and charge count per
+  tool (disabled at 0, click or tap spends one via `GameState.useTool`),
+  `lib/board.ts` toggles `.knot-frozen` on the Knot while anchored (no pulse, dashed
+  ring) and draws tool pickups with `.item_anchor` / `.item_twist` over
+  `public/images/tools/*.svg`; `game/tools.test.ts` plus new `game/run.test.ts` cases
+  cover the freeze, the reroll, the caps and the refusals, and the forecast baseline in
+  `game/forecast.test.ts` was re-captured for the new tool-pickup draws.

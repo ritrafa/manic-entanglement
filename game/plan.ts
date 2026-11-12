@@ -18,6 +18,8 @@ export interface LevelPlan {
     energyShare: number;
     /** Enemies on the level. */
     enemies: number;
+    /** Tool pickups on the level (game/tools.ts): 1 at depth 1 and every even depth, else 0. */
+    tools: number;
     /** Energy added on top of what is left when the exit is reached. */
     exitBonus: number;
 }
@@ -34,5 +36,6 @@ export function levelPlan(depth: number): LevelPlan {
         energyShare: CONFIG.energyShare,
         enemies: Math.min(CONFIG.maxEnemies, 1 + Math.floor(d / 2)),
         exitBonus: CONFIG.exitBonus,
+        tools: d === 1 || d % 2 === 0 ? 1 : 0,
     };
 }

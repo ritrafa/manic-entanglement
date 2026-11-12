@@ -90,6 +90,22 @@ export function sfxFor(event: GameEvent, ctx: SfxContext): Voice[] {
                 gain: 0.22,
             }));
         }
+        case "tool":
+            if (event.id === "anchor") {
+                // A low steady tone with a soft fifth over it: the maze holds still.
+                return [
+                    { wave: "sine", freq: 196, at: 0, dur: 0.28, gain: 0.22 },
+                    { wave: "triangle", freq: 294, at: 0.06, dur: 0.22, gain: 0.14 },
+                ];
+            }
+            // Twist: three quick rising notes, the forecast thrown and rolled again.
+            return [noteHz(4), noteHz(6), noteHz(9)].map((freq, i): Voice => ({
+                wave: "triangle",
+                freq,
+                at: i * 0.07,
+                dur: 0.07,
+                gain: 0.22,
+            }));
         case "levelStart":
             // One soft low note under the new maze.
             return [{ wave: "sine", freq: 110, at: 0, dur: 0.3, gain: 0.12 }];

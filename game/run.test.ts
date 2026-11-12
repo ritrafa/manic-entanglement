@@ -413,7 +413,8 @@ describe("Levels", () => {
       expect(run.player).toMatchObject({ x: Math.floor(plan.size / 2), y: plan.size - 1 });
       expect(run.exit).toEqual({ x: Math.floor(plan.size / 2), y: 0 });
       expect(run.enemies.length).toBeLessThanOrEqual(plan.enemies);
-      expect(run.items.length).toBeLessThanOrEqual(plan.items[1]);
+      // Tool pickups ride along in items but are separate from the pickup count.
+      expect(run.items.length).toBeLessThanOrEqual(plan.items[1] + plan.tools);
       if (level === 6) break;
       reachClear(run); // clears and stops the clock; nextLevel goes on
       run.takeEvents();
@@ -783,3 +784,281 @@ describe("Enemy kinds and tolls", () => {
   });
 });
 
+
+// --- Tools (game/tools.ts): charges, the Anchor's freeze and the Twist's reroll ---
+
+/** The open interior walls as "x,y,dir" keys (right = "r", down = "d"). */
+function openEdges(run: Run): Set<string> {
+  const open = new Set<string>();
+  for (let y = 0; y < run.maze.height; y++) {
+    for (let x = 0; x < run.maze.width; x++) {
+      const cell = run.maze.grid[y][x];
+      if (x + 1 < run.maze.width && !cell.walls[1]) open.add(`${x},${y},r`);
+      if (y + 1 < run.maze.height && !cell.walls[2]) open.add(`${x},${y},d`);
+    }
+  }
+  return open;
+}
+
+/** Everything a maze shift can change: the walls and the origin. */
+function shiftSnapshot(run: Run): string {
+  return JSON.stringify({ grid: run.maze.wallGrid, origin: run.maze.origin });
+}
+
+/** The first cardinal step blocked by a wall or the edge, or null when all four open. */
+function blockedStep(run: Run): { dx: number; dy: number } | null {
+  for (const step of STEPS) {
+    if (!run.maze.canMove(run.player.x, run.player.y, step.dx, step.dy)) return step;
+  }
+  return null;
+}
+
+/** A run with nothing on the board and an unreachable exit: free moves, no clear. */
+function freeRun(seed: number): Run {
+  const run = startedRun(seed);
+  run.items = [];
+  run.enemies = [];
+  run.exit = { x: -9, y: -9 };
+  run.takeEvents();
+  return run;
+}
+
+/** Check the stored forecast against what the next successful move then does. */
+function expectForecastMatchesMove(run: Run): void {
+  const forecast = JSON.parse(JSON.stringify(run.forecast));
+  const step = openStep(run);
+  const before = openEdges(run);
+  const originBefore = { ...run.maze.origin };
+  expect(run.move(step.dx, step.dy)).toBe(true);
+  const after = openEdges(run);
+  const opens = [...after].filter((key) => !before.has(key)).sort();
+  const closes = [...before].filter((key) => !after.has(key)).sort();
+  expect(forecast.opens.map((e: { x: number; y: number; dir: string }) => `${e.x},${e.y},${e.dir}`).sort()).toEqual(opens);
+  expect(forecast.closes.map((e: { x: number; y: number; dir: string }) => `${e.x},${e.y},${e.dir}`).sort()).toEqual(closes);
+  const last = forecast.walk[forecast.walk.length - 1];
+  expect(run.maze.origin).toEqual(last ?? originBefore);
+}
+
+describe("Run tools: charges", () => {
+  it("start carries none, pickups fill up to the cap and levels do not empty the pockets", () => {
+    const run = new Run({ seed: 30 });
+    expect(run.tools).toEqual({ anchor: 0, twist: 0 });
+    expect(run.anchored).toBe(0);
+    run.start();
+    expect(run.tools).toEqual({ anchor: 0, twist: 0 });
+
+    // Five Anchor pickups in a row: charges stop at the cap of three.
+    const free = freeRun(31);
+    for (let i = 0; i < 5; i++) {
+      const step = openStep(free);
+      free.items = [{ id: 900 + i, x: free.player.x + step.dx, y: free.player.y + step.dy, type: "anchor" }];
+      const scoreBefore = free.score;
+      expect(free.move(step.dx, step.dy)).toBe(true);
+      expect(free.score).toBe(scoreBefore + PICKUP_SCORE); // beyond the cap it still scores
+    }
+    expect(free.tools.anchor).toBe(CONFIG.toolMax);
+    expect(free.tools.twist).toBe(0);
+
+    // Charges survive a level change and die only with a fresh start.
+    free.exit = { x: Math.floor(free.maze.width / 2), y: 0 };
+    reachClear(free);
+    free.takeEvents();
+    free.nextLevel();
+    expect(free.tools).toEqual({ anchor: CONFIG.toolMax, twist: 0 });
+    free.tick(999999);
+    expect(free.phase).toBe("dead");
+    free.start();
+    expect(free.tools).toEqual({ anchor: 0, twist: 0 });
+    expect(free.anchored).toBe(0);
+  });
+
+  it("a tool pickup emits a pickup event with its +1 text", () => {
+    for (const id of ["anchor", "twist"] as const) {
+      const run = freeRun(32);
+      const step = openStep(run);
+      run.items = [{ id: 940, x: run.player.x + step.dx, y: run.player.y + step.dy, type: id }];
+      run.takeEvents();
+      expect(run.move(step.dx, step.dy)).toBe(true);
+      const pickups = run.takeEvents().filter((event) => event.type === "pickup");
+      expect(pickups).toHaveLength(1);
+      expect(pickups[0]).toMatchObject({
+        type: "pickup",
+        item: id,
+        text: `+1 ${id === "anchor" ? "Anchor" : "Twist"}`,
+        x: run.player.x,
+        y: run.player.y,
+      });
+    }
+  });
+
+  it("a refused use costs nothing and emits nothing", () => {
+    const run = freeRun(33);
+    // No charge.
+    expect(run.useTool("anchor")).toBe(false);
+    expect(run.useTool("twist")).toBe(false);
+    expect(run.takeEvents()).toEqual([]);
+    expect(run.anchored).toBe(0);
+    // Not playing: ready, clear and dead all refuse, and the charge stays.
+    run.tools.anchor = 1;
+    run.tools.twist = 1;
+    const ready = new Run({ seed: 34 });
+    ready.tools = { anchor: 1, twist: 1 };
+    expect(ready.useTool("anchor")).toBe(false);
+    expect(ready.useTool("twist")).toBe(false);
+
+    run.exit = { x: Math.floor(run.maze.width / 2), y: 0 };
+    reachClear(run);
+    expect(run.phase).toBe("clear");
+    expect(run.useTool("anchor")).toBe(false);
+    expect(run.useTool("twist")).toBe(false);
+    run.takeEvents();
+    run.nextLevel();
+    run.tick(999999);
+    expect(run.phase).toBe("dead");
+    expect(run.useTool("anchor")).toBe(false);
+    expect(run.useTool("twist")).toBe(false);
+    expect(run.takeEvents().filter((event) => event.type === "tool")).toEqual([]);
+    expect(run.tools).toEqual({ anchor: 1, twist: 1 });
+  });
+});
+
+describe("Run tools: anchor", () => {
+  it("six successful moves leave every wall and the origin unchanged; the seventh shifts", () => {
+    const run = freeRun(35);
+    run.tools.anchor = 1;
+    run.takeEvents();
+    expect(run.useTool("anchor")).toBe(true);
+    expect(run.tools.anchor).toBe(0);
+    expect(run.anchored).toBe(CONFIG.anchorMoves);
+    expect(run.takeEvents()).toEqual([{ type: "tool", id: "anchor" }]);
+
+    // While anchored the forecast is empty: no walk, no opens, no closes.
+    expect(run.forecast).toEqual({ walk: [], opens: [], closes: [] });
+    const frozen = shiftSnapshot(run);
+    for (let move = 1; move <= CONFIG.anchorMoves; move++) {
+      const step = openStep(run);
+      expect(run.move(step.dx, step.dy), `anchored move ${move}`).toBe(true);
+      expect(shiftSnapshot(run), `move ${move} shifted the maze`).toBe(frozen);
+      expect(run.anchored).toBe(CONFIG.anchorMoves - move);
+      // Only while moves are still frozen: the sixth spends the anchor and a
+      // walk for the seventh is rolled at once.
+      if (run.anchored > 0) expect(run.forecast).toEqual({ walk: [], opens: [], closes: [] });
+    }
+    // The anchor is spent: a walk is rolled again and the next move applies it.
+    expect(run.anchored).toBe(0);
+    expect(run.forecast.walk.length).toBeGreaterThan(0);
+    const before = shiftSnapshot(run);
+    const step = openStep(run);
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(shiftSnapshot(run)).not.toBe(before);
+  });
+
+  it("a blocked move does not use up an anchored move", () => {
+    const run = freeRun(36);
+    run.tools.anchor = 1;
+    expect(run.useTool("anchor")).toBe(true);
+    const blocked = blockedStep(run);
+    expect(blocked).not.toBeNull();
+    for (let i = 0; i < 3; i++) {
+      expect(run.move(blocked!.dx, blocked!.dy)).toBe(false);
+      expect(run.anchored).toBe(CONFIG.anchorMoves);
+    }
+    const step = openStep(run);
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(run.anchored).toBe(CONFIG.anchorMoves - 1);
+  });
+
+  it("using Anchor while anchored, or without a charge, is refused and costs nothing", () => {
+    const run = freeRun(37);
+    run.tools.anchor = 2;
+    run.takeEvents();
+    expect(run.useTool("anchor")).toBe(true);
+    run.takeEvents();
+    expect(run.useTool("anchor")).toBe(false);
+    expect(run.takeEvents()).toEqual([]);
+    expect(run.tools.anchor).toBe(1); // the second charge is still there
+    expect(run.anchored).toBe(CONFIG.anchorMoves);
+  });
+
+  it("when the anchor ends the forecast is non-empty again and matches the next move", () => {
+    const run = freeRun(38);
+    run.tools.anchor = 1;
+    expect(run.useTool("anchor")).toBe(true);
+    for (let move = 0; move < CONFIG.anchorMoves; move++) {
+      const step = openStep(run);
+      expect(run.move(step.dx, step.dy)).toBe(true);
+    }
+    expect(run.anchored).toBe(0);
+    expect(run.forecast.walk.length).toBeGreaterThan(0);
+    expectForecastMatchesMove(run);
+  });
+});
+
+describe("Run tools: twist", () => {
+  it("the new forecast matches what the next move then does, over 20 seeds", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const run = freeRun(seed);
+      run.tools.twist = 1;
+      expect(run.useTool("twist"), `seed ${seed}`).toBe(true);
+      expectForecastMatchesMove(run);
+    }
+  });
+
+  it("over 20 seeds the rerolled walk differs from the previous one at least 15 times", () => {
+    let differed = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const run = freeRun(seed);
+      const before = JSON.stringify(run.forecast.walk);
+      run.tools.twist = 1;
+      expect(run.useTool("twist"), `seed ${seed}`).toBe(true);
+      if (JSON.stringify(run.forecast.walk) !== before) differed++;
+    }
+    expect(differed).toBeGreaterThanOrEqual(15);
+  });
+
+  it("emits a tool event, spends the charge, and is refused while anchored", () => {
+    const run = freeRun(39);
+    run.tools.twist = 1;
+    run.takeEvents();
+    expect(run.useTool("twist")).toBe(true);
+    expect(run.takeEvents()).toEqual([{ type: "tool", id: "twist" }]);
+    expect(run.tools.twist).toBe(0);
+    expect(run.useTool("twist")).toBe(false);
+
+    run.tools.anchor = 1;
+    expect(run.useTool("anchor")).toBe(true);
+    run.takeEvents();
+    run.tools.twist = 1;
+    expect(run.useTool("twist")).toBe(false); // refused while anchored
+    expect(run.takeEvents()).toEqual([]);
+    expect(run.tools.twist).toBe(1); // and the charge survived the refusal
+  });
+});
+
+describe("Run tools: determinism", () => {
+  it("the same seed and the same inputs, moves and tool uses alike, give the same events", () => {
+    const scripted = (seed: number): string => {
+      const run = new Run({ seed });
+      run.start();
+      run.tools = { anchor: 3, twist: 3 };
+      const all: unknown[] = [];
+      for (let i = 0; i < 40 && run.phase !== "dead"; i++) {
+        if (run.phase === "clear") run.nextLevel();
+        if (i % 7 === 3) run.useTool("anchor");
+        if (i % 5 === 2) run.useTool("twist");
+        const step = openStep(run);
+        run.tick(250);
+        if (run.phase !== "playing") {
+          all.push(...run.takeEvents());
+          continue;
+        }
+        run.move(step.dx, step.dy);
+        all.push(...run.takeEvents());
+      }
+      return JSON.stringify(all);
+    };
+    for (const seed of [3, 11, 42, 77, 123]) {
+      expect(scripted(seed)).toBe(scripted(seed));
+    }
+  });
+});

@@ -421,6 +421,9 @@ export class Board {
         this.knotElement.style.width = `${this.cell}px`;
         this.knotElement.style.height = `${this.cell}px`;
         this.knotElement.style.transform = `translate(${x}px, ${y}px)`;
+        // While an Anchor holds, the Knot stops pulsing and shows a dashed ring:
+        // the maze is frozen (game/tools.ts, styles/globals.css .knot-frozen).
+        this.knotElement.classList.toggle('knot-frozen', run.anchored > 0);
     }
 
     /** Replace the wall marks with one element per tile the forecast changes. */

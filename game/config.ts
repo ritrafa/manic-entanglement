@@ -22,6 +22,10 @@ export const CONFIG = {
     energyShare: 0.4,
     /** Energy added on top of what is left when the exit is reached (capped at storage). */
     exitBonus: 50,
+    /** Successful moves an Anchor freezes the maze for (game/tools.ts, game/run.ts). */
+    anchorMoves: 6,
+    /** Most charges of one tool a run can carry at a time (game/run.ts). */
+    toolMax: 3,
     /** Tiles across the dark aura that sits under the Knot (lib/board.ts passes it to blobRect). */
     blobTiles: 4,
     /** Milliseconds between steps while a direction is held (game/stepper.ts). */

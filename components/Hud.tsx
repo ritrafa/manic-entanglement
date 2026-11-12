@@ -4,6 +4,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { getRelatedAssetsByOwner } from '../lib/helius';
 import { useWallet } from '@solana/wallet-adapter-react';
 import GameState from '@/lib/GameState';
+import ToolBar from './ToolBar';
 
 
 interface HudProps {
@@ -103,6 +104,8 @@ const Hud: React.FC<HudProps> = ({ player, gameState }) => {
                     </div>
                 </div>
             </div>
+            {/* The two tool buttons: Anchor and Twist, spent by click, tap or keys 1 and 2. */}
+            <ToolBar gameState={gameState} />
             {/* Spoken by assistive technology when the shell has something to
                 say (game/settings.ts announcement): Energy low, Level N,
                 Paused, Game over. Invisible on screen, polite in the reader. */}
