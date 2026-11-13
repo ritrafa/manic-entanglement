@@ -10,6 +10,7 @@ import { peekProof } from '@/lib/nft/proofPeek';
 import MintPanel from './MintPanel';
 import { SavePanel } from './SavePanel';
 import WalletContextProvider from './WalletContextProvider';
+import NftModal from './NftModal';
 
 interface WalletBoxProps {
     gameState: GameState;
@@ -200,19 +201,23 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
                     </>
                 )}
                 {mintOpen && address !== undefined && (
-                    <MintPanel
-                        gameState={gameState}
-                        wallet={address}
-                        onClose={() => setMintOpen(false)}
-                        onMinted={() => void handleCheckAssets()}
-                    />
+                    <NftModal label="Mint a reptile">
+                        <MintPanel
+                            gameState={gameState}
+                            wallet={address}
+                            onClose={() => setMintOpen(false)}
+                            onMinted={() => void handleCheckAssets()}
+                        />
+                    </NftModal>
                 )}
                 {saveOpen && (
-                    <SavePanel
-                        gameState={gameState}
-                        onClose={() => setSaveOpen(false)}
-                        onSaved={() => void handleCheckAssets()}
-                    />
+                    <NftModal label="Save progress to my NFT">
+                        <SavePanel
+                            gameState={gameState}
+                            onClose={() => setSaveOpen(false)}
+                            onSaved={() => void handleCheckAssets()}
+                        />
+                    </NftModal>
                 )}
             </div>
         </div>

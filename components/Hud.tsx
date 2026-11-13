@@ -140,8 +140,15 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                 rides row 1 so the player can tell, at a glance, that this
                 run counts for the NFT. */}
             {model.verified && (
-                <span className="me-verified" role="status" title="Server-seeded run, verified on finish">
+                <span className="me-verified" role="status" title="Server-seeded run: it counts toward minting and saving">
                     Verified
+                </span>
+            )}
+            {/* A wallet is connected but the server did not answer in time:
+                this run plays on, but says plainly that it will not count. */}
+            {!model.verified && model.walletLinked && playing && (
+                <span className="me-verified is-off" role="status" title="The server did not answer in time: this run will not count. Start a new run to try again.">
+                    Not verified
                 </span>
             )}
         </div>

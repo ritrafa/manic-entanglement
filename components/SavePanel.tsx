@@ -208,7 +208,7 @@ export const SavePanel: React.FC<SavePanelProps> = ({ gameState, onClose, onSave
     const saveBad = view === 'failed' && !approveBad && !verifyBad;
 
     return (
-        <section className="me-panel save-panel" role="dialog" aria-label="Save progress to my NFT">
+        <section className="me-panel save-panel" aria-label="Save progress to my NFT">
             <h2 className="me-panel-title is-sm">Save progress to my NFT</h2>
             <div className="me-panel-body">
                 {view === 'connect' && (

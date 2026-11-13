@@ -7,15 +7,17 @@ import { LAYER_ORDER, TRAITS, frameAt, pfpLayers, spriteLayers, type Layer, type
 import { availableTraits, isUnlocked, pickupRarity, unlockedBy } from '@/game/wardrobe';
 import { featById } from '@/game/feats';
 import { cardsOnPage, clampPage, pageForIndex, pageCount } from '@/game/pages';
+import NftModal from './NftModal';
 import { classifyTouch } from '@/game/swipe';
 
 // The save-to-NFT panel (E72, design/components/SaveToNft), pulled in only
 // when the button opens it: it carries the wallet code, which must stay out
 // of the first-load bundle (the same rule as components/WalletGate.tsx).
-const SavePanelLazy = dynamic({
-    loader: () => import('./SavePanel').then((module) => ({ default: module.SavePanelWithProvider })),
-    ssr: false,
-});
+// Next 16 takes the loader function form only: the object form renders nothing.
+const SavePanelLazy = dynamic(
+    () => import('./SavePanel').then((module) => ({ default: module.SavePanelWithProvider })),
+    { ssr: false },
+);
 
 interface WardrobeProps {
     gameState: GameState;
@@ -526,9 +528,9 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                             )}
                         </div>
                         {saveOpen && (
-                            <div className="wardrobe-save-wrap">
+                            <NftModal label="Save progress to my NFT">
                                 <SavePanelLazy gameState={gameState} onClose={() => setSaveOpen(false)} />
-                            </div>
+                            </NftModal>
                         )}
                     </div>
                 </div>

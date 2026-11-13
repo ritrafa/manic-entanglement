@@ -212,3 +212,43 @@ describe('a confirmed save drops the proofs it sent (E72)', () => {
         expect(gs.getSnapshot().pendingProofs).toBe(2);
     });
 });
+
+describe('a connected run asks for its seed when the countdown starts', () => {
+    test('the start call goes out at 3, not at go, and the HUD knows a wallet is linked', () => {
+        vi.useFakeTimers();
+        try {
+            const gs = new GameState();
+            const calls: string[] = [];
+            vi.stubGlobal('fetch', (async (url: string) => {
+                calls.push(url);
+                return new Response('{}', { status: 503 });
+            }) as unknown as typeof fetch);
+
+            gs.setWallet('11111111111111111111111111111111');
+            expect(gs.getSnapshot().walletLinked).toBe(true);
+
+            expect(gs.startGame()).toBe(true);
+            expect(calls).toEqual(['/api/run/start']);
+
+            gs.setWallet(null);
+            expect(gs.getSnapshot().walletLinked).toBe(false);
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+
+    test('without a wallet the countdown asks nothing', () => {
+        vi.useFakeTimers();
+        try {
+            const gs = new GameState();
+            let calls = 0;
+            vi.stubGlobal('fetch', (async () => { calls += 1; return new Response('{}'); }) as typeof fetch);
+            expect(gs.startGame()).toBe(true);
+            expect(calls).toBe(0);
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+});

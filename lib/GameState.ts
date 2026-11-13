@@ -80,6 +80,9 @@ export interface GameSnapshot extends HudModel {
     /** True while the live run started from a server-issued token (E70):
      *  the HUD shows a small "Verified" mark beside the wallet box. */
     verified: boolean;
+    /** True while a wallet is connected: a run that then plays without a
+     *  token shows "Not verified", so the player knows it will not count. */
+    walletLinked: boolean;
     /** Signed proofs waiting in the save to be saved to the NFT (E70);
      *  the wallet box prints "N runs to save" and the save panel (E72)
      *  offers them to the reptile. */
@@ -125,8 +128,10 @@ export interface ServerStart {
 /** A base58 address of the length Solana wallets have (E70). */
 const BASE58_WALLET = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-/** The longest a /api/run/start call may hold the countdown back (E70). */
-const RUN_START_TIMEOUT_MS = 2000;
+/** The longest a /api/run/start call may take. The call goes out when the
+ *  3-2-1 countdown starts, so it holds "go" back by at most 2 s, and a cold
+ *  server function (its first boot plus the DAS lookup) still makes it. */
+const RUN_START_TIMEOUT_MS = 5000;
 
 /**
  * Ask the server to issue a run token (E70): at most RUN_START_TIMEOUT_MS of
@@ -340,6 +345,9 @@ class GameState {
     /** The server start awaited by the running countdown, applied by the
      *  beginRun it belongs to; null for a local run (E70). */
     private pendingServer: ServerStart | null = null;
+    /** The /api/run/start call the running countdown made when it began, so
+     *  the server has the whole countdown to answer; null without a wallet. */
+    private serverStart: Promise<ServerStart | null> | null = null;
     /** The token of the live verified run; null while the run is local (E70).
      *  Its proof is posted when the run ends. */
     private activeToken: string | null = null;
@@ -380,7 +388,7 @@ class GameState {
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
         this.look = fitLook(sanitizeLook(this.save.look), this.save.feats, this.save.pickedUp);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null, verified: false, pendingProofs: this.save.pendingProofs.length, hasReptile: false, lookPickedSinceLoad: false };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null, verified: false, walletLinked: false, pendingProofs: this.save.pendingProofs.length, hasReptile: false, lookPickedSinceLoad: false };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -1164,6 +1172,8 @@ class GameState {
         // so the page never ends up with two countdown elements or two starts.
         if (this.countdownTimers !== null) return false;
         if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return false;
+        // A connected wallet asks for the run's seed now, while 3-2-1 plays.
+        this.serverStart = this.wallet !== null ? requestRunStart(this.modeId, this.wallet) : null;
         const mazeContainerElement = document.getElementById('maze-container');
         // The title art stays on screen, dimmed by the page while the screen is
         // "countdown"; only the number is drawn here, over it.
@@ -1212,6 +1222,7 @@ class GameState {
         // the generation bump tells it that no run waits for it any more (E70).
         this.startSeq += 1;
         this.pendingServer = null;
+        this.serverStart = null;
         if (this.countdownTimers === null) return;
         this.countdownTimers.forEach(clearTimeout);
         this.countdownTimers = null;
@@ -1227,6 +1238,7 @@ class GameState {
     setWallet(address: string | null): void {
         const clean = typeof address === 'string' && BASE58_WALLET.test(address) ? address : null;
         this.wallet = clean;
+        this.publishHud();
     }
 
     /**
@@ -1296,8 +1308,9 @@ class GameState {
     }
 
     /**
-     * The countdown's finish (E70): with a wallet connected, ask the server
-     * for the run's seed and start state - at most 2 s - and then begin. Any
+     * The countdown's finish (E70): with a wallet connected, wait for the
+     * seed and start state the countdown asked for (at most 2 s past "go")
+     * and then begin. Any
      * failure or timeout begins the run exactly as before, local and
      * unverified; nothing here may block the player. A countdown cancelled
      * while the call waits leaves this method without a run to begin.
@@ -1305,8 +1318,10 @@ class GameState {
     private async beginVerifiedRun(): Promise<void> {
         const seq = this.startSeq;
         this.pendingServer = null;
-        if (this.wallet !== null) {
-            const server = await requestRunStart(this.modeId, this.wallet);
+        const request = this.serverStart;
+        this.serverStart = null;
+        if (request !== null && this.wallet !== null) {
+            const server = await request;
             if (seq !== this.startSeq) return;
             this.pendingServer = server;
         }
@@ -1499,6 +1514,7 @@ class GameState {
             newTraits: [...this.newTraitKeys],
             heldTrait: this.run.heldTrait === null ? null : { ...this.run.heldTrait },
             verified: this.activeToken !== null,
+            walletLinked: this.wallet !== null,
             pendingProofs: this.save.pendingProofs.length,
             hasReptile: this.reptile !== null,
             lookPickedSinceLoad: this.lookPickedSinceLoad,
@@ -1524,6 +1540,7 @@ class GameState {
             && samePickups(this.hudSnapshot.pickedUp, next.pickedUp)
             && sameHeldTrait(this.hudSnapshot.heldTrait, next.heldTrait)
             && this.hudSnapshot.verified === next.verified
+            && this.hudSnapshot.walletLinked === next.walletLinked
             && this.hudSnapshot.pendingProofs === next.pendingProofs
             && this.hudSnapshot.hasReptile === next.hasReptile
             && this.hudSnapshot.lookPickedSinceLoad === next.lookPickedSinceLoad) {

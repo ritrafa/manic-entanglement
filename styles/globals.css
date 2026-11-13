@@ -1262,6 +1262,10 @@ body {
   font: 400 16px/24px var(--font-display);
   text-transform: uppercase;
 }
+#hud.me-hud .me-verified.is-off {
+  border-color: var(--ink-dim, currentColor);
+  color: var(--ink-dim, inherit);
+}
 
 .left-box {
   display: flex;
@@ -1945,17 +1949,34 @@ body {
   justify-content: center;
 }
 
-/* The save panel the wardrobe opens sits over the panel, centred, on the
-   scrim's own well - the wardrobe itself never scrolls. */
-.wardrobe-save-wrap {
-  position: absolute;
+/* The mint and save panels open as a pop-up over the whole page
+   (components/NftModal.tsx, portalled to <body>): the scrim dims everything,
+   the panel is centred and scrolls inside. Below the wallet adapter's own
+   picker (z-index 1040) so "Select Wallet" still opens over it. */
+.nft-modal-scrim {
+  position: fixed;
   inset: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-16);
-  background: color-mix(in srgb, var(--well) 72%, transparent);
-  z-index: 5;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--well) 82%, transparent);
+}
+.nft-modal {
+  width: 100%;
+  max-width: 440px;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.nft-modal::-webkit-scrollbar {
+  display: none;
+}
+.nft-modal > .me-panel {
+  max-width: none;
+  margin: 0;
 }
 
 @media (max-width: 720px) {
