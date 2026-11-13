@@ -7,11 +7,11 @@ export type Layer = 'Back' | 'Body' | 'Clothes' | 'Eye' | 'Head';
 export const LAYER_ORDER: readonly Layer[] = ['Back', 'Body', 'Clothes', 'Eye', 'Head'];
 
 export const TRAITS: Record<Layer, readonly string[]> = {
-  Back: ['None', 'Wings', 'Jetpack', 'Billhook'],
-  Body: ['Blue', 'Gold', 'Green', 'Pink', 'Purple', 'Skeleton', 'Solana'],
-  Clothes: ['Astronaut', 'None', 'Robe', 'Tank'],
-  Eye: ['Asleep', 'One', 'Regular', 'Scanner', 'Zero'],
-  Head: ['Cosmonaut', 'Cowboy', 'Crown', 'Hood', 'None'],
+  Back: ['None', 'Wings', 'Jetpack', 'Billhook', 'Oxygen', 'Panel'],
+  Body: ['Blue', 'Chrome', 'Ember', 'Gold', 'Green', 'Pink', 'Purple', 'Skeleton', 'Solana'],
+  Clothes: ['Astronaut', 'None', 'Plate', 'Robe', 'Scarf', 'Tank'],
+  Eye: ['Asleep', 'Eclipse', 'One', 'Regular', 'Scanner', 'Visor', 'Zero'],
+  Head: ['Cosmonaut', 'Cowboy', 'Crown', 'Halo', 'Hood', 'Miner', 'None'],
 };
 
 export type Look = Record<Layer, string>;

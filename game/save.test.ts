@@ -47,6 +47,7 @@ describe("defaultSave", () => {
       totals: {},
       feats: [],
       look: null,
+      pickedUp: [],
       seen: {},
     });
   });
@@ -85,7 +86,30 @@ describe("loadSave", () => {
     expect(loaded.totals).toEqual({});
     expect(loaded.feats).toEqual([]);
     expect(loaded.look).toBeNull();
+    expect(loaded.pickedUp).toEqual([]);
     expect(loaded.seen).toEqual({});
+  });
+
+  it("loads an old save without pickedUp as an empty list", () => {
+    const loaded = loadSave(storageWith('{ "v": 1, "feats": ["first-exit"] }'));
+    expect(loaded.pickedUp).toEqual([]);
+  });
+
+  it("keeps a stored pickedUp list and drops malformed entries", () => {
+    const loaded = loadSave(
+      storageWith(
+        '{ "v": 1, "pickedUp": [ { "layer": "Head", "trait": "Miner" }, { "layer": "Back", "trait": "Panel" }, { "layer": 7, "trait": "X" }, { "trait": "Chrome" }, "Miner", null ] }',
+      ),
+    );
+    expect(loaded.pickedUp).toEqual([
+      { layer: "Head", trait: "Miner" },
+      { layer: "Back", trait: "Panel" },
+    ]);
+  });
+
+  it("replaces a pickedUp that is not an array with the empty list", () => {
+    expect(loadSave(storageWith('{ "v": 1, "pickedUp": "Miner" }')).pickedUp).toEqual([]);
+    expect(loadSave(storageWith('{ "v": 1, "pickedUp": { "Head": "Miner" } }')).pickedUp).toEqual([]);
   });
 
   it("drops numbers in best that are not finite and non-negative", () => {
@@ -127,6 +151,7 @@ describe("writeSave", () => {
   it("round-trips: write then load gives the same data", () => {
     const data: SaveData = {
       ...defaultSave(),
+      pickedUp: [{ layer: "Head", trait: "Halo" }],
       best: { descent: 42 },
       totals: { runs: 7 },
       feats: ["dash"],
@@ -162,6 +187,7 @@ describe("resetProgress", () => {
       totals: { runs: 5 },
       feats: ["dash"],
       look: { Body: "Blue" },
+      pickedUp: [{ layer: "Head", trait: "Miner" }],
       seen: { howto: true },
     };
     const reset = resetProgress(save);
@@ -172,6 +198,7 @@ describe("resetProgress", () => {
     expect(reset.feats).toEqual([]);
     expect(reset.settings).toEqual({ motion: "reduced" });
     expect(reset.look).toEqual({ Body: "Blue" });
+    expect(reset.pickedUp).toEqual([{ layer: "Head", trait: "Miner" }]);
     expect(reset.seen).toEqual({ howto: true });
     expect(reset.v).toBe(1);
     // The stored save itself is untouched.

@@ -3,7 +3,7 @@
 // pass a plain object; the browser passes its local storage; the server passes
 // null), so nothing here reaches for a global.
 
-import { UNLOCKS } from "./wardrobe";
+import { UNLOCKS, type HeldTrait } from "./wardrobe";
 
 /** The slice of Storage the save needs, or null where storage is missing or blocked. */
 export type StorageLike = {
@@ -27,6 +27,12 @@ export interface SaveData {
     feats: string[];
     /** The saved look, or null when none was kept. */
     look: Record<string, string> | null;
+    /** The maze pickups this player holds, as { layer, trait } entries
+     *  (game/wardrobe.ts PICKUP_TRAITS): a held trait is wearable besides
+     *  the free and feat-unlocked ones. Old saves carry no list and load
+     *  with an empty one; entries naming no real trait simply never unlock
+     *  anything (game/wardrobe.ts checks them against TRAITS). */
+    pickedUp: HeldTrait[];
     /** One-time messages already shown ("howto" and the like), plus the
      *  wardrobe's trait markers, one key per card as trait:<Layer>:<Trait>,
      *  and the init key (SEEN_INIT) that records the markers as initialised.
@@ -53,6 +59,7 @@ export function defaultSave(): SaveData {
         totals: {},
         feats: [],
         look: null,
+        pickedUp: [],
         seen: {},
     };
 }
@@ -127,6 +134,19 @@ function keepBooleans(value: unknown): Record<string, boolean> {
     return kept;
 }
 
+/** A copy of a stored pickup list keeping only { layer, trait } entries whose
+ *  two fields are both strings. A missing or non-array value gives []. */
+function keepPickups(value: unknown): HeldTrait[] {
+    if (!Array.isArray(value)) return [];
+    const kept: HeldTrait[] = [];
+    for (const entry of value) {
+        if (isRecord(entry) && typeof entry.layer === "string" && typeof entry.trait === "string") {
+            kept.push({ layer: entry.layer, trait: entry.trait });
+        }
+    }
+    return kept;
+}
+
 /** A copy of a stored record keeping only strings. */
 function keepStrings(value: unknown): Record<string, string> | null {
     if (!isRecord(value)) return null;
@@ -179,6 +199,7 @@ export function loadSave(storage: StorageLike): SaveData {
         totals: keepNumbers(parsed.totals),
         feats,
         look: keepStrings(parsed.look),
+        pickedUp: keepPickups(parsed.pickedUp),
         seen,
     } as SaveData;
 }

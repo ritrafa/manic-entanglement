@@ -6,16 +6,23 @@ import { keyLabel, type Action } from '@/game/keys';
 /** Which key action spends which tool's charges (game/keys.ts). */
 const TOOL_ACTION: Record<ToolId, Action> = { anchor: 'tool1', twist: 'tool2', cut: 'tool3' };
 
+/** The tool's 24 px pixel icon (public/images/tools/, drawn pixelated). */
+const TOOL_ICON: Record<ToolId, string> = {
+    anchor: '/images/tools/anchor.png',
+    twist: '/images/tools/twist.png',
+    cut: '/images/tools/cut.png',
+};
+
 interface ToolBarProps {
     gameState: GameState;
 }
 
 /**
  * The tool buttons in the HUD (design/components/Button, the me-tools row):
- * each shows its name, key hint and charge count as text — no icons until
- * pixel tool sprites exist — sits disabled at 0 charges, and spends one charge
- * on a click or tap — the same path the tool1/tool2 keys take through the
- * shell. Cut needs a direction, so its button only arms it: while the snapshot
+ * each shows its 24 px pixel icon (public/images/tools/<name>.png, drawn
+ * pixelated) beside its name, key hint and charge count, sits disabled at 0
+ * charges, and spends one charge on a click or tap — the same path the
+ * tool1/tool2 keys take through the shell. Cut needs a direction, so its button only arms it: while the snapshot
  * says the board is waiting for that direction, the button carries the pressed
  * look and the hint "Choose a direction".
  */
@@ -37,6 +44,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ gameState }) => {
                         aria-pressed={id === 'cut' ? armed : undefined}
                         aria-label={`${TOOL_INFO[id].name}: ${armed ? 'Choose a direction' : TOOL_INFO[id].hint}. ${charges} charge${charges === 1 ? '' : 's'}. Key ${key ? keyLabel(key) : 'unbound'}.`}
                     >
+                        <img className="me-tool-icon" src={TOOL_ICON[id]} alt="" width={24} height={24} draggable={false} />
                         <span>{TOOL_INFO[id].name}</span>
                         {armed && <span className="me-hint me-gold">Choose a direction</span>}
                         <span className="me-key" aria-hidden="true">{key ? keyLabel(key) : ''}</span>

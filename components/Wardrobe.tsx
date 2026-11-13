@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import GameState, { type GameSnapshot } from '@/lib/GameState';
 import { LAYER_ORDER, TRAITS, frameAt, pfpLayers, spriteLayers, type Layer, type Look } from '@/game/sprite';
-import { availableTraits, isUnlocked, unlockedBy } from '@/game/wardrobe';
+import { availableTraits, isUnlocked, pickupRarity, unlockedBy } from '@/game/wardrobe';
 import { featById } from '@/game/feats';
 
 interface WardrobeProps {
@@ -18,7 +18,7 @@ const CARD_PX = 96;
 /** The preview repaints on this beat; frameAt picks the frame from the clock. */
 const PREVIEW_TICK_MS = 150;
 
-/** How many non-None traits exist across all layers (22 with the shipped art). */
+/** How many non-None traits exist across all layers (32 with the shipped art). */
 const TOTAL_TRAITS = LAYER_ORDER.reduce(
     (total, layer) => total + TRAITS[layer].filter((trait) => trait !== 'None').length,
     0,
@@ -44,18 +44,26 @@ function pfpUrl(layer: Layer, trait: string): string | null {
  *  the locked ones with the feat that unlocks them. */
 type CardState = 'equipped' | 'available' | 'locked';
 
-function cardState(layer: Layer, trait: string, look: Look, feats: readonly string[]): CardState {
+function cardState(
+    layer: Layer,
+    trait: string,
+    look: Look,
+    feats: readonly string[],
+    pickedUp: readonly { layer: string; trait: string }[],
+): CardState {
     if (look[layer] === trait) return 'equipped';
-    return isUnlocked(layer, trait, feats) ? 'available' : 'locked';
+    return isUnlocked(layer, trait, feats, pickedUp) ? 'available' : 'locked';
 }
 
 /** The three rarity pips (design/README, Colour): feat-unlocked traits are
- *  "Feat only", everything else that can be worn reads as "Found". */
+ *  "Feat only" (3), maze pickups read "Found" (1) or "Rare" (2) by their
+ *  slot in game/wardrobe.ts PICKUP_TRAITS. */
 function RarityPips({ layer, trait }: { layer: Layer; trait: string }): React.ReactElement | null {
     if (trait === 'None') return null;
+    const rarity = pickupRarity(layer, trait);
     const featOnly = unlockedBy(layer, trait) !== null;
-    const cls = featOnly ? 'me-pips is-feat' : 'me-pips is-found';
-    const label = featOnly ? 'Feat only' : 'Found';
+    const cls = rarity === 'rare' ? 'me-pips is-rare' : rarity === 'found' ? 'me-pips is-found' : featOnly ? 'me-pips is-feat' : 'me-pips is-found';
+    const label = rarity === 'rare' ? 'Rare' : rarity === 'found' ? 'Found' : featOnly ? 'Feat only' : 'Found';
     return (
         <span className={cls} aria-label={label}>
             <i /><i /><i />
@@ -91,6 +99,7 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
     const [layer, setLayer] = useState<Layer>('Body');
     const look: Look = model.look;
     const feats = model.feats;
+    const pickedUp = model.pickedUp;
     // The cards that were new when the panel opened, as the shell captured
     // them (GameState.openWardrobe): the New tags stay put while it is open
     // and the cards are marked seen when it closes.
@@ -109,7 +118,7 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
 
     const urls = spriteLayers(look, frameAt(now));
     const unlockedCount = LAYER_ORDER.reduce(
-        (total, cardLayer) => total + availableTraits(cardLayer, feats).filter((trait) => trait !== 'None').length,
+        (total, cardLayer) => total + availableTraits(cardLayer, feats, pickedUp).filter((trait) => trait !== 'None').length,
         0,
     );
     const unlockedPct = TOTAL_TRAITS === 0 ? 0 : Math.round((unlockedCount / TOTAL_TRAITS) * 100);
@@ -119,7 +128,7 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
     const closeWardrobe = (): void => {
         const keys: string[] = [];
         for (const cardLayer of LAYER_ORDER) {
-            for (const trait of availableTraits(cardLayer, feats)) {
+            for (const trait of availableTraits(cardLayer, feats, pickedUp)) {
                 if (trait !== 'None') keys.push(traitSeenKey(cardLayer, trait));
             }
         }
@@ -139,7 +148,7 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
     // group (design/components/Wardrobe: "equipped first, then unlocked, then locked").
     const rank: Record<CardState, number> = { equipped: 0, available: 1, locked: 2 };
     const cards = TRAITS[layer]
-        .map((trait) => ({ trait, state: cardState(layer, trait, look, feats) }))
+        .map((trait) => ({ trait, state: cardState(layer, trait, look, feats, pickedUp) }))
         .sort((a, b) => rank[a.state] - rank[b.state]);
 
     const bodyGhost = layer !== 'Body' ? pfpUrl('Body', look.Body) : null;
@@ -238,7 +247,11 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                                                 <span className="me-trait-name">{trait}</span>
                                                 {meta}
                                                 <span className="me-hint">
-                                                    {feat !== null ? `Feat: ${feat.name}` : 'Find it in the maze'}
+                                                    {feat !== null
+                                                        ? `Feat: ${feat.name}`
+                                                        : pickupRarity(layer, trait) !== null
+                                                            ? 'Found in the maze'
+                                                            : 'Find it in the maze'}
                                                 </span>
                                             </div>
                                         );

@@ -64,6 +64,9 @@ export interface GameSnapshot extends HudModel {
     feats: string[];
     /** The look the reptile wears now (game/sprite.ts); the wardrobe edits it. */
     look: Look;
+    /** The maze pickups the save holds (game/wardrobe.ts PICKUP_TRAITS);
+     *  the wardrobe wears a held trait besides the free and feat ones. */
+    pickedUp: { layer: string; trait: string }[];
     /** The feat-unlocked trait cards earned since the wardrobe was last
      *  closed, as the save's seen keys trait:<Layer>:<Trait>; the wardrobe
      *  shows a New tag on exactly these. Free traits never appear here. */
@@ -78,6 +81,11 @@ function sameFeats(a: string[], b: string[]): boolean {
 /** True when two key lists hold the same keys in the same order. */
 function sameKeys(a: string[], b: string[]): boolean {
     return a.length === b.length && a.every((key, index) => key === b[index]);
+}
+
+/** True when two pickup lists hold the same traits in the same order. */
+function samePickups(a: { layer: string; trait: string }[], b: { layer: string; trait: string }[]): boolean {
+    return a.length === b.length && a.every((entry, index) => entry.layer === b[index].layer && entry.trait === b[index].trait);
 }
 
 /** True when two looks wear the same trait on every layer. */
@@ -208,8 +216,8 @@ class GameState {
         this.bestBeforeRun = this.highScore;
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
-        this.look = fitLook(sanitizeLook(this.save.look), this.save.feats);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, newTraits: [] };
+        this.look = fitLook(sanitizeLook(this.save.look), this.save.feats, this.save.pickedUp);
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [] };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -292,7 +300,7 @@ class GameState {
      * in the save, and the sprite is redrawn at once.
      */
     setWardrobeLook(look: unknown): void {
-        this.look = fitLook(sanitizeLook(look), this.save.feats);
+        this.look = fitLook(sanitizeLook(look), this.save.feats, this.save.pickedUp);
         this.save = { ...this.save, look: { ...this.look } };
         writeSave(this.storage, this.save);
         this.preloadLook();
@@ -1141,6 +1149,7 @@ class GameState {
             finished: this.lastFinished,
             feats: [...this.save.feats],
             look: { ...this.look },
+            pickedUp: [...this.save.pickedUp],
             newTraits: [...this.newTraitKeys],
         };
         if (sameHudModel(this.hudSnapshot, next)
@@ -1160,7 +1169,8 @@ class GameState {
             && this.hudSnapshot.modeBestText === next.modeBestText
             && this.hudSnapshot.finished === next.finished
             && sameFeats(this.hudSnapshot.feats, next.feats)
-            && sameLook(this.hudSnapshot.look, next.look)) {
+            && sameLook(this.hudSnapshot.look, next.look)
+            && samePickups(this.hudSnapshot.pickedUp, next.pickedUp)) {
             return;
         }
         this.hudSnapshot = next;

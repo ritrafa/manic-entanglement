@@ -756,3 +756,22 @@
   changes only: walls at 1-2 px a tile, reptile and exit as bright pixels, the
   window as an outline, and on Blackout levels nothing but the reptile and the
   frame.
+
+- E57: art batch 1 is wired in. Brute, Warden and Stalker each draw their own
+  240 px four-frame GIF (`brute.gif`, `warden.gif`, `stalker.gif` in
+  `styles/globals.css`) at the cell size, pixelated like the rest; the wisp
+  keeps the shared `enemy.gif` and the heavy rings and the stalker's red
+  marker stay. The HUD tool buttons (`components/ToolBar.tsx`) show the new
+  24 px pixel icons (`public/images/tools/<name>.png`, pixelated) beside name,
+  key and count; the three `tools/*.svg` are gone and the maze's tool pickups
+  and the how-to line read the PNGs. `game/sprite.ts` TRAITS gained the ten
+  approved traits (Back Oxygen/Panel, Body Chrome/Ember, Clothes Scarf/Plate,
+  Eye Visor/Eclipse, Head Miner/Halo), and `game/wardrobe.ts` a pure
+  `PICKUP_TRAITS` table giving each a rarity (Found: Oxygen, Chrome, Scarf,
+  Visor, Miner; Rare: Panel, Ember, Plate, Eclipse, Halo). A trait is now
+  wearable when it is free, unlocked by an earned feat, or held in the save's
+  new `pickedUp` list (`game/save.ts`; old saves load with an empty one), and
+  the invariant test reads: every non-free, non-None trait sits in exactly one
+  of UNLOCKS or PICKUP_TRAITS. The wardrobe shows pickup traits with Found 1 /
+  Rare 2 pips and "Found in the maze" while unheld. Trait pickups in the maze
+  come with E58.

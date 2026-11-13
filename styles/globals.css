@@ -486,46 +486,52 @@ body {
   background-image: url('/images/backpack.gif');
 }
 
-/* Tool pickups (game/tools.ts): simple SVG icons in the game's teal and gold. */
+/* Tool pickups (game/tools.ts): the pixel tool icons, the same 240 px
+   one-frame art the HUD buttons show (components/ToolBar.tsx). */
 .item_anchor {
-  background-image: url('/images/tools/anchor.svg');
+  background-image: url('/images/tools/anchor.png');
 }
 
 .item_twist {
-  background-image: url('/images/tools/twist.svg');
+  background-image: url('/images/tools/twist.png');
 }
 
 .item_cut {
-  background-image: url('/images/tools/cut.svg');
+  background-image: url('/images/tools/cut.png');
 }
 
 .enemy {
   background-image: url('/images/enemy.gif');
   background-size: cover;
+  image-rendering: pixelated;
 }
 
-/* The kinds share the one GIF and differ by shape only: the heavy ones
-   carry hard rings (no blur, per the design). Every kind draws at the cell
-   size — no fractional scaling; bigger enemies get their own sprites later. */
+/* Each kind draws its own 240 px four-frame GIF at the cell size — no
+   fractional scaling, pixelated like everything else; the wisp keeps the
+   shared sprite and the heavy kinds keep their hard rings (no blur, per
+   the design). */
 .enemy-wisp {
-  /* plain */
+  /* plain: the shared enemy.gif */
 }
 
 .enemy-brute {
+  background-image: url('/images/brute.gif');
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 .enemy-warden {
+  background-image: url('/images/warden.gif');
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.85),
     0 0 0 5px rgba(255, 200, 60, 0.85);
 }
 
-/* The stalker (game/enemies.ts) is the same GIF with a distinct shape cue:
-   a pointed red marker above it (over the toll badge) and a faster bob, so
-   the one that follows you reads at a glance. `translate` bobs the sprite so
-   the position transform from lib/board.ts stays untouched. */
+/* The stalker (game/enemies.ts) carries a distinct shape cue over its own
+   sprite: a pointed red marker above it (over the toll badge) and a faster
+   bob, so the one that follows you reads at a glance. `translate` bobs the
+   sprite so the position transform from lib/board.ts stays untouched. */
 .enemy-stalker {
+  background-image: url('/images/stalker.gif');
   animation: stalker-bob 0.5s ease-in-out infinite;
 }
 
@@ -624,9 +630,14 @@ body {
 }
 
 /* The tool row in the HUD (components/ToolBar.tsx) is the me-tools part with
-   me-btn me-tool buttons: name, key and count as text (no icons until pixel
-   tool sprites exist), disabled at 0 charges, the armed Cut in the pressed
+   me-btn me-tool buttons: the tool's 24 px pixel icon beside its name, key
+   and count as text, disabled at 0 charges, the armed Cut in the pressed
    look. Nothing of the old copies survives. */
+.me-tool .me-tool-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+}
 
 /* The forecast's ghost walls, drawn with the game's own wall art. An
    incoming wall (a sealing edge) is one .mark-incoming image on this marks

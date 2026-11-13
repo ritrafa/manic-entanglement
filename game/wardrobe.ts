@@ -1,8 +1,9 @@
-// The pure wardrobe: which traits a player may wear and which feat unlocks
-// which. Five traits are free; every other one of the twenty-two belongs to
-// exactly one feat, the showiest ones to the hardest feats. Pure data and pure
-// functions: no DOM, no images, no clocks — trait names still reach a URL only
-// through spriteLayers in game/sprite.ts.
+// The pure wardrobe: which traits a player may wear, which feat unlocks which
+// and which the maze hands out. Five traits are free; every other one of the
+// thirty-two belongs to exactly one feat (the showiest ones to the hardest
+// feats) or to one pickup slot in the maze, with a Found or Rare rarity. Pure
+// data and pure functions: no DOM, no images, no clocks — trait names still
+// reach a URL only through spriteLayers in game/sprite.ts.
 
 import { DEFAULT_LOOK, LAYER_ORDER, TRAITS, type Layer, type Look } from "./sprite";
 
@@ -15,9 +16,9 @@ export const FREE_TRAITS: Partial<Record<Layer, readonly string[]>> = {
 
 /**
  * What each feat unlocks, keyed by the feat id (game/feats.ts). Every trait
- * that is neither free nor "None" appears exactly once across these entries;
- * the showiest (Body Skeleton, Body Solana, Body Gold, Head Crown, Back
- * Jetpack) sit on the hardest feats.
+ * that is neither free nor "None" appears exactly once across these entries
+ * and PICKUP_TRAITS; the showiest (Body Skeleton, Body Solana, Body Gold,
+ * Head Crown, Back Jetpack) sit on the hardest feats.
  */
 export const UNLOCKS: Record<string, { layer: Layer; trait: string }[]> = {
     "first-exit": [{ layer: "Body", trait: "Pink" }],
@@ -40,22 +41,70 @@ function unlockedBySome(layer: Layer, trait: string, feats: readonly string[]): 
     return feats.some((id) => (UNLOCKS[id] ?? []).some((entry) => entry.layer === layer && entry.trait === trait));
 }
 
+/** How seldom a maze pickup drops (design/README, Colour): Found is common,
+ *  Rare comes from deep or seldom-spawning spots. */
+export type PickupRarity = "found" | "rare";
+
+/** One trait the maze hands out, as the save's `pickedUp` list stores it. */
+export type HeldTrait = { layer: string; trait: string };
+
 /**
- * True when this trait may be worn with these feats: it must be a real trait
- * of the layer, and either "None" (always available where it exists), one of
- * the free traits, or unlocked by an earned feat.
+ * The traits that drop as pickups in the maze (trait cards come with E58),
+ * five Found and five Rare. A trait here is wearable once the save's
+ * `pickedUp` list holds it; the feat table above never names these.
  */
-export function isUnlocked(layer: Layer, trait: string, feats: readonly string[]): boolean {
+export const PICKUP_TRAITS: readonly { layer: Layer; trait: string; rarity: PickupRarity }[] = [
+    { layer: "Back", trait: "Oxygen", rarity: "found" },
+    { layer: "Back", trait: "Panel", rarity: "rare" },
+    { layer: "Body", trait: "Chrome", rarity: "found" },
+    { layer: "Body", trait: "Ember", rarity: "rare" },
+    { layer: "Clothes", trait: "Scarf", rarity: "found" },
+    { layer: "Clothes", trait: "Plate", rarity: "rare" },
+    { layer: "Eye", trait: "Visor", rarity: "found" },
+    { layer: "Eye", trait: "Eclipse", rarity: "rare" },
+    { layer: "Head", trait: "Miner", rarity: "found" },
+    { layer: "Head", trait: "Halo", rarity: "rare" },
+];
+
+/** The rarity of a maze-pickup trait, or null for a free or feat-only one. */
+export function pickupRarity(layer: Layer, trait: string): PickupRarity | null {
+    const entry = PICKUP_TRAITS.find((pick) => pick.layer === layer && pick.trait === trait);
+    return entry ? entry.rarity : null;
+}
+
+/** True when `pickedUp` (the save's held pickups) names this exact trait. */
+function heldSomewhere(layer: Layer, trait: string, pickedUp: readonly HeldTrait[]): boolean {
+    if (!Array.isArray(pickedUp)) return false;
+    return pickedUp.some((entry) => entry && entry.layer === layer && entry.trait === trait);
+}
+
+/**
+ * True when this trait may be worn: it must be a real trait of the layer, and
+ * either "None" (always available where it exists), one of the free traits,
+ * unlocked by an earned feat, or held in `pickedUp` (the save's maze pickups,
+ * empty for a player who has found none).
+ */
+export function isUnlocked(
+    layer: Layer,
+    trait: string,
+    feats: readonly string[],
+    pickedUp: readonly HeldTrait[] = [],
+): boolean {
     if (!TRAITS[layer]?.includes(trait)) return false;
     if (trait === "None") return true;
     if (FREE_TRAITS[layer]?.includes(trait)) return true;
+    if (heldSomewhere(layer, trait, pickedUp)) return true;
     return unlockedBySome(layer, trait, feats);
 }
 
 /** The traits of one layer the player may wear, in TRAITS order. */
-export function availableTraits(layer: Layer, feats: readonly string[]): string[] {
+export function availableTraits(
+    layer: Layer,
+    feats: readonly string[],
+    pickedUp: readonly HeldTrait[] = [],
+): string[] {
     const list = TRAITS[layer] ?? [];
-    return list.filter((trait) => isUnlocked(layer, trait, feats));
+    return list.filter((trait) => isUnlocked(layer, trait, feats, pickedUp));
 }
 
 /**
@@ -64,8 +113,14 @@ export function availableTraits(layer: Layer, feats: readonly string[]): string[
  * of 0, gives the same look back. A trait that is not currently available (a
  * look from before a feat was lost) steps into the available list from its top.
  */
-export function cycleTrait(look: Look, layer: Layer, step: number, feats: readonly string[]): Look {
-    const available = availableTraits(layer, feats);
+export function cycleTrait(
+    look: Look,
+    layer: Layer,
+    step: number,
+    feats: readonly string[],
+    pickedUp: readonly HeldTrait[] = [],
+): Look {
+    const available = availableTraits(layer, feats, pickedUp);
     if (available.length === 0) return { ...look };
     const count = available.length;
     const offset = Number.isFinite(step) ? Math.trunc(step) : 0;
@@ -81,15 +136,20 @@ export function cycleTrait(look: Look, layer: Layer, step: number, feats: readon
  * default (which is always available). Used on the saved look at load, so a
  * look kept before a progress reset cannot keep wearing a locked trait.
  */
-export function fitLook(look: Look, feats: readonly string[]): Look {
+export function fitLook(
+    look: Look,
+    feats: readonly string[],
+    pickedUp: readonly HeldTrait[] = [],
+): Look {
     const fitted: Look = { ...look };
     for (const layer of LAYER_ORDER) {
-        if (!isUnlocked(layer, fitted[layer], feats)) fitted[layer] = DEFAULT_LOOK[layer];
+        if (!isUnlocked(layer, fitted[layer], feats, pickedUp)) fitted[layer] = DEFAULT_LOOK[layer];
     }
     return fitted;
 }
 
-/** The feat id that unlocks this trait, or null for a free trait, "None" or an unknown one. */
+/** The feat id that unlocks this trait, or null for a free trait, a maze
+ *  pickup, "None" or an unknown one (pickups carry a rarity instead). */
 export function unlockedBy(layer: Layer, trait: string): string | null {
     for (const [featId, entries] of Object.entries(UNLOCKS)) {
         if (entries.some((entry) => entry.layer === layer && entry.trait === trait)) return featId;
