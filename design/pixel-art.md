@@ -52,7 +52,19 @@ Coordinates are art pixels on the 24 grid, x from the left, y from the top, both
 | Eye | x 8 to 15, y 4 to 10 | Regular eye is 2 x 2 at x 11 to 12, y 6 to 7: white with one black pupil pixel |
 | Head | x 5 to 19, y 1 to 16 | A hat rests on row 3 (the head top) and may rise to row 1; a helmet may wrap down to row 16 |
 
-- **Idle bob.** Across frames 1, 2, 3, 4 the head and shoulders sit 0, 1, 2, 1 art pixels lower while the feet stay on row 22. Eye, Head and Back shift by the same 0, 1, 2, 1. Clothes follow the torso: the neckline moves, the hem stays.
+- **Idle bob.** Measured on every trait in the game. The body moves in two parts across frames 1, 2, 3, 4 while the feet stay on row 22:
+
+  | Part | Drop in art pixels, frames 1 to 4 | Layers that move with it |
+  | --- | --- | --- |
+  | Head (rows 3 to 10 in frame 1) | 0, 1, 2, 1 | Body head, Eye, Head, and Back gear that rides high or free (Wings, Oxygen, Panel) |
+  | Torso and arms (shoulders on row 13 in frame 1) | 0, 1, 1, 0 | Body torso, Clothes, and Back packs strapped to the torso (Jetpack, Billhook) |
+  | Feet (row 22) | 0, 0, 0, 0 | Nothing else |
+
+  - The neck and legs take up the slack: the neck is 2 rows in frames 1 and 2 and 1 row in frames 3 and 4; the legs are 2 rows in frames 1 and 4 and 1 row in frames 2 and 3.
+  - **Eye and Head:** the whole layer shifts 0, 1, 2, 1. Nothing else changes between frames.
+  - **Clothes:** frames 2 and 3 are frame 1 moved down one pixel; frame 4 is frame 1 again. A garment that reaches the leg rows loses one leg row in frames 2 and 3 so it never passes the feet (Astronaut); only a floor-length hem may reach row 23 (Robe).
+  - **Back:** choose one of the two rows of the table per trait and move the whole layer by it. A detail that animates by itself (the jetpack flame) is drawn per frame on top of that.
+  - **A new Body** keeps the Green body's silhouette in all four frames: same pixels filled, same eye, nostril, teeth and claw pixels. It may change colours inside the silhouette from frame to frame within its ramp (Ember's lava); a mark on the head moves with the head, a mark on the torso with the torso.
 - A layer never needs pixels outside its box. If a design wants more room (a tall hat, wide wings), shrink the design.
 - Body colours never appear in other layers and other layers never repaint body pixels, except Clothes over the torso and Head over the skull.
 
@@ -150,5 +162,6 @@ A trait found in the maze appears as a tile-sized floor sprite made from its PFP
   - Every file is clean at its block size (no half pixels) and stays inside its layer box.
   - The PFP uses only colours the runner uses; colours counted, 6 at most.
   - The export equals the master times 20.
-  - Runner frames 1 to 4 bob 0, 1, 2, 1.
+  - Runner frames 1 to 4 bob by layer: Eye and Head 0, 1, 2, 1; Clothes 0, 1, 1, 0 with frame 4 equal to frame 1; Back one of the two; a Body matches Green's silhouette in every frame.
+  - Clothes checked on every body: the same pixels sit off the body in all four frames.
   - Stacked on the Green body, the runner reads at 48px and the PFP reads at 48px, both on black.
