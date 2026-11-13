@@ -797,3 +797,27 @@
   the exit answers "Kept: <Name>."; the kept trait wears the wardrobe's
   existing New marker until the panel is next closed. Feat-only traits
   never drop, and old saves load unchanged.
+
+- E59: the title block really centres, and the minimap draws crisp. The
+  centring E55 asked for never happened because the title block's parent,
+  the `.touch-layer` div of `components/TouchLayer.tsx`, was unstyled: only
+  as tall as its content, it left the block 16 px from the top with ~773 px
+  of empty below at 403x900 (~658 px at 1280x800) for the auto margins to
+  work on. `styles/globals.css` now makes `.touch-layer` the page's column:
+  `display: flex; flex-direction: column` with a `min-height` of the
+  viewport between the safe-area insets (what the body's own padding
+  leaves), so the title block sits in the vertical middle when shorter than
+  the screen and still starts at the top, page scrolling, when taller. The
+  wrapper's shrink-to-fit width and the default item stretch keep every
+  play item exactly where the block layout put it — same width, the board's
+  top position at 403x900 and 1280x800 unchanged, minimap and panels
+  unmoved — and the items' own auto margins still centre the title block,
+  the HUD and the D-pad; touch handling on the board is untouched. The E56
+  minimap was blurry: its buffer was ~91 px stretched to the 96 px CSS box.
+  `lib/board.ts`
+  `drawMinimap` now sizes the canvas to exactly its displayed CSS size times
+  `devicePixelRatio`, rounded to whole pixels, draws each wall-grid tile at
+  a whole number of buffer pixels (at most 2 CSS pixels' worth), turns
+  `imageSmoothingEnabled` off beside the CSS `image-rendering: pixelated`,
+  and folds the buffer side into the redraw key so a zoom or ratio change
+  repaints it.

@@ -38,7 +38,8 @@ const EFFECT_GRACE_MS = 250;
 const TILE_FLASH_MS = 450;
 /** The E56 minimap's side in pixels: a small square in a board corner. */
 const MINIMAP_PX = 96;
-/** The minimap draws each wall-grid tile at 1 or 2 pixels, never more. */
+/** The minimap draws each wall-grid tile at 1 or 2 CSS pixels, never more
+    (times the device pixel ratio in the drawing buffer). */
 const MINIMAP_MAX_TILE_PX = 2;
 /** The side of a PFP master in art pixels (public/images/nft/<Layer>/<Trait>pfp.png). */
 const PFP_ART_PX = 16;
@@ -742,7 +743,8 @@ export class Board {
     /**
      * Redraw the minimap: the whole maze's walls at 1 or 2 pixels a tile, the
      * reptile and the exit as single bright pixels and the camera window as an
-     * outline, on a ~96 px square (the CSS draws its well and line frame).
+     * outline, on a ~96 px square at the device pixel ratio, whole pixels per
+     * tile (the CSS draws its well and line frame).
      * Shown only in camera mode, and on a Blackout level it keeps its secret:
      * nothing but the reptile and the frame. Redrawn only when the maze, the
      * reptile, the window or the twist changed.
@@ -755,25 +757,35 @@ export class Board {
         canvas.hidden = !camera;
         if (!camera || this.camera === null) return;
         const blackout = run.vision !== null;
+        const gridTiles = run.maze.wallGrid.length;
+        // E59: the drawing buffer is exactly the square CSS displays times the
+        // device pixel ratio, rounded to whole pixels, so one canvas pixel
+        // lands on one screen pixel and nothing is rescaled. Each wall-grid
+        // tile then draws at a whole number of buffer pixels (CSS keeps it
+        // nearest-neighbour with image-rendering: pixelated).
+        const dpr = window.devicePixelRatio || 1;
+        const cssSide = canvas.clientWidth || MINIMAP_PX;
+        const side = Math.max(1, Math.round(cssSide * dpr));
+        const maxTilePx = Math.max(1, Math.round(MINIMAP_MAX_TILE_PX * dpr));
+        const px = Math.min(maxTilePx, Math.max(1, Math.floor(side / gridTiles)));
         const signature = [
             this.gridRevision,
             run.player.x, run.player.y,
             this.camera.x, this.camera.y,
             blackout ? 'b' : 'p',
             this.cell,
+            side,
         ].join(':');
         if (signature === this.minimapSignature) return;
         this.minimapSignature = signature;
 
-        const gridTiles = run.maze.wallGrid.length;
-        const px = Math.min(MINIMAP_MAX_TILE_PX, Math.max(1, Math.floor(MINIMAP_PX / gridTiles)));
-        const side = gridTiles * px;
         if (canvas.width !== side) {
             canvas.width = side;
             canvas.height = side;
         }
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
+        ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, side, side);
         const tokens = getComputedStyle(document.documentElement);
         const wallColour = tokens.getPropertyValue('--line').trim() || '#0b9363';
@@ -789,14 +801,17 @@ export class Board {
                 }
             }
             this.paintMinimapPixel(ctx, run.exit.x, run.exit.y, px, exitColour);
-            // The camera window as an outline, one pixel inside its edges.
+            // The camera window as an outline, one buffer pixel wide and
+            // crisp: a half-pixel inset only when the line is an odd width.
             ctx.strokeStyle = bright;
-            ctx.lineWidth = 1;
+            const lineWidth = Math.max(1, Math.round(dpr));
+            ctx.lineWidth = lineWidth;
+            const inset = lineWidth % 2 === 1 ? 0.5 : 0;
             ctx.strokeRect(
-                this.camera.x * px + 0.5,
-                this.camera.y * px + 0.5,
-                viewport.viewTiles * px - 1,
-                viewport.viewTiles * px - 1,
+                this.camera.x * px + inset,
+                this.camera.y * px + inset,
+                viewport.viewTiles * px - lineWidth,
+                viewport.viewTiles * px - lineWidth,
             );
         }
         // The reptile shows even on Blackout: it is the one thing the player

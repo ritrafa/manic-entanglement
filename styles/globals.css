@@ -45,9 +45,29 @@ body {
   overscroll-behavior: none;
 }
 
-/* The column itself is the body: the shell's children — the board area, the
-   HUD, the D-pad, and on the title screen the title block — are the body's
-   flex items, top-aligned and centred horizontally. */
+/* The touch wrapper (components/TouchLayer.tsx) is the page's column: the
+   body's one flex item, a flex column at least as tall as the viewport
+   between the safe-area insets (the body's own padding already holds the
+   content inside them), so the title block's auto margins (E55) have the
+   whole screen to centre in (E59): on the title screen the block sits in
+   the vertical middle when shorter than the viewport and still starts at
+   the top, with the page scrolling, when taller. Its width stays what it
+   always was, the widest child's, and the default stretch fills the items
+   across it exactly as the block layout did, so play, countdown and how-to
+   keep their top alignment and their board, minimap and panels to the
+   pixel; the items' own auto margins keep centring the title block, the
+   HUD and the D-pad horizontally. */
+.touch-layer {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2 * var(--space-16));
+  min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2 * var(--space-16));
+}
+
+/* The container dissolves, so the shell's children — the board area, the
+   HUD, the D-pad, and on the title screen the title block — are the
+   column's flex items directly, top-aligned and centred horizontally. */
 .game-container {
   display: contents;
 }
