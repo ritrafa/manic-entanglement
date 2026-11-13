@@ -11,17 +11,18 @@ interface ToolBarProps {
 }
 
 /**
- * The tool buttons in the HUD: each shows its icon, name, key hint and
- * charge count, sits disabled at 0 charges, and spends one charge on a click
- * or tap — the same path the tool1/tool2 keys take through the shell. Cut
- * needs a direction, so its button only arms it: while the snapshot says the
- * board is waiting for that direction, the button is highlighted and carries
- * the hint "Choose a direction".
+ * The tool buttons in the HUD (design/components/Button, the me-tools row):
+ * each shows its name, key hint and charge count as text — no icons until
+ * pixel tool sprites exist — sits disabled at 0 charges, and spends one charge
+ * on a click or tap — the same path the tool1/tool2 keys take through the
+ * shell. Cut needs a direction, so its button only arms it: while the snapshot
+ * says the board is waiting for that direction, the button carries the pressed
+ * look and the hint "Choose a direction".
  */
 const ToolBar: React.FC<ToolBarProps> = ({ gameState }) => {
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
     return (
-        <div className="toolbar" role="toolbar" aria-label="Tools">
+        <div className="me-tools" role="toolbar" aria-label="Tools">
             {TOOL_IDS.map((id) => {
                 const charges = model.tools[id];
                 const armed = model.armed === id;
@@ -30,22 +31,21 @@ const ToolBar: React.FC<ToolBarProps> = ({ gameState }) => {
                     <button
                         key={id}
                         type="button"
-                        className={`tool-button tool-${id}${armed ? ' tool-armed' : ''}`}
+                        className={`me-btn me-tool${armed ? ' is-pressed' : ''}`}
                         onClick={() => gameState.useTool(id)}
                         disabled={charges <= 0}
                         aria-pressed={id === 'cut' ? armed : undefined}
                         aria-label={`${TOOL_INFO[id].name}: ${armed ? 'Choose a direction' : TOOL_INFO[id].hint}. ${charges} charge${charges === 1 ? '' : 's'}. Key ${key ? keyLabel(key) : 'unbound'}.`}
                     >
-                        <img src={`/images/tools/${id}.svg`} alt="" className="tool-icon" aria-hidden="true" />
-                        <span className="tool-name">{TOOL_INFO[id].name}</span>
-                        {armed && <span className="tool-armed-hint">Choose a direction</span>}
-                        <span className="tool-key" aria-hidden="true">{key ? keyLabel(key) : ''}</span>
-                        <span className="tool-count" aria-hidden="true">{charges}</span>
+                        <span>{TOOL_INFO[id].name}</span>
+                        {armed && <span className="me-hint me-gold">Choose a direction</span>}
+                        <span className="me-key" aria-hidden="true">{key ? keyLabel(key) : ''}</span>
+                        <span className="me-count" aria-hidden="true">{charges}</span>
                     </button>
                 );
             })}
             {model.anchored > 0 && (
-                <span className="tool-anchored" aria-hidden="true">Anchored: {model.anchored}</span>
+                <span className="me-hint" aria-hidden="true">Anchored: {model.anchored}</span>
             )}
         </div>
     );

@@ -12,6 +12,7 @@ import SettingsPanel from '../components/Settings';
 import ControlsPanel from '../components/Controls';
 import FeatsPanel from '../components/Feats';
 import type { Dir } from '../game/stepper';
+import type { Screen } from '../game/screens';
 import { Analytics } from "@vercel/analytics/react"
 
 /** Follow the coarse-pointer media query; the store re-renders when it flips. */
@@ -44,6 +45,10 @@ function useCoarsePointer(): boolean {
     return useSyncExternalStore(subscribeCoarsePointer, readCoarsePointer, readCoarsePointerOnServer);
 }
 
+/** The screens that show a panel over the board: while one is open the pause
+ * button and the D-pad stand down (design/components/Panel and DPad). */
+const PANEL_SCREENS: readonly Screen[] = ['howto', 'paused', 'settings', 'keys', 'over', 'feats', 'wardrobe'];
+
 interface GameShellProps {
     gameState: GameState;
 }
@@ -57,6 +62,9 @@ interface GameShellProps {
 const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
     const coarse = useCoarsePointer();
+    // A panel (pause, game over, settings, how-to, controls, feats, wardrobe)
+    // owns the screen: the touch pause button and the D-pad hide while one shows.
+    const panelOpen = PANEL_SCREENS.includes(model.screen);
 
     // Held directions go straight to the Stepper's cadence, exactly like keys;
     // taps never come here — the browser's own click drives the title and the
@@ -79,10 +87,12 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
 
             <div id="maze-container">
                 <div id="maze"/>
-                {/* The touch pause button: the same toggle Esc and P use. */}
-                {coarse && (
-                    <button type="button" className="pause-button" aria-label="Pause" onClick={() => gameState.togglePause()}>
-                        {'\u23F8'}
+                {/* The touch pause button: the same toggle Esc and P use, a
+                    48 px icon button with the CSS pause mark, hidden while a
+                    panel is open. */}
+                {coarse && !panelOpen && (
+                    <button type="button" className="me-btn me-btn-icon pause-button" aria-label="Pause" onClick={() => gameState.togglePause()}>
+                        <span className="me-pause-bars" aria-hidden="true"><i /><i /></span>
                     </button>
                 )}
                 {/* The title art, the menu buttons and the how-to come from the
@@ -95,8 +105,9 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
                 <Overlay gameState={gameState} />
             </div>
 
-            {/* The optional D-pad sits below the board, above the HUD. */}
-            {coarse && model.settings.touch === 'dpad' && (
+            {/* The optional D-pad sits below the board, above the HUD, and
+                hides while a panel is open. */}
+            {coarse && !panelOpen && model.settings.touch === 'dpad' && (
                 <DPad onPress={handlePress} onRelease={handleRelease} />
             )}
 

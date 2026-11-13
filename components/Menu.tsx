@@ -22,9 +22,10 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
 }
 
 /**
- * The title menu: the title art as the background of the board area with a dark
- * gradient over its lower half (so the painted START is covered), the mode row
- * and the menu's real-text buttons stacked on it. It draws while the shell is
+ * The title menu (design/components/MenuList): the title painting keeps its
+ * own band at the top, cropped from the top so the lettering shows, with a
+ * line under it, and the MenuList sits below the band on void — nothing
+ * overlaps the painting and no gradient covers it. It draws while the shell is
  * on "title", "howto" or "countdown" — the buttons only on "title", the art
  * dimmed while the countdown runs over it.
  *
@@ -90,40 +91,40 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
     return (
         <div className={model.screen === 'countdown' ? 'title-menu dimmed' : 'title-menu'}>
             <img src="/images/title.png" alt="Manic Entanglement" className="title-art" draggable={false} />
-            <div className="title-gradient" aria-hidden="true" />
             {showsButtons && (
-                <div className="menu-buttons" onKeyDown={handleKeyDown} role="menu" aria-label="Main menu">
+                <div className="me-menu" onKeyDown={handleKeyDown} role="menu" aria-label="Main menu">
                     <div
-                        className="mode-row"
+                        className="me-mode"
                         role="menuitem"
                         tabIndex={0}
-                        aria-label={`Mode: ${model.modeName}. ${model.modeBlurb} Best: ${model.modeBestText}`}
+                        aria-label={`Mode: ${model.modeName}. ${model.modeBlurb} Best ${model.modeBestText}`}
                         ref={modeRowRef}
                     >
-                        <div className="mode-picker">
-                            <button
-                                type="button"
-                                aria-label="Previous mode"
-                                onClick={() => gameState.setMode(cycleMode(model.mode, -1))}
-                            >
-                                &#9664;
-                            </button>
-                            <span className="mode-name">{model.modeName}</span>
-                            <button
-                                type="button"
-                                aria-label="Next mode"
-                                onClick={() => gameState.setMode(cycleMode(model.mode, 1))}
-                            >
-                                &#9654;
-                            </button>
-                        </div>
-                        <p className="mode-blurb">{model.modeBlurb}</p>
-                        <p className="mode-best">Best: {model.modeBestText}</p>
+                        <button
+                            type="button"
+                            className="me-btn me-btn-icon"
+                            aria-label="Previous mode"
+                            onClick={() => gameState.setMode(cycleMode(model.mode, -1))}
+                        >
+                            <i className="me-arrow is-left" aria-hidden="true" />
+                        </button>
+                        <p className="me-display-md">{model.modeName}</p>
+                        <button
+                            type="button"
+                            className="me-btn me-btn-icon"
+                            aria-label="Next mode"
+                            onClick={() => gameState.setMode(cycleMode(model.mode, 1))}
+                        >
+                            <i className="me-arrow" aria-hidden="true" />
+                        </button>
+                        <p className="me-hint">{model.modeBlurb}</p>
+                        <p className="me-best">Best {model.modeBestText}</p>
                     </div>
                     {items.map((item, index) => (
                         <button
                             key={item.id}
                             role="menuitem"
+                            className={item.id === 'play' ? 'me-btn me-btn-primary' : 'me-btn'}
                             ref={(element) => {
                                 buttonRefs.current[index] = element;
                             }}

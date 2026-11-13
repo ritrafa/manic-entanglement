@@ -11,28 +11,30 @@ interface DPadProps {
 }
 
 /** The four buttons of the cross, in reading order with their screen-reader names. */
-const PAD_BUTTONS: readonly { dir: Dir; label: string; className: string }[] = [
-    { dir: "up", label: "Move up", className: "dpad-up" },
-    { dir: "left", label: "Move left", className: "dpad-left" },
-    { dir: "right", label: "Move right", className: "dpad-right" },
-    { dir: "down", label: "Move down", className: "dpad-down" },
+const PAD_BUTTONS: readonly { dir: Dir; label: string; place: string; arrow: string }[] = [
+    { dir: "up", label: "Move up", place: "is-u", arrow: "is-up" },
+    { dir: "left", label: "Move left", place: "is-l", arrow: "is-left" },
+    { dir: "right", label: "Move right", place: "is-r", arrow: "" },
+    { dir: "down", label: "Move down", place: "is-d", arrow: "is-down" },
 ];
 
 /**
- * The optional on-screen D-pad (settings.touch === "dpad"): four 56 px buttons
- * in a cross below the board. `pointerdown` presses a direction and `pointerup`,
- * `pointerleave` and `pointercancel` release it, so sliding off a button stops
- * the run just like lifting. Every button carries its direction as a label for
- * screen readers, and the long-press context menu stays out of the way.
+ * The optional on-screen D-pad (design/components/DPad, settings.touch ===
+ * "dpad"): four 64 px me-btn keys in a cross below the board, each carrying
+ * the CSS pixel arrow and its own grid place. `pointerdown` presses a
+ * direction and `pointerup`, `pointerleave` and `pointercancel` release it, so
+ * sliding off a button stops the run just like lifting. Every button carries
+ * its direction as a label for screen readers, and the long-press context
+ * menu stays out of the way.
  */
 const DPad: React.FC<DPadProps> = ({ onPress, onRelease }) => {
     return (
-        <div className="dpad" role="group" aria-label="Direction pad">
-            {PAD_BUTTONS.map(({ dir, label, className }) => (
+        <div className="me-dpad" role="group" aria-label="Direction pad">
+            {PAD_BUTTONS.map(({ dir, label, place, arrow }) => (
                 <button
                     key={dir}
                     type="button"
-                    className={`dpad-btn ${className}`}
+                    className={`me-btn ${place}`}
                     aria-label={label}
                     onPointerDown={(event) => {
                         event.preventDefault();
@@ -43,7 +45,7 @@ const DPad: React.FC<DPadProps> = ({ onPress, onRelease }) => {
                     onPointerCancel={() => onRelease(dir)}
                     onContextMenu={(event) => event.preventDefault()}
                 >
-                    {dir === "up" ? "\u25B2" : dir === "down" ? "\u25BC" : dir === "left" ? "\u25C0" : "\u25B6"}
+                    <i className={`me-arrow ${arrow}`} aria-hidden="true" />
                 </button>
             ))}
         </div>

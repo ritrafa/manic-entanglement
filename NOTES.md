@@ -450,3 +450,45 @@
   sprites): "404 / No corridor here / That page is not in this maze." with the two wall tiles and
   the exit, and "The maze tangled itself" with an enemy between walls, keeping the digest line and
   the "Try again" button that calls `reset()`. The theme colour stays `#08412c`.
+
+- E43: moved the controls and overlays outside the board onto the design system's
+  parts and deleted the old copies from `styles/globals.css`. Every button in
+  `components/Menu.tsx`, `Overlay.tsx`, `Settings.tsx`, `HowTo.tsx`, `Feats.tsx`,
+  `ToolBar.tsx` and `Controls.tsx` is a `me-btn` (Play, Resume, Retry and the
+  panels' Back are the one primary per screen, Reset progress is
+  `me-btn-danger`, the tool buttons carry name, key and count as text with no
+  SVG icons until pixel tool sprites exist); the pause, game-over, settings,
+  controls, how-to and feats sheets are one `me-panel` (with `me-panel-title`,
+  `me-panel-body`, `me-panel-actions`, `me-summary` and `me-divider`) centred on
+  `me-scrim`, at most 480px wide, scrolling inside with the scrollbar hidden;
+  the title menu is a `me-menu` with the `me-mode` picker below the painting's
+  own band, never over its lettering; the D-pad is `me-dpad` with `me-btn` keys
+  and CSS `me-arrow`s; the touch pause button is a `me-btn me-btn-icon` with
+  `me-pause-bars` and the shell hides it, and the D-pad, whenever a panel
+  (pause, game over, settings, controls, how-to, feats, wardrobe) is open; the
+  entanglement banner and the floating event line follow the Toast pattern
+  (`surface` on a `line`/gold border, `drop-hard`, display type, no blur).
+  Removed selectors: `.title-gradient`, `.menu-buttons` (+ its `button` and its
+  `:hover`/`:focus-visible`), `.menu-best`, `.mode-row` (+ `:focus-visible`),
+  `.mode-picker` (+ its `button` and its `:hover`/`:focus-visible`), `.mode-name`,
+  `.mode-blurb`, `.mode-best`, `.howto-panel`, `.game-over-message` (+ its `p`),
+  `.summary`, `.summary-line`, `.summary-label`, `.summary-value`,
+  `.overlay-buttons button` (+ its `:hover`/`:focus-visible`), `.settings-panel`
+  (+ its `p`), `.settings-rows`, `.settings-row` (+ its `label`, its
+  `label:first-child`, its `input[type="range"]` and its
+  `input[type="checkbox"]`/`[type="radio"]`), `.settings-radio`,
+  `.settings-toggle`, `.settings-choice` (+ its `legend`), `.settings-value`,
+  `.settings-panel .overlay-buttons button` (+ its `:hover`/`:focus-visible`),
+  `.feats-panel` (+ its `p`), `.feats-panel .overlay-buttons button` (+ its
+  `:hover`/`:focus-visible`), `.toolbar`, `.tool-button` (+ `:disabled`),
+  `.tool-icon`, `.tool-name`, `.tool-key`, `.tool-count`, `.tool-anchored`,
+  `.tool-button.tool-armed`, `.tool-armed-hint`, `@keyframes tool-armed-pulse`,
+  `.dpad`, `.dpad-btn` (+ `:active`) and `.dpad-up`/`.dpad-left`/`.dpad-right`/
+  `.dpad-down`. Kept for the wardrobe, the later card that still draws its own
+  sheet: `.overlay-title`, `.overlay-buttons` and the `.wardrobe-*` family; the
+  HUD, the board, the wallet box and the countdown keep their own selectors, and
+  `.settings-label`, `.controls-row`, `.controls-label`, `.controls-key`,
+  `.howto-list`, `.howto-line`, `.howto-sprite`, `.howto-text`, `.feats-list`,
+  `.feats-row`, `.feats-name`, `.feats-text`, `.feats-state`, `.me-dpad`
+  (placement), `.pause-button` (placement), `.title-menu`, `.title-art`,
+  `.level-banner` and `.message` stay as token-based layout or pattern rules.
