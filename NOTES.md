@@ -1082,3 +1082,36 @@
   tick, other seed) giving a different result or null, refuses malformed
   text, holds the 200,000-event cap, and proves a 15-minute bot run at 60
   ticks a second encodes to at most 64 kB.
+
+- E69: the NFT attribute codec and merge rule are in (NFT-PLAN N3). The new
+  pure `game/nftProgress.ts` carries `NftProgress` (the five layers plus
+  `Background`, mode bests, totals, feat ids, held pickups, gear levels and a
+  `synced` watermark), `encodeAttributes(progress, keep?)` and
+  `decodeAttributes(list)` for the Core Attributes plugin's
+  `[{ key, value }]` shape: look keys `Back`/`Body`/`Clothes`/`Eye`/`Head`/
+  `Background`, `Best <Mode name>` per earned best plus `Best Depth`, `Runs`,
+  `Kills`, `Cleared` and `Banked`, `Feats` and `Traits` as base64url bitmasks
+  over FEATS and PICKUP_TRAITS order, gear under `Gear Boots` and friends
+  (the prefix keeps them clear of the stat keys old reptiles carry — the
+  derived stats are never stored; `displayStats` derives them with
+  `statsFromGear` for the metadata route), `Synced` and `Version` 1, with the
+  unknown keys of the asset's current list passed through unchanged and
+  sorted after the known ones and no key ever twice. The decoder never
+  throws: broken values read as defaults, bits past the tables are ignored,
+  and a look value the art does not know (a real holder wears Clothes
+  `White`) is kept exactly as it is, never rewritten to `None`.
+  `mergeProgress(current, runs, chosenLook)` applies verified proofs at or
+  above the watermark in issuedAt order — updateTotals, evaluateFeats on the
+  fresh totals, each mode best by its own rule, depth as a max, traits as a
+  union, gear as capped maxima — moves the watermark to the newest applied
+  run, and is idempotent; a chosen trait only lands when unlocked (feats or
+  held pickups), and the Solana background rides only with its reward feat.
+  `progressVersion` hashes the encoded list with 32-bit FNV-1a to eight hex
+  characters for the image route, and `progressFromSave`/`saveWithProgress`
+  fold verified progress into the local save by max and union while keeping
+  the local look (Q24). `game/nftProgress.test.ts` covers the round trips,
+  the old-holder lists with `Speed`/`Attack` extras kept through a re-encode,
+  duplicate-free keys, the pinned first ids of both bitmask tables, the
+  idempotent merge and watermark, the refused locked looks, and the whole
+  list of a full save (every feat and trait, the longest names, 13-digit
+  `Synced`) at 521 of the 560 bytes the mint transaction fits.
