@@ -1,4 +1,5 @@
 import { Run } from '@/game/run';
+import { RecordingRun, type RunLog } from '@/game/runlog';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
@@ -154,6 +155,8 @@ class GameState {
     /** The movement cadence: held keys, the remembered press and when steps are due. */
     private stepper: Stepper = new Stepper();
     private lastTickAt: number = 0;
+    /** The fractional milliseconds riding from one frame's tick into the next. */
+    private tickCarryMs: number = 0;
     /** The pending 3-2-1 timers while a countdown runs; null when no countdown is running. */
     private countdownTimers: ReturnType<typeof setTimeout>[] | null = null;
     /** Every timeout the shell scheduled, so dispose() can leave nothing that may fire. */
@@ -198,6 +201,10 @@ class GameState {
     private modeId: ModeId = 'descent';
     /** True once the live run emitted "finished"; decides the summary's wording. */
     private lastFinished: boolean = false;
+    /** The finished run's call log (game/runlog.ts), kept in memory for the
+     *  verify card (NFT-PLAN N1): the last run that died, finished or was
+     *  abandoned, ready to encode and send. Nothing is sent from here. */
+    public lastRunLog: RunLog | null = null;
     /** Names of the feats the last finished run earned; the summary prints them. */
     private lastFeatNames: string[] = [];
     /** "Layer Trait" texts the last run's new feats unlocked; the summary prints them. */
@@ -227,7 +234,7 @@ class GameState {
         // The bank carries what earlier runs kept by reaching exits; anything
         // wrongly stored reads as no gear (game/gear.ts), and a no-gear mode
         // never sees the bank at all (game/modes.ts).
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
+        this.run = new RecordingRun({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         this.bestBeforeRun = this.highScore;
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
@@ -578,7 +585,7 @@ class GameState {
         this.highScore = this.storedBest() ?? 0;
         this.bestBeforeRun = this.highScore;
         // The title shows a run of the chosen mode's rules, ready for the countdown.
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
+        this.run = new RecordingRun({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
         this.publishHud();
@@ -633,7 +640,10 @@ class GameState {
             // A restart abandons whatever run was live; from the title the
             // countdown starts one on its own. A refused start leaves no half
             // countdown behind.
-            if (prev !== 'title') this.run.abandon();
+            if (prev !== 'title') {
+                this.run.abandon();
+                this.rememberRunLog();
+            }
             if (!this.startGame()) {
                 this.screen = prev;
                 return;
@@ -700,6 +710,7 @@ class GameState {
         this.howtoFromPlay = false;
         this.lastFinished = false;
         this.run.abandon();
+        this.rememberRunLog();
         // The page shows the title again by itself: the title art belongs to
         // components/Menu.tsx, driven by the screen in the snapshot.
         this.board.setLevel(this.run, this.cellSize, this.viewport);
@@ -1061,7 +1072,7 @@ class GameState {
         this.rollDailyDay();
         // The run is built fresh under the chosen mode's rules: its own seed
         // (the calendar day for Daily) and its own gear (no bank without gear).
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
+        this.run = new RecordingRun({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         // The bar and the "new high score" claim measure this run against the best it started with.
         this.bestBeforeRun = this.storedBest() ?? 0;
         this.highScore = this.bestBeforeRun;
@@ -1079,6 +1090,7 @@ class GameState {
     private startClock(): void {
         if (this.rafId !== null) return;
         this.lastTickAt = performance.now();
+        this.tickCarryMs = 0;
         const frame = () => {
             this.rafId = requestAnimationFrame(frame);
             const now = performance.now();
@@ -1093,7 +1105,13 @@ class GameState {
             }
             const elapsedMs = clampDt(now - this.lastTickAt);
             this.lastTickAt = now;
-            this.run.tick(elapsedMs);
+            // The run ticks in whole milliseconds (game/runlog.ts records what
+            // it gets): the fraction rides into the next frame, so the timing
+            // is the same as before within 1 ms and the log stores integers.
+            this.tickCarryMs += elapsedMs;
+            const wholeMs = Math.floor(this.tickCarryMs);
+            this.tickCarryMs -= wholeMs;
+            if (wholeMs > 0) this.run.tick(wholeMs);
             this.handleEvents();
             this.maybeWarnLowEnergy(now);
             this.publishHud();
@@ -1211,6 +1229,17 @@ class GameState {
         }
         this.hudSnapshot = next;
         this.hudListeners.forEach((listener) => listener());
+    }
+
+    /**
+     * Keep the live run's call log (game/runlog.ts) as the last finished
+     * run's, in memory for the verify card. A run that never started has no
+     * story to tell and is not kept.
+     */
+    private rememberRunLog(): void {
+        if (this.run instanceof RecordingRun && this.run.started) {
+            this.lastRunLog = this.run.getLog();
+        }
     }
 
     /** Turn the run's queued events into sound, drawing and messages, oldest first. */
@@ -1334,6 +1363,7 @@ class GameState {
                     }
                     break;
                 case 'dead':
+                    this.rememberRunLog();
                     this.stopClock();
                     // A time mode never records a death: only a finished run's
                     // milliseconds count (see the "finished" case).
@@ -1344,6 +1374,7 @@ class GameState {
                     break;
                 case 'finished':
                     // The last level is down: the tally's time is the result.
+                    this.rememberRunLog();
                     this.stopClock();
                     this.lastFinished = true;
                     this.recordBest(this.run.tally.ms);

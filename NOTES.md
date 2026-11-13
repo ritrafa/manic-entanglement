@@ -1051,3 +1051,34 @@
   here — the clone carries no git history and the binary is nowhere in the
   sandbox, so `exit.gif` still holds the black hole; re-run the two git
   commands from the owner's card when history is available.
+
+- E68: every run is recorded and any recorded run replays to the identical
+  result (NFT-PLAN N1). The new pure `game/runlog.ts` holds the `RunLog` type
+  (`{ v: 1, seed, mode, gear, feats, pickedUp, events }` with the ordered
+  events tick `ms` / move `dx dy` / tool `id dir?` / next level / abandon),
+  `encodeLog` and `decodeLog`: the text is one small JSON header whose `e`
+  field carries dot-separated tokens (`mr` a step right, `ucl` a Cut left,
+  `n`, `a`), and consecutive ticks with the same value collapse into one
+  run-length entry (`t16x5` is five ticks of 16 ms). `decodeLog` never
+  throws — anything malformed answers null — and refuses a log expanding
+  past 200,000 events. `class RecordingRun extends Run` keeps the same
+  surface, forwards the shell's six calls, and writes them down: ticks
+  arrive in whole milliseconds (the fraction rides into the next call) and
+  ticks with nothing between them merge into one event, which a replay
+  answers exactly because a tick only adds its milliseconds and drains from
+  the standing pending time. `game/replay.ts` answers `replay(log)` with
+  `{ tally, score, depth, mode, pickedUp, gear, ended }` — the score the
+  shell ranks each mode by, the traits kept at exits from the `traitKept`
+  events, the banked gear — or null for a call no live shell could have
+  written (a tool the run does not hold, a next level outside "clear", a
+  non-cardinal move). `lib/GameState.ts` builds its `Run` as a
+  `RecordingRun` in all three places, keeps the last finished run's log in
+  `lastRunLog` (dead, finished or abandoned; nothing is sent anywhere yet),
+  and its frame loop carries the tick's fractional milliseconds into the
+  next frame, so the log stores integers and the timing is unchanged within
+  1 ms. `game/replay.test.ts` plays 200 seeds through all four modes and
+  compares tally, score, depth, banked traits and gear after the encode /
+  decode / replay round trip, shows a tampered log (extra move, changed
+  tick, other seed) giving a different result or null, refuses malformed
+  text, holds the 200,000-event cap, and proves a 15-minute bot run at 60
+  ticks a second encodes to at most 64 kB.
