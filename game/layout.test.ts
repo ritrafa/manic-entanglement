@@ -6,8 +6,10 @@ import {
     MIN_READABLE_CELL,
     CAMERA_CELL_STEP,
     MIN_VIEW_TILES,
+    MIN_STAGE,
     WIDTH_SHARE,
     HEIGHT_SHARE,
+    stageSide,
 } from "@/game/layout";
 
 describe("boardLayout", () => {
@@ -187,6 +189,62 @@ describe("viewportFor", () => {
                     expect(vp.board).toBe(vp.cell * tiles);
                 }
             }
+        }
+    });
+});
+
+describe("stageSide", () => {
+    it("gives a phone its largest square inside the shares", () => {
+        // 403 * 0.94 = 378.82; 900 * 0.72 = 648 -> the width is the bind: 378.
+        expect(stageSide(403, 900)).toBe(378);
+        // 390 * 0.94 = 366.6; 844 * 0.72 = 607.68 -> 366.
+        expect(stageSide(390, 844)).toBe(366);
+    });
+
+    it("gives a desktop its largest square inside the shares", () => {
+        // 1280 * 0.94 = 1203.2; 800 * 0.72 = 576 -> the height is the bind: 576.
+        expect(stageSide(1280, 800)).toBe(576);
+    });
+
+    it("is never larger than either viewport share", () => {
+        const screens = [
+            { w: 1280, h: 800 },
+            { w: 390, h: 844 },
+            { w: 403, h: 900 },
+            { w: 768, h: 1024 },
+            { w: 1920, h: 1080 },
+            { w: 100, h: 100 },
+        ];
+        for (const { w, h } of screens) {
+            const side = stageSide(w, h);
+            expect(side).toBeLessThanOrEqual(w * WIDTH_SHARE);
+            expect(side).toBeLessThanOrEqual(h * HEIGHT_SHARE);
+            expect(Number.isInteger(side)).toBe(true);
+        }
+    });
+
+    it("depends on the viewport alone, never on the maze size", () => {
+        // The stage takes no maze argument: the same viewport answers the
+        // same square whatever level is about to start, so the board area and
+        // the HUD under it cannot shift at a level start.
+        const screens = [
+            { w: 1280, h: 800 },
+            { w: 390, h: 844 },
+            { w: 403, h: 900 },
+        ];
+        for (const { w, h } of screens) {
+            const first = stageSide(w, h);
+            for (const tiles of [11, 21, 27, 51, 91]) {
+                expect(stageSide(w, h)).toBe(first);
+                // The maze drawn for that level always fits inside the stage.
+                expect(viewportFor(w, h, tiles).view).toBeLessThanOrEqual(first);
+            }
+        }
+    });
+
+    it("falls back to a small drawable stage for a zero or NaN viewport", () => {
+        for (const [w, h] of [[0, 0], [NaN, 844], [390, NaN], [-403, -900]] as const) {
+            expect(stageSide(w, h)).toBe(MIN_STAGE);
         }
     });
 });

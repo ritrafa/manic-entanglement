@@ -920,3 +920,43 @@
   opens the page that holds the equipped trait, and equipping keeps the
   current page. The New tags, the rarity pips, the unlocked-percentage line
   and the close/seen behaviour are untouched.
+
+- E65: one steady stage from the first paint on. The screen no longer
+  bounces between loading, title, countdown and level starts.
+  `game/layout.ts` gains the pure `stageSide(viewW, viewH)`: the side of the
+  largest square that fits `viewW * WIDTH_SHARE` by `viewH * HEIGHT_SHARE`,
+  viewport-only and never a function of the maze size (MIN_STAGE for a broken
+  viewport), with a describe block in `game/layout.test.ts` (phone and
+  desktop sizes, never past either share, the same answer for every maze
+  size, and the level's `viewportFor` view always fitting inside).
+  `lib/GameState.ts` (sizing only) writes it as `--stage-size` on the root in
+  a new `sizeStage()`, called on load (`mountBoard`) and on `handleResize`
+  only — never on a level start — and `sizeBoard` now sizes just `#maze`
+  (centred inside the stage by the container's flex box; the space around a
+  smaller maze is the void the stage paints) and no longer stamps a width on
+  the HUD. `styles/globals.css` gives `#maze-container` that box
+  (`width/height: var(--stage-size)`, `background: var(--void)`, a vw/dvh
+  default for the very first paint) and `#hud.me-hud` the same width
+  (`min(var(--stage-size), 100vw - 32px)`, the old maze-derived `!important`
+  rule gone). The title screen keeps the stage: `[data-screen='title']` now
+  hides only `#maze`, and `.title-screen` (components/Menu.tsx, rendered
+  inside `#maze-container` on every screen by app/page.tsx) fills the stage
+  over the void — art band, mode row, buttons and best line centred in it,
+  the art band shrinking first (min-height 60px) so nothing scrolls at
+  403x900, 390x844 or 1280x800. The HUD renders on every screen, the title
+  included, in the same place; before a run its meters show the fresh run's
+  starting values and `components/Hud.tsx` keeps the tool buttons disabled
+  whenever the shell is not playing. While the GameState does not exist yet
+  the page renders the same skeleton — the empty stage box with the loading
+  text inside it and a `HudSkeleton` box of the same rows and height under
+  it — instead of the bare "Loading..." div. The countdown and the how-to
+  keep their overlays over the stage (the E63 digit still centres whole:
+  `startGame` measures the container, now the stage). Measurements: no
+  browser is available in this sandbox, so the boxes were measured from the
+  sizing functions and the stylesheet's box model rather than
+  `getBoundingClientRect`: at 403x900 `#maze-container` is 378x378,
+  horizontally centred (left 12.5) below the 16 px body padding, and `#hud`
+  is 371 wide directly under it (top 402); at 1280x800 they are 576x576
+  (left 352, top 16) and 576 wide (top 600) — and since `--stage-size` is written
+  only on load and on resize, those boxes are the same strings on the title,
+  during the countdown, at level 1 and at level 3, equal to the pixel.

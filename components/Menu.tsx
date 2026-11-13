@@ -24,14 +24,15 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
 /**
  * The title screen and the title art (design/components/MenuList).
  *
- * On "title" the whole title block takes the board's place in the page's
- * column (app/page.tsx): the painting band at its own aspect ratio with the
- * whole lettering, then the mode picker, the buttons and the best line at
- * their natural height, at the content width (up to 720 px inside the 16 px
- * gutters). Nothing inside it scrolls by itself. The block is vertically
- * centred between the safe-area insets while it is shorter than the screen
- * (E55, the auto margins on .title-screen in styles/globals.css); where it
- * is taller it starts at the top and the page itself scrolls.
+ * On "title" the whole title block shows INSIDE the fixed stage (E65,
+ * app/page.tsx): the board area keeps its box and the block sits in it, over
+ * the void, with the board hidden beneath. The painting band at its own
+ * aspect ratio with the whole lettering, then the mode picker, the buttons
+ * and the best line at their natural height. Nothing inside it scrolls by
+ * itself and the page never scrolls for it: where the block is taller than
+ * the stage on a small phone the art band shrinks first, down to its 60 px
+ * floor (.title-screen .title-art in styles/globals.css), and the block is
+ * centred in the stage.
  *
  * On "howto" and "countdown" only the art shows, as an overlay on the board
  * area (dimmed while the countdown runs over it); the buttons belong to the

@@ -2,7 +2,7 @@ import { Run } from '@/game/run';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
-import { viewportFor } from '@/game/layout';
+import { stageSide, viewportFor } from '@/game/layout';
 import type { BoardViewport } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
@@ -341,6 +341,9 @@ class GameState {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         this.board.mount(mazeElement);
+        // E65: the fixed stage is set here, on load (and on resize), never on
+        // a level start: the board area keeps one box from the first paint on.
+        this.sizeStage();
         this.sizeBoard(this.run.maze.width);
         this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
@@ -1476,7 +1479,21 @@ class GameState {
         }
     }
 
-    /** Size the maze, the HUD and the CSS grid for a maze of the given cell side. */
+    /**
+     * E65: the one fixed stage. #maze-container is a square box whose size
+     * depends only on the viewport (stageSide), written as --stage-size for
+     * styles/globals.css to give the board area its box and the HUD its width.
+     * Called on load (mountBoard) and on resize (handleResize) only — never on
+     * a level start — so nothing shifts when a new maze grows.
+     */
+    private sizeStage(): void {
+        const stage = stageSide(window.innerWidth, window.innerHeight);
+        document.documentElement.style.setProperty('--stage-size', `${stage}px`);
+    }
+
+    /** Size the maze and the CSS grid for a maze of the given cell side. The
+     *  stage around it (E65) is not touched here: it follows the viewport, not
+     *  the maze, so a level start cannot move the board area or the HUD. */
     private sizeBoard(size: number): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
@@ -1489,11 +1506,10 @@ class GameState {
         const viewport = viewportFor(window.innerWidth, window.innerHeight, tiles);
         this.viewport = viewport;
         this.cellSize = viewport.cell;
+        // Centred inside the fixed stage by the container's flex box; the
+        // space around a smaller maze is the void the stage paints.
         mazeElement.style.width = `${viewport.view}px`;
         mazeElement.style.height = `${viewport.view}px`;
-
-        const hudElement = document.getElementById('hud');
-        if (hudElement) hudElement.style.width = `${viewport.view}px`;
 
         document.documentElement.style.setProperty('--cell-size', `${viewport.cell}px`);
         document.documentElement.style.setProperty('--item-size', `${viewport.cell}px`);
@@ -1512,7 +1528,9 @@ class GameState {
     handleResize() {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        // Same sizing path as the level start, then every sprite follows the new cell size.
+        // The stage follows the viewport (E65); then the same sizing path as
+        // the level start, and every sprite follows the new cell size.
+        this.sizeStage();
         this.sizeBoard(this.run.maze.width);
         this.board.resize(this.cellSize, this.viewport);
     }

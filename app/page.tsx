@@ -93,11 +93,13 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
         <TouchLayer onPress={handlePress} onRelease={handleRelease}>
         <div className="game-container" data-screen={model.screen}>
 
-            {/* On the title screen the title block takes the board's place in
-                the column (the board area itself stands down, styles/globals.css);
-                the HUD and the D-pad follow it, top-aligned. */}
-            {model.screen === 'title' && <Menu gameState={gameState} />}
-
+            {/* E65: one fixed stage on every screen. The board area is the
+                same square box in the same place from the first paint on; the
+                maze is centred inside it and the space around a smaller maze
+                is the void. On the title the title block shows inside the
+                stage, over the void, with the board hidden beneath it
+                (styles/globals.css); the countdown and the how-to keep their
+                overlays over the stage as before. */}
             <div id="maze-container">
                 <div id="maze"/>
                 {/* The touch pause button: the same toggle Esc and P use, a
@@ -108,10 +110,11 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
                         <span className="me-pause-bars" aria-hidden="true"><i /><i /></span>
                     </button>
                 )}
-                {/* The title art over the board comes from the shell's screen:
-                    it shows (dimmed under the countdown) on howto and countdown;
-                    on the title the whole block sits in the column above. */}
-                {model.screen !== 'title' && <Menu gameState={gameState} />}
+                {/* The title block (components/Menu.tsx) lives inside the
+                    stage on every screen it shows: the whole block on the
+                    title, the art alone (dimmed under the countdown) on
+                    howto and countdown, nothing elsewhere. */}
+                <Menu gameState={gameState} />
                 <HowTo gameState={gameState} />
                 <SettingsPanel gameState={gameState} />
                 <ControlsPanel gameState={gameState} />
@@ -119,10 +122,11 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
                 <Overlay gameState={gameState} />
             </div>
 
-            {/* The HUD shows from the countdown on: the title screen hides it
-                (E52), so its rows take no room and the title page fits the
-                viewport without scrolling at 403x900 and 1280x800. */}
-            {model.screen !== 'title' && <Hud gameState={gameState} />}
+            {/* E65: the HUD is on screen under the stage on every screen, the
+                title included, always in the same place. Before a run its
+                meters show their starting values and the tool buttons are
+                disabled (components/Hud.tsx). */}
+            <Hud gameState={gameState} />
 
             {/* The optional D-pad is the column's last item, below the HUD,
                 and hides while a panel is open. */}
@@ -135,6 +139,77 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
         </>
     );
 };
+
+/** A single CSS custom property in a skeleton style object (--s the sprite,
+ *  --v the meter), the same shape components/Hud.tsx uses. */
+function skeletonVars(vars: Record<string, string>): React.CSSProperties {
+    return vars as React.CSSProperties;
+}
+
+/**
+ * The HUD's place held while the GameState does not exist yet (E65): the same
+ * #hud box with the same rows, portrait well, meters, stats and tool buttons
+ * at their starting values, so the stage above it sits exactly where the game
+ * will put it and the first paint does not jump when the real HUD arrives.
+ */
+const HudSkeleton: React.FC = () => (
+    <div id="hud" className="me-hud" aria-hidden="true">
+        <div className="me-hud-row">
+            <div className="me-portrait">
+                <div className="me-sprite" style={skeletonVars({ '--s': '48px' })} />
+            </div>
+            <div className="me-hud-meters">
+                <span className="me-label">Energy</span>
+                <span className="me-num me-energy">100</span>
+                <div className="me-meter" style={skeletonVars({ '--v': '100%' })}><i /></div>
+                <span className="me-label">Score</span>
+                <span className="me-num me-gold">0</span>
+                <div className="me-meter is-gold" style={skeletonVars({ '--v': '0%' })}><i /></div>
+            </div>
+        </div>
+        <div className="me-hud-row">
+            <div className="me-stats">
+                <div className="me-stat">
+                    <img className="me-icon" src="/images/gloves.gif" alt="" />
+                    <span className="me-label">Atk</span>
+                    <b>1.0</b>
+                </div>
+                <div className="me-stat">
+                    <img className="me-icon" src="/images/shield.gif" alt="" />
+                    <span className="me-label">Def</span>
+                    <b>1.0</b>
+                </div>
+                <div className="me-stat">
+                    <img className="me-icon" src="/images/speed.gif" alt="" />
+                    <span className="me-label">Clock</span>
+                    <b>100%</b>
+                </div>
+                <div className="me-stat">
+                    <img className="me-icon" src="/images/boots.gif" alt="" />
+                    <span className="me-label">Step</span>
+                    <b>100%</b>
+                </div>
+            </div>
+            <div className="me-tools">
+                <button type="button" className="me-btn me-tool" disabled tabIndex={-1}>
+                    <img className="me-tool-icon" src="/images/tools/anchor.png" alt="" width={24} height={24} draggable={false} />
+                    <span>Anchor</span>
+                    <span className="me-count" aria-hidden="true">0</span>
+                </button>
+                <button type="button" className="me-btn me-tool" disabled tabIndex={-1}>
+                    <img className="me-tool-icon" src="/images/tools/twist.png" alt="" width={24} height={24} draggable={false} />
+                    <span>Twist</span>
+                    <span className="me-count" aria-hidden="true">0</span>
+                </button>
+                <button type="button" className="me-btn me-tool" disabled tabIndex={-1}>
+                    <img className="me-tool-icon" src="/images/tools/cut.png" alt="" width={24} height={24} draggable={false} />
+                    <span>Cut</span>
+                    <span className="me-count" aria-hidden="true">0</span>
+                </button>
+            </div>
+        </div>
+    </div>
+);
 
 const Page: React.FC = () => {
     const [gameState, setGameState] = useState<GameState | null>(null);
@@ -174,7 +249,19 @@ const Page: React.FC = () => {
     }, [gameState]);
 
     if (!gameState) {
-        return <div>Loading...</div>;
+        // E65: the first paint already shows the steady layout: the empty
+        // stage box (the same size, painted in the void colour, its size from
+        // the --stage-size the stylesheet guesses until the shell writes the
+        // exact pixels) with the loading text inside it, and an empty HUD box
+        // of the same height under it. Nothing jumps when the game appears.
+        return (
+            <div className="game-container" data-screen="loading">
+                <div id="maze-container" aria-hidden="true">
+                    <p className="stage-loading">Loading...</p>
+                </div>
+                <HudSkeleton />
+            </div>
+        );
     }
 
     return <GameShell gameState={gameState} />;

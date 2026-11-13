@@ -1,8 +1,9 @@
-import React, { useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import { rpcUrl } from '@/lib/reptile';
 import { pfpLayers } from '@/game/sprite';
 import GameState from '@/lib/GameState';
 import ToolBar from './ToolBar';
+import { TOOL_IDS } from '@/game/tools';
 import WalletGate from './WalletGate';
 
 interface HudProps {
@@ -31,9 +32,33 @@ function cssVars(vars: Record<string, string>): React.CSSProperties {
  *
  * The whole model comes from the shell's store: one source, no getElementById,
  * and a React re-render (e.g. a wallet connecting) can never put stale text back.
+ *
+ * E65: the bar renders on every screen, the title included, always in the same
+ * place under the fixed stage. Before a run the meters show their starting
+ * values (the fresh run's model, game/hud.ts) and the tool buttons are
+ * disabled; they wake the moment the shell is playing.
  */
 const Hud: React.FC<HudProps> = ({ gameState }) => {
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
+
+    // E65: the HUD shows on every screen, the title included, so the tool
+    // buttons must answer outside a run too: they are disabled whenever the
+    // shell is not playing (ToolBar's own rule only knows the charges). The
+    // buttons are ToolBar's own; this walks them in TOOL_IDS order after every
+    // render whose screen or charges changed, applying charge AND play state,
+    // so a stale enabled button can never survive into the title.
+    const playing = model.screen === 'playing';
+    const hudRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        const root = hudRef.current;
+        if (!root) return;
+        const buttons = root.querySelectorAll<HTMLButtonElement>('.me-tools .me-tool');
+        buttons.forEach((button, index) => {
+            const id = TOOL_IDS[index];
+            if (id === undefined) return;
+            button.disabled = !playing || model.tools[id] <= 0;
+        });
+    }, [playing, model.tools]);
 
     // No RPC endpoint configured: no wallet box at all (no button, no hook
     // that would miss its context). WalletGate holds the wallet hooks behind
@@ -42,7 +67,7 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
     const hasWallet = rpcUrl() !== null;
 
     return (
-        <div id="hud" className="me-hud">
+        <div id="hud" className="me-hud" ref={hudRef}>
         <div className="me-hud-row">
             {/* The reptile's PFP: the 16-grid portrait layers of the current
                 look stacked at 48px on well — never the runner here. */}

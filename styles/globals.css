@@ -71,10 +71,10 @@ body {
 .game-container {
   display: contents;
 }
-/* On the title screen the title block takes the board's place in the column,
-   so the board area stands down; the board itself stays in the DOM, mounted
-   and ready for the first run. */
-.game-container[data-screen='title'] #maze-container {
+/* On the title screen the board area keeps its box (E65): the title block
+   shows inside the stage, over the void, and the board itself stays in the
+   DOM, mounted and ready for the first run, hidden beneath the block. */
+.game-container[data-screen='title'] #maze {
   display: none;
 }
 /* The drifting galaxy lives on #maze::before, a layer exactly the size of
@@ -97,8 +97,26 @@ body {
     background-position: -1000px -500px;
   }
 }
+/* The fixed stage (E65): one square box, the same size and place on every
+   screen from the first paint on. Its side is --stage-size, the largest
+   square that fits 94% of the viewport width by 72% of its height
+   (stageSide in game/layout.ts, the same shares as the board): the shell
+   writes the exact pixels on load and on resize, never on a level start, and
+   the vw/vh default below is the stylesheet's own guess for the very first
+   paint, before the shell exists. The maze is centred inside it by the flex
+   box; the space around a smaller maze is the void colour. The HUD under it
+   follows the same width. */
+:root {
+  --stage-size: min(94vw, 72vh);
+  --stage-size: min(94vw, 72dvh);
+}
 #maze-container {
   position: relative;
+  box-sizing: border-box;
+  flex: none;
+  width: var(--stage-size);
+  height: var(--stage-size);
+  background: var(--void);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -106,6 +124,14 @@ body {
   /* Touches on the board belong to the game: no browser pan, zoom or double-tap. */
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
+}
+/* The loading text (app/page.tsx, HudSkeleton's companion): centred in the
+   empty stage while the GameState does not exist yet. */
+.stage-loading {
+  margin: 0;
+  font: 400 16px/24px var(--font-display);
+  color: var(--ink);
+  text-align: center;
 }
 #maze {
   position: relative;
@@ -218,27 +244,30 @@ body {
   opacity: 0.5;
 }
 
-/* The title screen (components/Menu.tsx, design/components/MenuList): the
-   title block takes the board's place in the page's top-aligned column, at
-   the content width (up to 720 px, inside the 16 px gutters): the painting
+/* The title screen (components/Menu.tsx, design/components/MenuList) lives
+   INSIDE the fixed stage (E65): the board area keeps its box and the block
+   shows in it, over the void, with the board hidden beneath. The painting
    band at its own aspect ratio with the whole lettering, then the mode
-   picker, the buttons and the best line at their natural height. Nothing
-   inside it scrolls by itself; where the block is taller than the screen the
-   page itself scrolls. Auto margins (E55) centre it vertically in the space
-   between the safe-area insets when it is shorter than the viewport, and
-   resolve to zero when it is taller, so a tall block still starts at the top
-   and the page scrolls as before. Play, countdown and how-to keep their top
-   alignment. */
+   picker, the buttons and the best line at their natural height, centred in
+   the stage. Nothing inside it scrolls and the page never scrolls for it:
+   where the block is taller than the stage on a small phone the art band
+   shrinks first (flex-shrink, down to its 60 px floor) and anything left
+   over is clipped by the stage's own overflow. */
 .title-screen {
   box-sizing: border-box;
-  width: min(720px, calc(100vw - 32px));
-  margin: auto;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-16);
+  background: var(--void);
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
 }
 .title-screen .title-art {
-  flex: none;
+  /* Shrink first when the stage is short, but never below a 60 px band. */
+  flex: 0 1 auto;
+  min-height: 60px;
   box-sizing: border-box;
   /* The painting's lettering band, cropped by CSS (E52 — the file is never
      edited): the 500 px square holds the whole "MANIC ENTANGLEMENT"
@@ -264,6 +293,7 @@ body {
    scrolling at 390x844 and 1280x800. */
 .title-screen .me-menu {
   box-sizing: border-box;
+  flex: none;
   margin: var(--space-16) 0 0;
   padding: 0;
   width: min(440px, 100%);
@@ -1096,15 +1126,15 @@ body {
    parts come from design/components.css; the rows only decide who shares a
    line, so at 1280x800 the bar is two rows and never a stack.
 
-   The width is the larger of the board's width and 720px, never wider than
-   the viewport minus the 16px gutters on each side, centred under the board
-   (the body centres it). The board's side is rebuilt from the two custom
-   properties lib/GameState.ts sizeBoard writes for the tiles; the !important
-   is because sizeBoard still stamps the plain board width on the element as
-   an inline style, and the bar's own rule must win over it. */
+   The width follows the fixed stage (E65), not the maze: --stage-size, the
+   same square the board area keeps on every screen, never wider than the
+   viewport minus the 16px gutters on each side, centred under the stage (the
+   body centres it). The shell writes --stage-size on load and on resize
+   (lib/GameState.ts sizeStage); the stylesheet's own default sizes the empty
+   HUD box of the loading skeleton to match before the shell exists. */
 #hud.me-hud {
   box-sizing: border-box;
-  width: min(max(calc(var(--cell-size, 24px) * var(--grid-size, 11)), 720px), calc(100vw - 32px)) !important;
+  width: min(var(--stage-size), calc(100vw - 32px));
   max-width: calc(100vw - 32px);
   /* The bar sits under the board with one space-8 of air, centred. */
   margin: var(--space-8) auto 0;

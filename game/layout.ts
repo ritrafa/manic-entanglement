@@ -144,3 +144,24 @@ export function viewportFor(viewW: number, viewH: number, tiles: number): BoardV
     }
     return { mode: 'camera', cell, viewTiles, view: cell * viewTiles, board: cell * tiles };
 }
+
+/** The fixed stage (E65) is this many pixels across when the viewport itself
+ *  is unusable (NaN, zero, negative): a small but drawable box, so the first
+ *  paint always has a stage to show. */
+export const MIN_STAGE = 120;
+
+/**
+ * The one fixed stage the board area keeps from the first paint on (E65): the
+ * side of the largest SQUARE that fits viewW * WIDTH_SHARE by
+ * viewH * HEIGHT_SHARE, in whole pixels. It depends on the viewport alone —
+ * never on the maze size — so the stage, and the HUD that follows its width,
+ * hold their size and place through the title, the countdown and every level.
+ * The maze (viewportFor) is centred inside this box; the space around a
+ * smaller maze is the void colour. A viewport that cannot be read (NaN, zero,
+ * negative) falls back to MIN_STAGE.
+ */
+export function stageSide(viewW: number, viewH: number): number {
+    const usable = Math.min(viewW * WIDTH_SHARE, viewH * HEIGHT_SHARE);
+    if (!Number.isFinite(usable) || usable <= 0) return MIN_STAGE;
+    return Math.floor(usable);
+}
