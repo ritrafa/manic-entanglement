@@ -121,7 +121,11 @@ Design points worth knowing:
   per unit (a priority fee of roughly 1,100 to 2,300 lamports).
 - **Attribute budget**: with three signatures a mint fits an attribute list
   of 595 bytes (4 + key + 4 + value, summed; 591 once the number has five
-  digits); a save fits 683. Pinned in `lib/nft/tx.test.ts`.
+  digits); a save fits 683. Pinned in `lib/nft/tx.test.ts`. The real codec's
+  fullest possible list (every feat and pickup, capped gear, longest names,
+  seven-digit counters) is 526 bytes, and 647 with an old holder's six extra
+  keys: both fit, the second with 36 bytes to spare.
+  `lib/nft/budget.test.ts` fails if the codec outgrows either limit.
 
 ### Browser helper (`lib/nft/client.ts`)
 
@@ -171,8 +175,9 @@ the Core program (`--clone-upgradeable-program CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R9
 
 `node scripts/nft/devnet-e2e.mjs --keys <dir>` against api.devnet.solana.com
 with throwaway keys: all 48 checks passed, and every quoted fee equalled the
-measured cost to the lamport. Test collection
-`3Dsac4vg9EDW65HH4a8iysDSQ4UyU9CMwQ3r2BpXyf2T`, game signer
+measured cost to the lamport. This is the run with the real E69 codec and
+E70 proofs (`lib/nft/progress.ts`). Test collection
+`3PhNkpk9qwkb84UMPrBcTTw3eDVJNEKoB8etwP8WwkC4`, game signer
 `9koXNSzMnbi7ydBs8nVTGiYQdUjoJYYY41kKcB5KnFpx`.
 
 The Update Delegate assumption holds: a key in the collection's
@@ -182,17 +187,17 @@ Attributes plugin. Before it was a delegate the same key was refused.
 
 | Action | Total (lamports) | SOL | Network | Rent | Core fee | Units | Tx bytes |
 |---|---|---|---|---|---|---|---|
-| Mint (629-byte account) | 5,361,573 | 0.005361573 | 16,013 | 3,845,560 | 1,500,000 | 35,106 | 1,033 |
-| Save, same size | 11,931 | 0.000011931 | 11,931 | 0 | 0 | 70,408 | 945 |
-| Save, list grows by 26 bytes (a first Sprint best) | 144,103 | 0.000144103 | 12,023 | 132,080 | 0 | 73,925 | 971 |
-| Save after a foreign key was added | 12,074 | 0.000012074 | 12,074 | 0 | 0 | 75,890 | 992 |
-| First save on an old holder's asset (look-only list) | 1,738,996 | 0.001738996 | 11,796 | 1,727,200 | 0 | 65,204 | 1,069 |
-| First save on an asset with no Attributes plugin | 2,378,434 | 0.002378434 | 11,154 | 2,367,280 | 0 | 40,512 | 911 |
+| Mint (613-byte account) | 5,280,286 | 0.005280286 | 16,006 | 3,764,280 | 1,500,000 | 34,819 | 1,017 |
+| Save, same size | 11,901 | 0.000011901 | 11,901 | 0 | 0 | 69,260 | 929 |
+| Save, list grows by 28 bytes (a first Sprint best) | 154,239 | 0.000154239 | 11,999 | 142,240 | 0 | 73,005 | 957 |
+| Save after a foreign key was added | 12,059 | 0.000012059 | 12,059 | 0 | 0 | 75,316 | 978 |
+| First save on an old holder's asset (look-only list) | 1,657,709 | 0.001657709 | 11,789 | 1,645,920 | 0 | 64,929 | 1,053 |
+| First save on an asset with no Attributes plugin | 1,895,745 | 0.001895745 | 11,065 | 1,884,680 | 0 | 37,088 | 816 |
 
 Signatures (devnet): mint
-`2oSNGxuxiPfbVu18BPV6KWFfRsVxVtE1jGBJNkFKJny2sBC3o4n4HJLqLkmawF3JfV4of6wg7QfBdhRnNeCdZ7nV`,
-save `5Dzjhbq7CmKMHwe9VvWj6RpEuo2yNBCW9EkYs1ZgukmAz45GV3RU3ruaQeG8JiF2ZroTmtBMcGk5cYPrVqfWQ71C`,
-growing save `5jknFeLwxAkbr3P2tWa8GFta9wnb9dPL8fCrxJtq9zemzGtpvPohMd2HTmdrQ2bfrSF9CFbZo6sWUmthoy4cck35`.
+`2EbCQD5uyQNCJwaEpCh2osC2RnX4gNygVVM8oC1MuodkHZVEVQyUH1dUJGvDP6vGgQAKNUYohbnZZTbF51kyFW7E`,
+save `58XdRDDxmzHcJWuj6N4dE7tEZG6yd1fYej1BazwmTY2BWa2A2KPwtXv8yqCYdCJAnbw8hfkEzBP7WUdYvdfjbphj`,
+growing save `HhD9Bysjnev8NuiqmyZLPdeAMcCphMvTBRYeGoQm7uXmsbWdgqs5YdcLH2h7JQcVUykct2AxugWGsgB3vgr9Dwn`.
 
 Rent is 5,080 lamports per byte on devnet and on mainnet (the two clusters
 answer `getMinimumBalanceForRentExemption` identically, read the same day),
@@ -201,8 +206,8 @@ network fee unless the list gets longer; a value that gains a digit costs
 5,080 lamports once. The network fee is 5,000 lamports per signature (3 on a
 mint, 2 on a save) plus the priority fee. The Core program is byte-identical
 on both clusters (810,273 bytes, sha256 `af40bd111c783e4c...`), so mainnet
-should cost the same. These numbers came from the stand-in codec used
-before E69 landed; the real list moves the rent a little.
+should cost the same. A run with the stand-in codec used before E69 landed
+cost about 80,000 lamports more per mint (a 629-byte account).
 
 An earlier run with `--local` (a `solana-test-validator`, Agave 2.3.12, with
 Core cloned from mainnet) passed the same 48 checks; its totals were higher
