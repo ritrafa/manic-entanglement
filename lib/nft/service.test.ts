@@ -270,6 +270,30 @@ describe('prepareSave', () => {
         expect(text(tx.message.compiledInstructions[2].data)).toContain(prepared.summary.uri?.to);
         expect(prepared.fee).toEqual({ network: 10_000 + 1140, rent: 174_000, protocol: 0, total: 185_140 });
     });
+    it('keeps a look value the current art does not know, unless the player replaces it', async () => {
+        const old = [{ key: 'Clothes', value: 'White' }, { key: 'Body', value: 'Purple' }, { key: 'Head', value: 'Crown' }];
+        const clothes = (prepared: Prepared) => (prepared.summary.kind === 'save'
+            ? prepared.summary.changes.filter((change) => ['Clothes', 'Body', 'Head'].includes(change.key)) : null);
+        // No look sent: nothing about the look changes.
+        let kit = withAsset(old);
+        let prepared = ok(await prepareSave({ wallet: kit.W, asset: kit.A, proofs: [proof(kit.W, T)], look: null }, kit.deps));
+        expect(clothes(prepared)).toEqual([]);
+        expect(text(decode(prepared).message.compiledInstructions[3].data)).toContain('White');
+        // The look sent back as it is, with one free trait picked: only that layer changes.
+        kit = withAsset(old);
+        const look = { Back: 'None', Body: 'Purple', Clothes: 'White', Eye: 'Asleep', Head: 'Crown', Background: 'Void' };
+        prepared = ok(await prepareSave({ wallet: kit.W, asset: kit.A, proofs: [], look }, kit.deps));
+        expect(clothes(prepared)).toEqual([]);
+        if (prepared.summary.kind !== 'save') throw new Error('kind');
+        expect(prepared.summary.changes).toContainEqual({ key: 'Eye', from: null, to: 'Asleep' });
+        // Replacing the unknown value with a free one works; it cannot be picked back.
+        kit = withAsset(old);
+        prepared = ok(await prepareSave({ wallet: kit.W, asset: kit.A, proofs: [], look: { ...look, Clothes: 'None' } }, kit.deps));
+        expect(clothes(prepared)).toEqual([{ key: 'Clothes', from: 'White', to: 'None' }]);
+        kit = withAsset([{ key: 'Clothes', value: 'None' }]);
+        const back = await prepareSave({ wallet: kit.W, asset: kit.A, proofs: [], look: { ...starterLook(), Clothes: 'White' } }, kit.deps);
+        expect([back.status, error(back)]).toEqual([400, 'bad_look']);
+    });
     it('has nothing to save when the same proofs come again', async () => {
         const { deps, chain, W, A } = withAsset();
         const proofs = [proof(W, T, { score: 555 })];

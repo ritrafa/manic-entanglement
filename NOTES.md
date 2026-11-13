@@ -110,6 +110,10 @@ Design points worth knowing:
   not the index, merge with `mergeProgress`, and write the whole list back
   with unknown keys kept (`encodeAttributes(progress, current)`). An asset
   without the Attributes plugin gets it added.
+- **Old looks are never rewritten.** A look value the current art does not
+  know (a real holder wears Clothes `White`) stays as it is on chain. A save
+  may send that value back for its layer; it changes only when the player
+  picks a different trait, and cannot be picked again afterwards.
 - **Name**: `Entangled Reptile #<numMinted + 1>`, read at request time. Two
   mints prepared in the same moment can get the same number.
 - **Compute budget**: each request simulates once unsigned to measure the
@@ -171,7 +175,7 @@ cluster. Request test SOL at https://faucet.solana.com"), so the run above
 was made with `--local` against a `solana-test-validator` (Agave 2.3.12)
 that cloned the Core program from mainnet. The program bytes are identical
 on mainnet, devnet and that validator (810,273 bytes, sha256 `af40bd111c783e4c...`),
-and rent and signature fees are the same on every cluster. All 47 checks
+and rent and signature fees are the same on every cluster. All 48 checks
 passed; every quoted fee equalled the measured cost to the lamport. To
 repeat on devnet, fund the throwaway authority the script prints from the
 web faucet and run it without `--local`.
@@ -183,11 +187,11 @@ Attributes plugin. Before it was a delegate the same key was refused.
 
 | Action | Total (lamports) | SOL | Network | Rent | Core fee | Units | Tx bytes |
 |---|---|---|---|---|---|---|---|
-| Mint (685-byte account) | 7,174,563 | 0.007174563 | 16,083 | 5,658,480 | 1,500,000 | 37,783 | 1,089 |
-| Save, same size | 12,161 | 0.000012161 | 12,161 | 0 | 0 | 79,268 | 1,001 |
-| Save, list grows by 26 bytes (a first Sprint best) | 193,213 | 0.000193213 | 12,253 | 180,960 | 0 | 82,792 | 1,027 |
-| First save on an old holder's asset (look-only list) | 2,064,975 | 0.002064975 | 11,775 | 2,053,200 | 0 | 64,393 | 1,024 |
-| First save on an asset with no Attributes plugin | 3,609,547 | 0.003609547 | 11,227 | 3,598,320 | 0 | 43,326 | 962 |
+| Mint (629-byte account) | 6,784,737 | 0.006784737 | 16,017 | 5,268,720 | 1,500,000 | 35,268 | 1,033 |
+| Save, same size | 11,931 | 0.000011931 | 11,931 | 0 | 0 | 70,408 | 945 |
+| Save, list grows by 26 bytes (a first Sprint best) | 192,984 | 0.000192984 | 12,024 | 180,960 | 0 | 73,979 | 971 |
+| First save on an old holder's asset (look-only list) | 2,378,199 | 0.002378199 | 11,799 | 2,366,400 | 0 | 65,312 | 1,069 |
+| First save on an asset with no Attributes plugin | 3,254,518 | 0.003254518 | 11,158 | 3,243,360 | 0 | 40,674 | 911 |
 
 Rent is 6,960 lamports per byte, a deposit that comes back when the asset is
 burned. A save costs only the network fee unless the list gets longer; a

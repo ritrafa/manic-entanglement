@@ -21,11 +21,12 @@
 //
 // then run `npx tsc --noEmit && npm test`. The stand-ins below follow the
 // briefs closely enough for the tests and the devnet end-to-end run, but they
-// are NOT the real rules (no Solana background feat, simple bitmasks).
+// are NOT the real rules (no Solana background feat, simple bitmasks, no
+// displayStats helper).
 // ============================================================================
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { FEATS, evaluateFeats, updateTotals } from '@/game/feats';
-import { GEAR_IDS, GEAR_NAMES, gearCap, noGear, sanitizeGear, statsFromGear, type GearLevels } from '@/game/gear';
+import { GEAR_IDS, GEAR_NAMES, gearCap, noGear, sanitizeGear, type GearLevels } from '@/game/gear';
 import { MODES, MODE_IDS, betterScore, type ModeId } from '@/game/modes';
 import type { Tally } from '@/game/run';
 import { LAYER_ORDER, sanitizeLook, type Look } from '@/game/sprite';
@@ -100,13 +101,9 @@ export function encodeAttributes(progress: NftProgress, keep: readonly Attribute
         value: toMask(PICKUP_TRAITS.map((pick) =>
             progress.traits.some((held) => held.layer === pick.layer && held.trait === pick.trait))),
     });
-    for (const id of GEAR_IDS) out.push({ key: GEAR_NAMES[id], value: String(progress.gear[id]) });
-    const stats = statsFromGear(progress.gear);
-    out.push({ key: 'Attack', value: String(Number(stats.attack.toFixed(2))) });
-    out.push({ key: 'Defense', value: String(Number(stats.defense.toFixed(2))) });
-    // The gear level is already stored under "Speed"; the stat keeps its own key.
-    out.push({ key: 'Consumption', value: String(Number(stats.consumption.toFixed(2))) });
-    out.push({ key: 'Energy Storage', value: String(Number(stats.storage.toFixed(2))) });
+    // "Gear " prefix: old reptiles carry stat keys such as "Speed", which pass
+    // through as unknown keys. The derived stats are not stored on chain.
+    for (const id of GEAR_IDS) out.push({ key: `Gear ${GEAR_NAMES[id]}`, value: String(progress.gear[id]) });
     out.push({ key: 'Synced', value: String(progress.synced) });
     out.push({ key: 'Version', value: '1' });
     const known = new Set(out.map((entry) => entry.key));
@@ -122,9 +119,14 @@ export function decodeAttributes(list: readonly Attribute[]): NftProgress {
     for (const entry of Array.isArray(list) ? list : []) {
         if (entry && typeof entry.key === 'string' && typeof entry.value === 'string') map.set(entry.key, entry.value);
     }
-    const look: Record<string, string> = {};
-    for (const layer of LAYER_ORDER) look[layer] = map.get(layer) ?? '';
-    progress.look = { ...sanitizeLook(look), Background: 'Void' };
+    // A value the current art does not know (an old holder's Clothes "White")
+    // is kept exactly as it is: only the player picking a new trait for that
+    // layer replaces it.
+    for (const layer of LAYER_ORDER) {
+        const value = map.get(layer);
+        if (value !== undefined && value !== '') progress.look[layer] = value;
+    }
+    progress.look.Background = map.get('Background') || 'Void';
     for (const mode of MODE_IDS) {
         const best = wholeNumber(map.get(`Best ${MODES[mode].name}`));
         if (best !== null) progress.best[mode] = best;
@@ -139,8 +141,7 @@ export function decodeAttributes(list: readonly Attribute[]): NftProgress {
     progress.traits = PICKUP_TRAITS.filter((_, i) => traits[i]).map(({ layer, trait }) => ({ layer, trait }));
     const gear: Record<string, number> = {};
     for (const id of GEAR_IDS) {
-        // An old holder's "Speed" is a stat like 1.02, not a level: only whole numbers count.
-        const level = wholeNumber(map.get(GEAR_NAMES[id]));
+        const level = wholeNumber(map.get(`Gear ${GEAR_NAMES[id]}`));
         if (level !== null) gear[id] = level;
     }
     progress.gear = sanitizeGear(gear);
@@ -182,7 +183,9 @@ export function mergeProgress(
     if (chosenLook !== null && typeof chosenLook === 'object') {
         for (const layer of LAYER_ORDER) {
             const trait = chosenLook[layer];
-            if (typeof trait === 'string' && isUnlocked(layer, trait, progress.feats, progress.traits)) {
+            // The value the layer already has always stays allowed.
+            if (typeof trait === 'string' && trait !== progress.look[layer]
+                && isUnlocked(layer, trait, progress.feats, progress.traits)) {
                 progress.look[layer] = trait;
             }
         }

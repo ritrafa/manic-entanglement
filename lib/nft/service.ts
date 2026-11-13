@@ -109,13 +109,16 @@ function readProofs(raw: unknown, wallet: string, now: number): ProofPayload[] |
 }
 
 /** The look as the client sent it: five layer names and a background, all
- *  strings naming real traits. Null for anything else. */
-function readLook(raw: unknown): ChosenLook | null {
+ *  strings naming real traits. On a save, a layer may also repeat the value
+ *  the asset already has on chain (`current`), even one the current art does
+ *  not know: such a value is kept, never rewritten. Null for anything else. */
+function readLook(raw: unknown, current: Record<string, string> = {}): ChosenLook | null {
     if (!isRecord(raw)) return null;
     const look: Record<string, string> = {};
     for (const layer of LAYER_ORDER) {
         const trait = raw[layer];
-        if (typeof trait !== 'string' || !TRAITS[layer].includes(trait)) return null;
+        if (typeof trait !== 'string') return null;
+        if (!TRAITS[layer].includes(trait) && trait !== current[layer]) return null;
         look[layer] = trait;
     }
     if (typeof raw.Background !== 'string' || raw.Background.length > 32) return null;
@@ -311,11 +314,7 @@ export async function prepareSave(body: unknown, deps: Deps): Promise<Result> {
 
     const proofs = readProofs(body.proofs, wallet, deps.now());
     if (isResult(proofs)) return proofs;
-    let look: ChosenLook | null = null;
-    if (body.look !== undefined && body.look !== null) {
-        look = readLook(body.look);
-        if (look === null) return refuse(400, 'bad_look');
-    }
+    if (body.look !== undefined && body.look !== null && !isRecord(body.look)) return refuse(400, 'bad_look');
 
     const wrong = await clusterProblem(deps);
     if (wrong) return wrong;
@@ -327,6 +326,11 @@ export async function prepareSave(body: unknown, deps: Deps): Promise<Result> {
     if (onChain.owner !== wallet) return refuse(403, 'not_owner');
 
     const current = onChain.attributes ?? [];
+    let look: ChosenLook | null = null;
+    if (isRecord(body.look)) {
+        look = readLook(body.look, Object.fromEntries(current.map((entry) => [entry.key, entry.value])));
+        if (look === null) return refuse(400, 'bad_look');
+    }
     const { progress, applied } = mergeProgress(decodeAttributes(current), proofs, look);
     // A look the merged progress has not unlocked is refused, not dropped
     // silently: the player would otherwise pay for a save that ignores it.

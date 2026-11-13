@@ -324,8 +324,11 @@ check('old holder: first save prepared', reply.status === 200, why(reply));
 if (reply.status === 200) {
     costs.push(await sendMeasured('first save on an old asset', reply.body, oldHolder));
     const old = await fetchAsset(umi, oldAsset.publicKey);
-    check('old holder: unknown key kept, uri moved to the game', old.attributes.attributeList.some((e) => e.key === 'High Score' && e.value === '292')
+    const has = (key, value) => old.attributes.attributeList.some((e) => e.key === key && e.value === value);
+    check('old holder: unknown key kept, uri moved to the game', has('High Score', '292')
         && old.uri.startsWith('https://www.manic-entanglement.com/api/reptile/'));
+    check('old holder: look values outside the current art are not rewritten',
+        has('Clothes', 'White') && has('Body', 'Purple') && has('Head', 'Crown'));
 }
 
 // An asset with no Attributes plugin at all: the save adds the plugin.
