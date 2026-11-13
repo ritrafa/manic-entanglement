@@ -139,7 +139,7 @@ async function layerInput(layerUrl: string): Promise<Buffer | null> {
  *  (pfpLayers sanitizes); the JSON keeps showing the stored text. */
 export async function renderReptilePng(progress: NftProgress): Promise<Buffer> {
     const base = await backgroundBase(progress.look.Background);
-    const composites: sharp.OverlayOptions[] = [];
+    const composites: Parameters<ReturnType<typeof sharp>["composite"]>[0] = [];
     for (const layerUrl of pfpLayers(progress.look)) {
         const input = await layerInput(layerUrl);
         if (input !== null) composites.push({ input });

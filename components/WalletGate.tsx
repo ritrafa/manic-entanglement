@@ -13,19 +13,16 @@ interface WalletGateProps {
  *  button and the reptile loader (next/dynamic with ssr: false — the wallet
  *  only ever runs in the browser). While that chunk is in flight the button
  *  reads "Loading...". */
-const WalletPanel = dynamic(
-    {
-        loader: () => import('./WalletBox'),
-        ssr: false,
-        loading: () => (
-            <div className="left-box">
-                <button type="button" className="me-btn" disabled>
-                    Loading...
-                </button>
-            </div>
-        ),
-    },
-);
+const WalletPanel = dynamic(() => import('./WalletBox'), {
+    ssr: false,
+    loading: () => (
+        <div className="left-box">
+            <button type="button" className="me-btn" disabled>
+                Loading...
+            </button>
+        </div>
+    ),
+});
 
 /** The plain "Wallet" button the HUD shows in the wallet box's place (only
  *  when an RPC endpoint is configured). One click swaps it for the wallet
