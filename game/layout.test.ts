@@ -2,14 +2,24 @@ import { describe, expect, it } from "vitest";
 import { boardLayout, blobRect } from "@/game/layout";
 
 describe("boardLayout", () => {
-    it("floors the height-limited cell on a desktop viewport", () => {
-        // 800 * 0.62 = 496; 496 / 11 = 45.09 -> 45.
-        expect(boardLayout(1280, 800, 11)).toEqual({ cell: 45, board: 495 });
+    it("rounds the height-limited cell down to the pixel grid on a desktop viewport", () => {
+        // 800 * 0.72 = 576; 576 / 11 = 52.36 -> 52, and 52 >= 24 -> 48.
+        expect(boardLayout(1280, 800, 11)).toEqual({ cell: 48, board: 528 });
     });
 
-    it("floors the width-limited cell on a phone viewport", () => {
-        // 390 * 0.94 = 366.6; 366.6 / 11 = 33.3 -> 33.
-        expect(boardLayout(390, 844, 11)).toEqual({ cell: 33, board: 363 });
+    it("rounds the width-limited cell down to the pixel grid on a phone viewport", () => {
+        // 390 * 0.94 = 366.6; 366.6 / 11 = 33.3 -> 33, and 33 >= 24 -> 24.
+        expect(boardLayout(390, 844, 11)).toEqual({ cell: 24, board: 264 });
+    });
+
+    it("gives the first level's tiles a 24 px cell on a 1280x800 screen", () => {
+        // 800 * 0.72 = 576; 576 / 21 = 27.4 -> 27, and 27 >= 24 -> 24.
+        expect(boardLayout(1280, 800, 21)).toEqual({ cell: 24, board: 504 });
+    });
+
+    it("keeps the whole-pixel cell below 24 on a phone (small screens and deep levels)", () => {
+        // 390 * 0.94 = 366.6; 366.6 / 21 = 17.4 -> 17, below the pixel grid.
+        expect(boardLayout(390, 844, 21)).toEqual({ cell: 17, board: 357 });
     });
 
     it("keeps board = cell * tiles inside both limits for many sizes and screens", () => {
@@ -25,8 +35,9 @@ describe("boardLayout", () => {
                 if (cell > 4) {
                     // Only the minimum cell may break the limits.
                     expect(board).toBeLessThanOrEqual(w * 0.94);
-                    expect(board).toBeLessThanOrEqual(h * 0.62);
+                    expect(board).toBeLessThanOrEqual(h * 0.72);
                 }
+                if (cell >= 24) expect(cell % 24).toBe(0);
             }
         }
     });

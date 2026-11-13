@@ -6,9 +6,14 @@
 /** Smallest cell we will draw, so a tiny or broken viewport still shows a board. */
 export const MIN_CELL = 4;
 
-/** The board may use at most this share of the viewport width / height (HUD room below). */
+/** The board may use at most this share of the viewport width / height (the
+ *  one-row HUD of E44 sits above it, so the board takes most of the height). */
 export const WIDTH_SHARE = 0.94;
-export const HEIGHT_SHARE = 0.62;
+export const HEIGHT_SHARE = 0.72;
+
+/** The design's art grid (design/pixel-art.md): a cell that can afford it is a
+ *  whole multiple of this, so sprites draw at whole multiples of their art. */
+export const PIXEL = 24;
 
 /** The blob is this many tiles across. */
 export const BLOB_TILES = 8;
@@ -29,7 +34,9 @@ export interface BlobRect {
 /**
  * Size a square board of `tiles` tiles per side for a `viewW` x `viewH` viewport.
  * The board fits in viewW * WIDTH_SHARE and viewH * HEIGHT_SHARE unless even
- * MIN_CELL would overflow, and `cell` is always a whole number of pixels.
+ * MIN_CELL would overflow, and `cell` is always a whole number of pixels: the
+ * largest multiple of PIXEL that fits when it can afford one (the pixel grid),
+ * the plain whole-pixel cell below that (small phones and deep levels).
  */
 export function boardLayout(viewW: number, viewH: number, tiles: number): BoardLayout {
     const usable = Math.min(viewW * WIDTH_SHARE, viewH * HEIGHT_SHARE);
@@ -37,6 +44,9 @@ export function boardLayout(viewW: number, viewH: number, tiles: number): BoardL
         ? Math.floor(usable / tiles)
         : MIN_CELL;
     if (!Number.isFinite(cell) || cell < MIN_CELL) cell = MIN_CELL;
+    // Whole multiples of the 24 px art where the screen allows; below 24 the
+    // plain whole-pixel cell stands (a phone and the deep levels stay playable).
+    if (cell >= PIXEL) cell = Math.floor(cell / PIXEL) * PIXEL;
     return { cell, board: cell * tiles };
 }
 

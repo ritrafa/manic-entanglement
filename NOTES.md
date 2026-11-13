@@ -519,3 +519,22 @@
   `#progress-bar` and their inners, `.stats-container`, `.stat`,
   `.carried-marker`, `#stat-*`), restyled `.left-box` as the wallet box inside
   the row, and stacks the HUD below 480px on the `is-phone` pattern.
+
+- E45: put the board on the design's pixel grid. `game/layout.ts` now raises
+  `HEIGHT_SHARE` to 0.72 (the HUD has been one row since E44) and exports the
+  art-grid size `PIXEL = 24`: `boardLayout` still floors the cell to whole
+  pixels, then snaps it down to the largest multiple of 24 that fits whenever
+  it can afford one, so a 1280x800 screen draws the first level's tiles at
+  exactly 24 px; below 24 the plain whole-pixel cell stands, keeping small
+  phones and the deep levels playable, and `blobRect` is untouched.
+  `game/layout.test.ts` covers the new rule (24 px at 1280x800 with 21 tiles,
+  the kept 17 px cell at 390x844 with 21 tiles, multiples of 24 whenever the
+  cell reaches it). `styles/globals.css` dropped the Brute's 1.15 and the
+  Warden's 1.3 `scale` — every enemy now draws at the cell size, the heavier
+  kinds still told apart by their hard rings until their own sprites exist —
+  and cleared the last blur from the board: the Knot keeps its gold ring, teal
+  centre (both tokens now) and pulse without its radial gradient or `0 0 10px`
+  glow, the frozen Knot keeps its dashed ring, and the stalker's marker and
+  intent chevron lost their 1 px drop shadows. Tiles, entities and sprites all
+  already render with `image-rendering: pixelated`; the galaxy drift and the
+  reduced-motion and contrast rules are unchanged.

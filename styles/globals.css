@@ -375,19 +375,17 @@ body {
 }
 
 /* The kinds share the one GIF and differ by shape only: the heavy ones
-   carry rings and are drawn larger. `scale` (not `transform`) grows the sprite
-   so the position transform from lib/board.ts stays untouched. */
+   carry hard rings (no blur, per the design). Every kind draws at the cell
+   size — no fractional scaling; bigger enemies get their own sprites later. */
 .enemy-wisp {
   /* plain */
 }
 
 .enemy-brute {
-  scale: 1.15;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 .enemy-warden {
-  scale: 1.3;
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.85),
     0 0 0 5px rgba(255, 200, 60, 0.85);
@@ -412,7 +410,6 @@ body {
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
   border-bottom: 7px solid #ff3b30;
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
   pointer-events: none;
 }
 
@@ -476,10 +473,9 @@ body {
   top: 0;
   pointer-events: none;
   border-radius: 50%;
-  border: 3px solid #ffd700;
+  border: 3px solid var(--gold);
   box-sizing: border-box;
-  background: radial-gradient(circle, rgba(0, 160, 160, 0.95) 0%, rgba(0, 160, 160, 0.45) 55%, rgba(0, 160, 160, 0) 75%);
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+  background: var(--energy);
   transition: transform 150ms linear;
   animation: knot-pulse 2.4s ease-in-out infinite;
 }
@@ -495,7 +491,6 @@ body {
   animation: none;
   opacity: 0.9;
   border-style: dashed;
-  box-shadow: 0 0 10px rgba(27, 191, 133, 0.7);
 }
 
 /* The tool row in the HUD (components/ToolBar.tsx) is the me-tools part with
@@ -552,7 +547,6 @@ body {
   margin: -5px 0 0 -3px;
   border-top: 2px solid rgba(255, 59, 48, 0.95);
   border-right: 2px solid rgba(255, 59, 48, 0.95);
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
 }
 
 .mark-intent-n::after {
