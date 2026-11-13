@@ -167,18 +167,13 @@ every cost from balances and compares it with the quoted fee. It refuses to
 run against mainnet. `--local` is for a `solana-test-validator` that cloned
 the Core program (`--clone-upgradeable-program CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`).
 
-### Measured (2026-11-13)
+### Measured on devnet (2026-11-13)
 
-The devnet faucet was closed that day (`requestAirdrop` on
-api.devnet.solana.com: "410 Gone ... The RPC faucet is closed on this
-cluster. Request test SOL at https://faucet.solana.com"), so the run above
-was made with `--local` against a `solana-test-validator` (Agave 2.3.12)
-that cloned the Core program from mainnet. The program bytes are identical
-on mainnet, devnet and that validator (810,273 bytes, sha256 `af40bd111c783e4c...`),
-and rent and signature fees are the same on every cluster. All 48 checks
-passed; every quoted fee equalled the measured cost to the lamport. To
-repeat on devnet, fund the throwaway authority the script prints from the
-web faucet and run it without `--local`.
+`node scripts/nft/devnet-e2e.mjs --keys <dir>` against api.devnet.solana.com
+with throwaway keys: all 48 checks passed, and every quoted fee equalled the
+measured cost to the lamport. Test collection
+`3Dsac4vg9EDW65HH4a8iysDSQ4UyU9CMwQ3r2BpXyf2T`, game signer
+`9koXNSzMnbi7ydBs8nVTGiYQdUjoJYYY41kKcB5KnFpx`.
 
 The Update Delegate assumption holds: a key in the collection's
 `UpdateDelegate.additionalDelegates` can create an asset into the collection
@@ -187,18 +182,33 @@ Attributes plugin. Before it was a delegate the same key was refused.
 
 | Action | Total (lamports) | SOL | Network | Rent | Core fee | Units | Tx bytes |
 |---|---|---|---|---|---|---|---|
-| Mint (629-byte account) | 6,784,737 | 0.006784737 | 16,017 | 5,268,720 | 1,500,000 | 35,268 | 1,033 |
+| Mint (629-byte account) | 5,361,573 | 0.005361573 | 16,013 | 3,845,560 | 1,500,000 | 35,106 | 1,033 |
 | Save, same size | 11,931 | 0.000011931 | 11,931 | 0 | 0 | 70,408 | 945 |
-| Save, list grows by 26 bytes (a first Sprint best) | 192,984 | 0.000192984 | 12,024 | 180,960 | 0 | 73,979 | 971 |
-| First save on an old holder's asset (look-only list) | 2,378,199 | 0.002378199 | 11,799 | 2,366,400 | 0 | 65,312 | 1,069 |
-| First save on an asset with no Attributes plugin | 3,254,518 | 0.003254518 | 11,158 | 3,243,360 | 0 | 40,674 | 911 |
+| Save, list grows by 26 bytes (a first Sprint best) | 144,103 | 0.000144103 | 12,023 | 132,080 | 0 | 73,925 | 971 |
+| Save after a foreign key was added | 12,074 | 0.000012074 | 12,074 | 0 | 0 | 75,890 | 992 |
+| First save on an old holder's asset (look-only list) | 1,738,996 | 0.001738996 | 11,796 | 1,727,200 | 0 | 65,204 | 1,069 |
+| First save on an asset with no Attributes plugin | 2,378,434 | 0.002378434 | 11,154 | 2,367,280 | 0 | 40,512 | 911 |
 
-Rent is 6,960 lamports per byte, a deposit that comes back when the asset is
-burned. A save costs only the network fee unless the list gets longer; a
-value that gains a digit costs 6,960 lamports once. The network fee is
-5,000 lamports per signature (3 on a mint, 2 on a save) plus the priority
-fee. These numbers come from the stand-in codec in `_pending.ts`; E69's real
-list will move the rent a little.
+Signatures (devnet): mint
+`2oSNGxuxiPfbVu18BPV6KWFfRsVxVtE1jGBJNkFKJny2sBC3o4n4HJLqLkmawF3JfV4of6wg7QfBdhRnNeCdZ7nV`,
+save `5Dzjhbq7CmKMHwe9VvWj6RpEuo2yNBCW9EkYs1ZgukmAz45GV3RU3ruaQeG8JiF2ZroTmtBMcGk5cYPrVqfWQ71C`,
+growing save `5jknFeLwxAkbr3P2tWa8GFta9wnb9dPL8fCrxJtq9zemzGtpvPohMd2HTmdrQ2bfrSF9CFbZo6sWUmthoy4cck35`.
+
+Rent is 5,080 lamports per byte on devnet and on mainnet (the two clusters
+answer `getMinimumBalanceForRentExemption` identically, read the same day),
+a deposit that comes back when the asset is burned. A save costs only the
+network fee unless the list gets longer; a value that gains a digit costs
+5,080 lamports once. The network fee is 5,000 lamports per signature (3 on a
+mint, 2 on a save) plus the priority fee. The Core program is byte-identical
+on both clusters (810,273 bytes, sha256 `af40bd111c783e4c...`), so mainnet
+should cost the same. These numbers come from the stand-in codec in
+`_pending.ts`; E69's real list will move the rent a little.
+
+An earlier run with `--local` (a `solana-test-validator`, Agave 2.3.12, with
+Core cloned from mainnet) passed the same 48 checks; its totals were higher
+only because that validator still charges the old rent of 6,960 lamports per
+byte (mint 6,784,737). The public devnet RPC rate-limits (429) during the
+run; web3.js retries and the run still completes.
 
 ## Queue log
 
