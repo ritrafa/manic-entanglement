@@ -97,6 +97,19 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                     Carried {model.carried}
                 </span>
             )}
+            {/* The trait held since the last exit (E58): its PFP icon rides
+                beside the carried marker — the same story, reach the exit or
+                lose it (game/run.ts). */}
+            {model.heldTrait !== null && (
+                <span className="me-held-trait" title="Reach the exit to keep it">
+                    <img
+                        className="me-held-trait-icon"
+                        src={`/images/nft/${model.heldTrait.layer}/${model.heldTrait.trait}pfp.png`}
+                        alt=""
+                    />
+                    {model.heldTrait.trait}
+                </span>
+            )}
         </div>
         <div className="me-hud-row">
             {/* Each stat carries the gear sprite that changes it (design/README.md,

@@ -6,7 +6,7 @@
 import { Maze, DIR_DELTAS, type Dir } from "./maze";
 import { forecastOf, rollWalk, type Forecast } from "./forecast";
 import { createRng, type Rng } from "./rng";
-import { spawnLevel, GEAR_TYPES } from "./spawn";
+import { spawnLevel, GEAR_TYPES, type SpawnedTrait, type TraitCandidate } from "./spawn";
 import { routeCells } from "./bot";
 import { ENEMY_KINDS, type EnemyKind } from "./enemies";
 import { levelPlan } from "./plan";
@@ -17,6 +17,7 @@ import { KILL_SCORE, PICKUP_SCORE, levelScore } from "./score";
 import type { DeathCause, GameEvent, ItemType, PickupType } from "./events";
 import { TOOL_INFO, TOOL_IDS, isToolType, type ToolId } from "./tools";
 import { MODES, type ModeId, type ModeRules } from "./modes";
+import { isUnlocked, PICKUP_TRAITS, type HeldTrait } from "./wardrobe";
 import {
     addGear,
     countGear,
@@ -126,6 +127,16 @@ export interface RunOptions {
      * card. Left out, every third level from depth 3 gets its twist.
      */
     modifiers?: boolean;
+    /**
+     * The feats the player has earned (game/wardrobe.ts); trait candidates
+     * unlocked by one never drop. Left out, no feat keeps a trait off the board.
+     */
+    feats?: readonly string[];
+    /**
+     * The traits the save already holds (game/save.ts `pickedUp`); a held trait
+     * never drops again. Left out, nothing is held yet.
+     */
+    pickedUp?: readonly HeldTrait[];
 }
 
 export class Run {
@@ -178,6 +189,18 @@ export class Run {
      * null when it is not a Blackout level (game/modifiers.ts, lib/board.ts).
      */
     vision: number | null = null;
+    /**
+     * The trait pickup lying on the current level (E58), or null when none
+     * dropped. Taking it moves it into `heldTrait`; like carried gear it is
+     * kept by reaching the exit and lost on death, quit or restart.
+     */
+    trait: SpawnedTrait | null = null;
+    /**
+     * The trait picked up this level and not yet kept by an exit (E58): the
+     * HUD shows its PFP beside the carried gear; the exit turns it into a
+     * "traitKept" event and the save's `pickedUp` list.
+     */
+    heldTrait: TraitCandidate | null = null;
 
     private mode: ModeRules;
     private rng: Rng;
@@ -194,6 +217,13 @@ export class Run {
     private modifiersEnabled: boolean;
     /** The modified plan the current level was built from; decides shifts and the exit bonus. */
     private currentPlan: ModifiedPlan = levelPlan(1);
+    /** The feats the player earned, as handed to the constructor (E58 candidate filter). */
+    private traitFeats: readonly string[];
+    /** The traits the save held when the run was built (E58 candidate filter). */
+    private traitPickedUp: readonly HeldTrait[];
+    /** Traits this run already kept at an exit (E58): they never drop again,
+     *  even before the save's `pickedUp` list catches up. */
+    private keptThisRun: HeldTrait[] = [];
 
     constructor(options: RunOptions) {
         const { seed, gear, mode = MODES.descent } = options;
@@ -201,6 +231,8 @@ export class Run {
         this.tally = freshTally(mode.id);
         this.rng = createRng(seed);
         this.modifiersEnabled = options.modifiers !== false;
+        this.traitFeats = Array.isArray(options.feats) ? [...options.feats] : [];
+        this.traitPickedUp = Array.isArray(options.pickedUp) ? options.pickedUp.map((entry) => ({ ...entry })) : [];
         this.shiftsOverride = Number.isFinite(options.shiftsOverride ?? Number.NaN)
             ? Math.max(0, Math.floor(options.shiftsOverride as number))
             : null;
@@ -230,6 +262,8 @@ export class Run {
         if (this.phase !== "ready" && this.phase !== "dead" && this.phase !== "done") return;
         this.push({ type: "start" });
         this.carried = noGear();
+        // A restart loses the trait held since the last exit, exactly like gear.
+        this.heldTrait = null;
         this.level = 1;
         this.score = 0;
         this.tally = freshTally(this.mode.id);
@@ -253,6 +287,7 @@ export class Run {
         this.pendingMs = 0;
         // Nothing was kept by an exit: what was carried goes with the run.
         this.carried = noGear();
+        this.heldTrait = null;
     }
 
     /** One cardinal step. False (and no change) unless playing; a wall or the edge only costs a "blocked" event. */
@@ -285,6 +320,24 @@ export class Run {
             this.score += PICKUP_SCORE;
             this.tally.pickups += 1;
             this.push({ type: "pickup", item: item.type, text, x: item.x, y: item.y });
+        }
+
+        // The trait pickup (E58): stepping onto it holds the trait for this run.
+        // It is kept by reaching the exit and lost before it, exactly like gear.
+        if (this.trait !== null && this.player.x === this.trait.x && this.player.y === this.trait.y) {
+            const drop = this.trait;
+            this.trait = null;
+            this.heldTrait = { layer: drop.layer, trait: drop.trait, rarity: drop.rarity };
+            this.score += PICKUP_SCORE;
+            this.tally.pickups += 1;
+            this.push({
+                type: "traitPickup",
+                layer: drop.layer,
+                trait: drop.trait,
+                rarity: drop.rarity,
+                x: drop.x,
+                y: drop.y,
+            });
         }
 
         let fought = false;
@@ -332,6 +385,14 @@ export class Run {
             }
             // The carry is spent either way: kept by the bank, or gone with the level.
             this.carried = noGear();
+            // The exit keeps the trait held since it started (E58): the shell
+            // adds it to the save's `pickedUp` list from the "traitKept" event.
+            if (this.heldTrait !== null) {
+                const kept = this.heldTrait;
+                this.keptThisRun.push({ layer: kept.layer, trait: kept.trait });
+                this.heldTrait = null;
+                this.push({ type: "traitKept", layer: kept.layer, trait: kept.trait, rarity: kept.rarity });
+            }
             // The last level of a limited mode ends the run where the exit is:
             // "done" ticks nothing and takes no move; one "finished" event tells
             // the tally's time and there is no next level.
@@ -481,6 +542,8 @@ export class Run {
         // Dying before the exit loses everything carried since the last one.
         const lost = countGear(this.carried);
         this.carried = noGear();
+        // Dying before the exit loses the trait held since it started too (E58).
+        this.heldTrait = null;
         this.push({ type: "dead", cause, score: this.score, level: this.level, lost });
     }
 
@@ -588,6 +651,20 @@ export class Run {
         }
     }
 
+    /**
+     * The trait candidates for the next drop (E58): the maze pickups the
+     * player does not hold — not free, not feat-unlocked, not in the save's
+     * `pickedUp`, not kept by this run at an earlier exit, and not the trait
+     * currently held since the last one.
+     */
+    private unheldTraits(): TraitCandidate[] {
+        const held: HeldTrait[] = [...this.traitPickedUp, ...this.keptThisRun];
+        if (this.heldTrait !== null) held.push({ layer: this.heldTrait.layer, trait: this.heldTrait.trait });
+        return PICKUP_TRAITS.filter(
+            (entry) => !isUnlocked(entry.layer, entry.trait, this.traitFeats, held),
+        ).map((entry) => ({ layer: entry.layer, trait: entry.trait, rarity: entry.rarity }));
+    }
+
     /** Build the maze, start, exit, pickups and enemies for the current level from its plan. */
     private buildLevel(): void {
         // Every third level from depth 3 is entangled with one twist, drawn with
@@ -610,8 +687,9 @@ export class Run {
             size,
             { items: plan.items, enemies: plan.enemies, tools: plan.tools },
             plan.energyShare,
-            { depth: this.level, route },
+            { depth: this.level, route, traits: this.unheldTraits() },
         );
+        this.trait = spawned.trait;
         this.items = spawned.items.map((item) => ({ id: this.nextId++, ...item }));
         this.enemies = spawned.enemies.map((enemy) => ({
             id: this.nextId++,

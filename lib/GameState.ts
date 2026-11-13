@@ -71,6 +71,10 @@ export interface GameSnapshot extends HudModel {
      *  closed, as the save's seen keys trait:<Layer>:<Trait>; the wardrobe
      *  shows a New tag on exactly these. Free traits never appear here. */
     newTraits: string[];
+    /** The trait picked up this run and not yet kept by an exit (E58), or
+     *  null. The HUD shows its PFP icon beside the carried gear: reaching the
+     *  exit keeps it, dying, quitting or restarting loses it (game/run.ts). */
+    heldTrait: { layer: string; trait: string; rarity: string } | null;
 }
 
 /** True when two feat lists hold the same ids in the same order. */
@@ -86,6 +90,15 @@ function sameKeys(a: string[], b: string[]): boolean {
 /** True when two pickup lists hold the same traits in the same order. */
 function samePickups(a: { layer: string; trait: string }[], b: { layer: string; trait: string }[]): boolean {
     return a.length === b.length && a.every((entry, index) => entry.layer === b[index].layer && entry.trait === b[index].trait);
+}
+
+/** True when two held-trait marks (E58) name the same trait of the same rarity. */
+function sameHeldTrait(
+    a: { layer: string; trait: string; rarity: string } | null,
+    b: { layer: string; trait: string; rarity: string } | null,
+): boolean {
+    if (a === null || b === null) return a === b;
+    return a.layer === b.layer && a.trait === b.trait && a.rarity === b.rarity;
 }
 
 /** True when two looks wear the same trait on every layer. */
@@ -105,6 +118,8 @@ const MUSIC_TICK_MS = 50;
 const LOW_ENERGY_PCT = 25;
 /** Milliseconds between two low-energy pulses. */
 const WARN_EVERY_MS = 1000;
+/** Milliseconds the trait toast (E58, design/components/Toast) stands over the board. */
+const TRAIT_TOAST_MS = 2500;
 
 class GameState {
     public run: Run;
@@ -212,12 +227,12 @@ class GameState {
         // The bank carries what earlier runs kept by reaching exits; anything
         // wrongly stored reads as no gear (game/gear.ts), and a no-gear mode
         // never sees the bank at all (game/modes.ts).
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         this.bestBeforeRun = this.highScore;
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
         this.look = fitLook(sanitizeLook(this.save.look), this.save.feats, this.save.pickedUp);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [] };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -560,7 +575,7 @@ class GameState {
         this.highScore = this.storedBest() ?? 0;
         this.bestBeforeRun = this.highScore;
         // The title shows a run of the chosen mode's rules, ready for the countdown.
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
         this.publishHud();
@@ -812,8 +827,13 @@ class GameState {
      *  covered in New tags. */
     openWardrobe(): void {
         if (this.screen !== 'title') return;
-        this.newTraitKeys = GameState.unlockedTraitKeys(this.save.feats)
-            .filter((key) => !this.save.seen[key]);
+        // Kept maze pickups (E58) carry the New marker too, until the panel
+        // is next closed (markTraitsSeen writes their seen keys down).
+        const keys = [
+            ...GameState.unlockedTraitKeys(this.save.feats),
+            ...this.save.pickedUp.map((entry) => `trait:${entry.layer}:${entry.trait}`),
+        ];
+        this.newTraitKeys = keys.filter((key, index) => !this.save.seen[key] && keys.indexOf(key) === index);
         this.dispatch('wardrobe');
     }
 
@@ -1027,7 +1047,7 @@ class GameState {
         this.rollDailyDay();
         // The run is built fresh under the chosen mode's rules: its own seed
         // (the calendar day for Daily) and its own gear (no bank without gear).
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         // The bar and the "new high score" claim measure this run against the best it started with.
         this.bestBeforeRun = this.storedBest() ?? 0;
         this.highScore = this.bestBeforeRun;
@@ -1151,6 +1171,7 @@ class GameState {
             look: { ...this.look },
             pickedUp: [...this.save.pickedUp],
             newTraits: [...this.newTraitKeys],
+            heldTrait: this.run.heldTrait === null ? null : { ...this.run.heldTrait },
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -1170,7 +1191,8 @@ class GameState {
             && this.hudSnapshot.finished === next.finished
             && sameFeats(this.hudSnapshot.feats, next.feats)
             && sameLook(this.hudSnapshot.look, next.look)
-            && samePickups(this.hudSnapshot.pickedUp, next.pickedUp)) {
+            && samePickups(this.hudSnapshot.pickedUp, next.pickedUp)
+            && sameHeldTrait(this.hudSnapshot.heldTrait, next.heldTrait)) {
             return;
         }
         this.hudSnapshot = next;
@@ -1202,6 +1224,42 @@ class GameState {
                     this.pickupStreak += 1;
                     this.floatMessage(event);
                     break;
+                case 'traitPickup':
+                    // A trait pickup (E58) is held for this run: the Toast
+                    // pattern (design/components/Toast) names it and says the
+                    // price — reach the exit, or it is lost like gear.
+                    this.pickupStreak += 1;
+                    this.board.float(`New trait: ${event.trait}`, event.x, event.y);
+                    this.board.banner(
+                        `New trait: ${event.trait}`,
+                        'Reach the exit to keep it.',
+                        TRAIT_TOAST_MS,
+                    );
+                    this.hudSnapshot = {
+                        ...this.hudSnapshot,
+                        announcement: `New trait: ${event.trait}. Reach the exit to keep it.`,
+                    };
+                    break;
+                case 'traitKept': {
+                    // The exit kept the held trait (E58): it joins the save's
+                    // pickedUp list at once, wears the wardrobe's New marker,
+                    // and the toast says what was kept.
+                    if (!this.save.pickedUp.some(
+                        (entry) => entry.layer === event.layer && entry.trait === event.trait,
+                    )) {
+                        this.save = {
+                            ...this.save,
+                            pickedUp: [...this.save.pickedUp, { layer: event.layer, trait: event.trait }],
+                        };
+                        writeSave(this.storage, this.save);
+                    }
+                    const keptKey = `trait:${event.layer}:${event.trait}`;
+                    if (!this.newTraitKeys.includes(keptKey)) {
+                        this.newTraitKeys = [...this.newTraitKeys, keptKey];
+                    }
+                    this.board.banner(`Kept: ${event.trait}.`, `${event.layer}. Added to your reptile.`, TRAIT_TOAST_MS);
+                    break;
+                }
                 case 'fight':
                     this.floatMessage(event);
                     break;

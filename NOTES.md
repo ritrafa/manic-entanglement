@@ -775,3 +775,25 @@
   of UNLOCKS or PICKUP_TRAITS. The wardrobe shows pickup traits with Found 1 /
   Rare 2 pips and "Found in the maze" while unheld. Trait pickups in the maze
   come with E58.
+
+- E58: traits drop in the maze. `game/spawn.ts` rolls at most one trait
+  pickup per level from the traits the player does not hold yet (not free,
+  not feat-unlocked, not in the save's `pickedUp`, none kept or held by the
+  run): Rare first at 6% from depth 5, then Found at 20% from depth 2, so a
+  level never carries both and the first level never carries one (the table
+  is the exported `TRAIT_DROPS`). The roll rides its own rng branch
+  (`Rng.clone`), so a level without candidates reads exactly as before; if
+  the roll wins but no unheld trait of that rarity is left, nothing drops.
+  `game/run.ts` holds the picked trait (`heldTrait`, counted as a pickup)
+  and emits `traitPickup` / `traitKept`: reaching the exit keeps it — the
+  shell adds it to the save's `pickedUp` and saves — while dying, quitting
+  or restarting loses it, like gear. The HUD shows the held trait's PFP
+  icon beside the carried marker; the board draws the floor sprite per
+  Pixel art: the PFP master cropped to its bounding box (measured on a
+  canvas), two tile pixels per art pixel at crops of at most 8 by 8 else
+  one, centred in the middle 16, with the 1px black outline and the four
+  1x5 corner brackets in `--energy` (Found) or `--gold` (Rare). Picking up
+  toasts "New trait: <Name>. Reach the exit to keep it." over the board and
+  the exit answers "Kept: <Name>."; the kept trait wears the wardrobe's
+  existing New marker until the panel is next closed. Feat-only traits
+  never drop, and old saves load unchanged.

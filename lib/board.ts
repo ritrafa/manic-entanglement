@@ -40,6 +40,64 @@ const TILE_FLASH_MS = 450;
 const MINIMAP_PX = 96;
 /** The minimap draws each wall-grid tile at 1 or 2 pixels, never more. */
 const MINIMAP_MAX_TILE_PX = 2;
+/** The side of a PFP master in art pixels (public/images/nft/<Layer>/<Trait>pfp.png). */
+const PFP_ART_PX = 16;
+/** A trait PFP crop this wide or narrower is drawn at two tile pixels per art pixel. */
+const TRAIT_CROP_SCALE_UP = 8;
+
+/** The opaque bounding box of a PFP master, in art pixels, or null when the
+    sprite is empty or its pixels cannot be read. */
+function traitBoundingBox(image: HTMLImageElement): { x: number; y: number; w: number; h: number } | null {
+    const canvas = document.createElement('canvas');
+    canvas.width = PFP_ART_PX;
+    canvas.height = PFP_ART_PX;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, PFP_ART_PX, PFP_ART_PX);
+    ctx.drawImage(image, 0, 0, PFP_ART_PX, PFP_ART_PX);
+    let data: Uint8ClampedArray;
+    try {
+        data = ctx.getImageData(0, 0, PFP_ART_PX, PFP_ART_PX).data;
+    } catch {
+        return null;
+    }
+    let minX = PFP_ART_PX;
+    let minY = PFP_ART_PX;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < PFP_ART_PX; y++) {
+        for (let x = 0; x < PFP_ART_PX; x++) {
+            if (data[(y * PFP_ART_PX + x) * 4 + 3] === 0) continue;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+/**
+ * Crop a trait pickup's floor sprite to its PFP's bounding box
+ * (design/pixel-art.md, "Trait pickups on the board"): two tile pixels per
+ * art pixel when the crop is at most 8 by 8, otherwise one, centred by CSS.
+ * Until the picture has loaded (or when its pixels cannot be read) the CSS
+ * default stands: the whole 16 at one tile pixel each.
+ */
+function applyTraitCrop(crop: HTMLElement, url: string): void {
+    const image = new Image();
+    image.onload = () => {
+        const box = traitBoundingBox(image);
+        if (box === null) return;
+        const scale = box.w <= TRAIT_CROP_SCALE_UP && box.h <= TRAIT_CROP_SCALE_UP ? 2 : 1;
+        crop.style.width = `${box.w * scale}px`;
+        crop.style.height = `${box.h * scale}px`;
+        crop.style.backgroundSize = `${PFP_ART_PX * scale}px ${PFP_ART_PX * scale}px`;
+        crop.style.backgroundPosition = `${-box.x * scale}px ${-box.y * scale}px`;
+    };
+    image.src = url;
+}
 
 function copyGrid(grid: string[][]): string[][] {
     return grid.map((row) => row.slice());
@@ -70,6 +128,8 @@ export class Board {
     private knotElement: HTMLElement | null = null;
     /** Entity elements keyed by the stable ids run.items / run.enemies carry. */
     private itemElements: Map<number, HTMLElement> = new Map();
+    /** The one trait pickup element of the level (E58), null when none dropped. */
+    private traitElement: HTMLElement | null = null;
     private enemyElements: Map<number, HTMLElement> = new Map();
     /** The element mount() received (#maze): shake and zoom animate this, not the page. */
     private boardElement: HTMLElement | null = null;
@@ -135,6 +195,7 @@ export class Board {
         this.knotElement = null;
         this.itemElements.clear();
         this.enemyElements.clear();
+        this.traitElement = null;
         this.visible = null;
         this.viewport = null;
         this.camera = null;
@@ -418,6 +479,7 @@ export class Board {
         this.entitiesLayer.replaceChildren();
         this.itemElements.clear();
         this.enemyElements.clear();
+        this.traitElement = null;
         this.layerImages = [];
 
         this.playerElement = document.createElement('div');
@@ -456,6 +518,7 @@ export class Board {
         this.place(this.exitElement, run.exit.x, run.exit.y);
         this.syncTileVisibility();
         this.syncItems(run);
+        this.syncTrait(run);
         this.syncEnemies(run);
         this.placeBlob(run);
         this.placeKnot(run);
@@ -546,6 +609,52 @@ export class Board {
                 this.itemElements.delete(id);
             }
         }
+    }
+
+    /**
+     * The trait pickup of the level (E58): one persistent element like an
+     * item, holding the PFP cropped to its bounding box (`.trait-crop`, sized
+     * by applyTraitCrop) inside the middle 16 tile pixels, with the four
+     * rarity corner brackets (`.trait-frame`, coloured by CSS).
+     */
+    private syncTrait(run: Run): void {
+        const trait = run.trait;
+        if (trait === null) {
+            if (this.traitElement !== null) {
+                this.traitElement.remove();
+                this.traitElement = null;
+            }
+            return;
+        }
+        if (this.traitElement === null) {
+            const element = document.createElement('div');
+            const crop = document.createElement('div');
+            crop.className = 'trait-crop';
+            const frame = document.createElement('div');
+            frame.className = 'trait-frame';
+            // The four corner brackets: one <i> each, drawn entirely by CSS.
+            for (let corner = 0; corner < 4; corner += 1) frame.appendChild(document.createElement('i'));
+            element.append(crop, frame);
+            this.traitElement = element;
+            this.entitiesLayer?.appendChild(element);
+        }
+        const element = this.traitElement;
+        element.className = `powerup trait-pickup trait-${trait.rarity}`;
+        element.classList.toggle('unseen', !this.cellShown(trait.x, trait.y));
+        const crop = element.querySelector('.trait-crop');
+        if (crop instanceof HTMLElement) {
+            const url = `/images/nft/${trait.layer}/${trait.trait}pfp.png`;
+            if (crop.dataset.src !== url) {
+                crop.dataset.src = url;
+                crop.style.width = '';
+                crop.style.height = '';
+                crop.style.backgroundSize = '';
+                crop.style.backgroundPosition = '';
+                crop.style.backgroundImage = `url("${url}")`;
+                applyTraitCrop(crop, url);
+            }
+        }
+        this.place(element, trait.x, trait.y);
     }
 
     private syncEnemies(run: Run): void {

@@ -3,6 +3,7 @@
 import type { EnemyKind } from "./enemies";
 import type { ToolId } from "./tools";
 import type { ModifierId } from "./modifiers";
+import type { PickupRarity } from "./wardrobe";
 
 export type ItemType = "energy" | "boots" | "gloves" | "shield" | "speed" | "backpack";
 
@@ -27,4 +28,9 @@ export type GameEvent =
     | { type: "banked"; count: number }
     /** The last level of a limited run was cleared: it finished in `ms` (the tally's time). */
     | { type: "finished"; ms: number }
+    /** A trait pickup (game/spawn.ts, E58) was taken: it is held for this run and
+     *  kept only by reaching the exit, like gear. */
+    | { type: "traitPickup"; layer: string; trait: string; rarity: PickupRarity; x: number; y: number }
+    /** The exit kept the trait held this run: it joins the save's `pickedUp` list. */
+    | { type: "traitKept"; layer: string; trait: string; rarity: PickupRarity }
     | { type: "dead"; cause: DeathCause; score: number; level: number; lost: number };

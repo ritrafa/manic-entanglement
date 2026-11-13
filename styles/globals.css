@@ -500,6 +500,87 @@ body {
   background-image: url('/images/tools/cut.png');
 }
 
+/* Trait pickups on the board (E58, design/components/Pickup, Pixel art):
+   the trait's PFP master cropped to its bounding box, centred inside the
+   middle 16 tile pixels — two tile pixels per art pixel when the crop is at
+   most 8 by 8, else one (lib/board.ts measures the box and sizes the crop).
+   The game adds the one-pixel black outline (a hard drop-shadow ring) and
+   the rarity frame: four corner brackets, 1 tile pixel thick and 5 long, in
+   --energy (Found) or --gold (Rare). Nothing is baked into the art. */
+.trait-pickup {
+  background-image: none;
+  --trait-bracket: calc(var(--cell-size, 24px) / 24);
+}
+
+.trait-pickup .trait-crop {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  /* Before the picture is measured: the whole 16 at one tile pixel each. */
+  width: calc(var(--item-size, 24px) * 16 / 24);
+  height: calc(var(--item-size, 24px) * 16 / 24);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  /* The 1 tile pixel black outline, one hard shadow per side. */
+  filter:
+    drop-shadow(calc(var(--trait-bracket)) 0 0 #000)
+    drop-shadow(calc(-1 * var(--trait-bracket)) 0 0 #000)
+    drop-shadow(0 calc(var(--trait-bracket)) 0 #000)
+    drop-shadow(0 calc(-1 * var(--trait-bracket)) 0 #000);
+}
+
+.trait-pickup .trait-frame {
+  /* The middle 16 of the tile's 24 art pixels. */
+  position: absolute;
+  inset: calc(100% / 6);
+  pointer-events: none;
+}
+
+.trait-pickup .trait-frame i {
+  position: absolute;
+  width: calc(100% * 5 / 16);
+  height: calc(100% * 5 / 16);
+  border: 0 solid var(--trait-frame-colour, var(--energy));
+}
+
+.trait-pickup .trait-frame i:nth-child(1) {
+  top: 0;
+  left: 0;
+  border-top-width: var(--trait-bracket);
+  border-left-width: var(--trait-bracket);
+}
+
+.trait-pickup .trait-frame i:nth-child(2) {
+  top: 0;
+  right: 0;
+  border-top-width: var(--trait-bracket);
+  border-right-width: var(--trait-bracket);
+}
+
+.trait-pickup .trait-frame i:nth-child(3) {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: var(--trait-bracket);
+  border-left-width: var(--trait-bracket);
+}
+
+.trait-pickup .trait-frame i:nth-child(4) {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: var(--trait-bracket);
+  border-right-width: var(--trait-bracket);
+}
+
+.trait-pickup.trait-found {
+  --trait-frame-colour: var(--energy);
+}
+
+.trait-pickup.trait-rare {
+  --trait-frame-colour: var(--gold);
+}
+
 .enemy {
   background-image: url('/images/enemy.gif');
   background-size: cover;
@@ -1036,8 +1117,28 @@ body {
   padding-right: var(--space-8);
 }
 #hud.me-hud .me-carried,
+#hud.me-hud .me-held-trait,
 #hud.me-hud .me-portrait {
   flex: none;
+}
+
+/* The trait held since the last exit (E58): the carried marker's story with
+   the trait's PFP icon beside its name — reach the exit to keep it. */
+#hud.me-hud .me-held-trait {
+  display: inline-flex;
+  gap: var(--space-4);
+  align-items: center;
+  padding: 0 var(--space-8);
+  border: var(--border-thin) solid var(--energy);
+  color: var(--energy);
+  font: 400 16px/24px var(--font-display);
+  text-transform: uppercase;
+}
+
+#hud.me-hud .me-held-trait .me-held-trait-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
 }
 
 .left-box {
