@@ -798,32 +798,26 @@ body {
 }
 
 /* The Knot: the visible origin of the shifting, one persistent element that
-   glides with the origin (a gold ring with a teal centre, slowly pulsing).
-   lib/board.ts sizes it to one tile and moves it with a transform. */
+   glides with the origin. It is the black hole GIF (public/images/knot.gif),
+   which animates by itself; lib/board.ts sizes it to one tile and moves it
+   with a transform. */
 .knot {
   position: absolute;
   left: 0;
   top: 0;
   pointer-events: none;
-  border-radius: 50%;
-  border: 3px solid var(--gold);
   box-sizing: border-box;
-  background: var(--energy);
+  background: url('/images/knot.gif') center / cover no-repeat;
+  image-rendering: pixelated;
   transition: transform 150ms linear;
-  animation: knot-pulse 2.4s ease-in-out infinite;
 }
 
-@keyframes knot-pulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-
-/* While an Anchor holds (game/tools.ts): the Knot stops pulsing and shows a
-   dashed ring, so a frozen maze reads without any colour-only cue. */
+/* While an Anchor holds (game/tools.ts): the Knot dims and wears a square
+   dashed outline, so a frozen maze reads without any colour-only cue
+   (lib/board.ts toggles the class in placeKnot). */
 .knot-frozen {
-  animation: none;
+  outline: 2px dashed var(--gold);
   opacity: 0.9;
-  border-style: dashed;
 }
 
 /* The tool row in the HUD (components/ToolBar.tsx) is the me-tools part with

@@ -406,6 +406,17 @@ export class Run {
             return true;
         }
 
+        // Touching the Knot hurts a little: a move that ends on the Knot's
+        // cell (where it stands after this move's forecast walk) loses a small
+        // amount of energy. Checked once per successful move, here and only
+        // here; the move that reaches the exit returned above, and blocked
+        // moves, tool uses and a stalker's step never come this far. It still
+        // hurts while an Anchor holds. A death it causes reads as "move".
+        if (this.player.x === this.maze.origin.x && this.player.y === this.maze.origin.y) {
+            this.energy -= CONFIG.knotHurt;
+            this.push({ type: "hurt", cost: CONFIG.knotHurt, x: this.player.x, y: this.player.y });
+        }
+
         if (this.energy <= 0) {
             this.die(fought ? "fight" : "move");
         }

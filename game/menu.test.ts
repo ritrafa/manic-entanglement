@@ -71,7 +71,9 @@ describe("HOWTO", () => {
     it("every text is a short, non-empty sentence", () => {
         for (const line of HOWTO) {
             expect(line.text.length, line.text).toBeGreaterThan(0);
-            expect(line.text.length, line.text).toBeLessThanOrEqual(90);
+            // 95: the Knot line ("... Touching it costs a little energy.")
+            // is the longest the owner asked for.
+            expect(line.text.length, line.text).toBeLessThanOrEqual(95);
         }
     });
 });

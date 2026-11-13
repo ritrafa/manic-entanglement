@@ -34,6 +34,8 @@ export const CONFIG = {
     drainMs: 150,
     /** Energy at the start of the run (also the floor, storage may raise it). */
     startEnergy: 100,
+    /** Energy lost when a move ends on the Knot's cell (game/run.ts). */
+    knotHurt: 5,
     /** Per-pickup effects, keyed by item type (gear lives in GEAR_RULES below). */
     pickups: {
         /** Energy restored by an "energy" pickup (capped at storage). */
@@ -133,6 +135,10 @@ export const FX = {
     popMs: 350,
     /** Milliseconds of the fight's red flash. */
     fightFlashMs: 120,
+    /** Particles the Knot's hurt burst throws on the cell (game/fx.ts). */
+    hurtBurstCount: 4,
+    /** Milliseconds of the Knot hurt's red flash (smaller than the fight's). */
+    hurtFlashMs: 80,
     /** Pixels and milliseconds of the fight's board shake. */
     fightShakePx: 4,
     fightShakeMs: 150,

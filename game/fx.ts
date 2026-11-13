@@ -72,6 +72,14 @@ export function fxFor(event: GameEvent, context: FxContext): Fx[] {
                 { kind: 'shake', px: FX.fightShakePx, ms: clampMs(FX.fightShakeMs) },
             ];
         }
+        case 'hurt': {
+            // The Knot's bite: the fight's answer, smaller and without a shake.
+            if (reduced) return [{ kind: 'fade', ms: clampMs(FX.hurtFlashMs) }];
+            return [
+                { kind: 'burst', x: event.x, y: event.y, count: clampCount(FX.hurtBurstCount), tone: 'red' },
+                { kind: 'flash', tone: 'red', ms: clampMs(FX.hurtFlashMs) },
+            ];
+        }
         case 'levelClear': {
             if (reduced) return [];
             const exit = context.exit ?? { x: 0, y: 0 };

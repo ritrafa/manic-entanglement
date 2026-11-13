@@ -13,9 +13,10 @@ const PICKUP: GameEvent = { type: "pickup", item: "boots", text: "Boots!", x: 3,
 const FIGHT: GameEvent = { type: "fight", cost: 15, kind: "wisp", x: 1, y: 2 };
 const LEVEL_CLEAR: GameEvent = { type: "levelClear", level: 2, gained: 50 };
 const LEVEL_START: GameEvent = { type: "levelStart", level: 2, size: 5, modifier: null };
+const HURT: GameEvent = { type: "hurt", cost: 5, x: 2, y: 3 };
 const DEAD: GameEvent = { type: "dead", cause: "time", score: 100, level: 2 , lost: 0 };
 
-const ALL_EVENTS: GameEvent[] = [BLOCKED, PICKUP, FIGHT, LEVEL_CLEAR, LEVEL_START, DEAD];
+const ALL_EVENTS: GameEvent[] = [BLOCKED, PICKUP, FIGHT, HURT, LEVEL_CLEAR, LEVEL_START, DEAD];
 
 describe("fxFor with full motion", () => {
     it("blocked bumps in the direction that was refused", () => {
@@ -230,4 +231,21 @@ describe("effect caps", () => {
             });
         }
     }
+});
+
+describe("fxFor for the Knot hurt", () => {
+    const HURT: GameEvent = { type: "hurt", cost: 5, x: 2, y: 3 };
+
+    it("bursts red 4 on its cell and flashes red for 80 ms", () => {
+        expect(fxFor(HURT, { motion: "full", exit: EXIT })).toEqual([
+            { kind: "burst", x: 2, y: 3, count: 4, tone: "red" },
+            { kind: "flash", tone: "red", ms: 80 },
+        ]);
+    });
+
+    it("turns the hurt flash into a fade under reduced motion", () => {
+        expect(fxFor(HURT, { motion: "reduced", exit: EXIT })).toEqual([
+            { kind: "fade", ms: 80 },
+        ]);
+    });
 });

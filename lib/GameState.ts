@@ -1520,7 +1520,7 @@ class GameState {
     private floatMessage(event: GameEvent): void {
         const message = eventMessage(event);
         if (message === null) return;
-        if (event.type === 'pickup' || event.type === 'fight') {
+        if (event.type === 'pickup' || event.type === 'fight' || event.type === 'hurt') {
             this.board.float(message, event.x, event.y);
         }
     }

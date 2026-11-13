@@ -62,7 +62,7 @@ export interface HowToLine {
 export const HOWTO: HowToLine[] = [
     { text: "Reach the exit to descend to the next level.", image: "/images/exit.gif" },
     { text: "Energy drains all the time and with every step; run out and the run ends.", image: "/images/energy.gif" },
-    { text: "The maze rewires itself around the Knot each time you move.", image: null },
+    { text: "The maze rewires itself around the Knot each time you move. Touching it costs a little energy.", image: "/images/knot.gif" },
     { text: "Dashed marks will open, hatched marks will seal.", image: null },
     { text: "Enemies charge the toll shown on them.", image: "/images/enemy.gif" },
     { text: "Gear makes you stronger and is kept when you reach the exit; dying loses it.", image: "/images/gloves.gif" },
