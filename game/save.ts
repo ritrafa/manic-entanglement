@@ -28,13 +28,15 @@ export interface SaveData {
     /** The saved look, or null when none was kept. */
     look: Record<string, string> | null;
     /** One-time messages already shown ("howto" and the like), plus the
-     *  wardrobe's trait markers, one key per card as trait:<Layer>:<Trait>.
+     *  wardrobe's trait markers, one key per card as trait:<Layer>:<Trait>,
+     *  and the init key (SEEN_INIT) that records the markers as initialised.
      *  Only traits a feat unlocks can be new; free traits never carry a
-     *  marker. A save kept before the markers existed holds no trait key at
-     *  all, and loadSave then seeds one for every trait its feats already
-     *  unlocked: an old save reads as everything seen, never waking up with
-     *  "New" tags. From the first marker on, an unseen feat trait stays new
-     *  until the wardrobe is next closed. */
+     *  marker. A save that has stored no marker yet has its currently
+     *  unlocked traits recorded as seen once, at load, and that lands in
+     *  storage at once (seedSeenOnce, applied by lib/GameState.ts): an old
+     *  save reads as everything seen, never waking up with "New" tags, yet
+     *  the seed happens only that once - a feat earned later keeps its
+     *  traits unseen, so they wear "New" until the wardrobe is next opened. */
     seen: Record<string, boolean>;
 }
 
@@ -86,6 +88,35 @@ function featTraitKeys(feats: readonly string[]): string[] {
     return keys;
 }
 
+/** The seen key that records this save's trait markers as initialised once.
+ *  It names no trait (no `trait:` prefix), so it rides the seen record beside
+ *  the markers without ever wearing one. */
+export const SEEN_INIT = "traits:init";
+
+/** True when the save has stored a wardrobe marker at least once: the init
+ *  key or any trait key. A save with neither predates the markers, so the
+ *  traits its feats already unlocked must be read as seen - and that reading
+ *  recorded at once, before any later feat could be mistaken for an old one
+ *  (seedSeenOnce). */
+export function hasSeenMarkers(save: SaveData): boolean {
+    return save.seen[SEEN_INIT] === true || Object.keys(save.seen).some((key) => key.startsWith("trait:"));
+}
+
+/**
+ * The save with the traits its feats unlock recorded as seen, once: the
+ * caller runs it at load and writes the result when it differs, so the seed
+ * - and the init key that makes it a one-time act - lands in storage the
+ * first time. A save that already carries markers comes back untouched, the
+ * very same object: a feat trait missing from such a save was earned since
+ * the wardrobe last closed and genuinely stays new.
+ */
+export function seedSeenOnce(save: SaveData): SaveData {
+    if (hasSeenMarkers(save)) return save;
+    const seen: Record<string, boolean> = { ...save.seen, [SEEN_INIT]: true };
+    for (const key of featTraitKeys(save.feats)) seen[key] = true;
+    return { ...save, seen };
+}
+
 /** A copy of a stored record keeping only true flags (the seen markers). */
 function keepBooleans(value: unknown): Record<string, boolean> {
     const kept: Record<string, boolean> = {};
@@ -133,15 +164,11 @@ export function loadSave(storage: StorageLike): SaveData {
     const feats = Array.isArray(parsed.feats)
         ? parsed.feats.filter((f): f is string => typeof f === "string")
         : fresh.feats;
+    // The seen record comes back exactly as kept (only true flags surviving):
+    // a feat trait missing from a marked save is genuinely new, unlocked
+    // since the wardrobe was last closed. The one-time seed for a save that
+    // never stored a marker lives in seedSeenOnce, applied at load.
     const seen = keepBooleans(parsed.seen);
-    // A save written before the wardrobe kept trait markers holds no trait key
-    // at all: seed one for every trait its feats already unlocked, so an old
-    // save reads as everything seen and nothing wears a "New" tag. A save that
-    // carries markers is left exactly as kept: a feat trait missing from it is
-    // genuinely new, unlocked since the wardrobe was last closed.
-    if (!Object.keys(seen).some((key) => key.startsWith("trait:"))) {
-        for (const key of featTraitKeys(feats)) seen[key] = true;
-    }
     return {
         ...fresh,
         ...parsed,

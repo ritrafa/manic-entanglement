@@ -48,23 +48,24 @@ body {
   width: 100vw;
   overflow: hidden;
 }
-/* The drifting galaxy moves by transform only (translate + scale), so the
-   compositor slides a layer instead of repainting the board every frame. The
-   picture lives on #maze::before, a layer 13x the board (inset: -600%), so
-   neither the zoom-out nor the long pan ever exposes an edge; #maze's
-   overflow keeps that huge layer strictly inside the board. The picture is
-   tiled at 6 board widths (6/13 of the layer) and the keyframes halve it to
-   3 while panning 2 boards left and 1 board up: on a ~500 px board that is
-   the pre-E38 zoom-out (600% -> 300%) with its ~1000 x 500 px drift, scaled
-   to the board. The origin sits on the board's top-left corner (6/13 of the
-   layer), where the old background-position: 0 0 anchored the zoom. */
+/* The drifting galaxy lives on #maze::before, a layer exactly the size of
+   the board (inset: 0) sitting behind the tiles: no oversized canvas, so the
+   GPU carries one board-sized picture instead of a 13-board one. The drift
+   is the way the original game did it: background-size from 600% to 300%
+   and background-position from 0 0 to -1000px -500px over 45s ease-in-out
+   alternate, the picture tiled so the long pan never exposes an edge. On a
+   ~500 px board that is the pre-E38 zoom-out with its ~1000 x 500 px drift,
+   at board scale. will-change plus contain: paint keep the drift's
+   repainting on that one layer, under the tiles. */
 @keyframes moveBackground {
   0% {
-    transform: translate(0, 0) scale(1);
+    background-size: 600% 600%;
+    background-position: 0 0;
   }
   100% {
-    /* -2 and -1 board widths over the 13-board layer, halving the picture. */
-    transform: translate(-15.385%, -7.693%) scale(0.5);
+    /* Half the zoom, panned 2 boards left and 1 board up. */
+    background-size: 300% 300%;
+    background-position: -1000px -500px;
   }
 }
 #maze-container {
@@ -80,25 +81,28 @@ body {
 #maze {
   position: relative;
   /* Its own stacking context, so the galaxy layer (z-index: -1) stays behind
-     the tiles but inside the board; the clip keeps the oversized drifting
-     layer from ever showing outside the board. */
+     the tiles but inside the board; the clip is a belt for the braces, as
+     the layer itself is exactly the board. */
   isolation: isolate;
   overflow: hidden;
 }
 #maze::before {
   content: '';
   position: absolute;
-  /* Six boards beyond every edge (a 13-board layer): the zoom-out to half
-     and the 2 x 1 board pan never uncover a side, and #maze clips the rest. */
-  inset: -600%;
+  /* Exactly the board, behind the tiles: no layer larger than the board is
+     ever composited. */
+  inset: 0;
   z-index: -1;
-  /* One picture every 6 boards (6/13 of this 13-board layer), tiled; the
-     keyframes scale it down to 3 boards, the original 600% -> 300% zoom. */
+  /* Tiled, so the pan from 0 0 to -1000px -500px never uncovers a side; the
+     keyframes carry the original 600% -> 300% zoom. */
   background: url('/images/galaxy2.jpg') repeat;
-  background-size: 46.154% 46.154%;
-  /* Zoom from the board's top-left corner, where the old background sat. */
-  transform-origin: 46.154% 46.154%;
+  background-size: 600% 600%;
+  background-position: 0 0;
   animation: moveBackground 45s ease-in-out infinite alternate;
+  /* The drift repaints this box alone: contain: paint keeps the painting
+     inside it and will-change asks for its own layer under the tiles. */
+  will-change: background-size, background-position;
+  contain: paint;
   pointer-events: none;
 }
 
@@ -145,7 +149,9 @@ body {
 .title-art {
   flex: none;
   width: 100%;
-  height: clamp(140px, 42%, 300px);
+  /* The band is kept short enough that the two-column button grid below it
+     still fits inside the board-sized menu at 1280x800. */
+  height: clamp(120px, 34%, 260px);
   object-fit: cover;
   /* Cropped from the top so the painted lettering always shows. */
   object-position: center top;
@@ -160,12 +166,55 @@ body {
   opacity: 0.5;
 }
 .title-menu .me-menu {
-  margin: var(--space-16) 0;
+  /* Two columns, so the five entries are three button rows under the mode
+     row: the whole menu fits below the painting without hidden scrolling at
+     1280x800, and where it still must scroll (a phone's small board) the
+     .menu-more-hint below says there is more. */
+  box-sizing: border-box;
+  margin: var(--space-8) 0;
+  padding: 0 var(--space-16);
+  width: min(440px, 100%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+.title-menu .me-menu .me-mode,
+.title-menu .me-menu .me-menu-wide {
+  grid-column: 1 / -1;
 }
 /* The mode row takes the inset ring while it is focused, like the buttons. */
 .title-menu .me-mode:focus-visible {
   outline: var(--border-thin) solid var(--ink);
   outline-offset: -6px;
+}
+/* Shown while the menu scrolls and the bottom entries are out of view: a
+   word and a CSS chevron over a fade at the bottom edge (components/Menu.tsx
+   decides when it shows). Pointer-events none: it is a hint, not a control. */
+.menu-more-hint {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: var(--space-16) 0 var(--space-8);
+  text-align: center;
+  font: 400 12px/16px var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink);
+  background: linear-gradient(to top, var(--void) 30%, rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+.menu-more-hint::after {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: var(--space-4) auto 0;
+  border-right: var(--border-thin) solid var(--ink);
+  border-bottom: var(--border-thin) solid var(--ink);
+  transform: rotate(45deg);
 }
 
 /* The 3-2-1 the shell drops over the dimmed title while a run starts. */
@@ -818,13 +867,64 @@ body {
   }
 }
 
-/* The HUD is the design's HudBar (design/components/HudBar): components/Hud.tsx
-   renders #hud as one me-hud row and lib/GameState.ts sizeBoard writes the
-   board's width onto it, so on desktop it is one wrapping row at the board's
-   width — one wrapping row, never a stack of rows. The portrait
-   (me-portrait), meters (me-meter), stats (me-stat), carried marker
-   (me-carried) and the wallet's closed button (me-btn) all come from
-   design/components.css. */
+/* The HUD is the design's HudBar (design/components/HudBar), widened to fit:
+   components/Hud.tsx renders #hud as a me-hud carrying two me-hud-row rows —
+   row 1 the portrait (me-portrait), the wallet's button (me-btn), the energy
+   and score meters (me-hud-meters) and the carried marker (me-carried);
+   row 2 the four stats (me-stat) and the tool buttons (me-tools). All the
+   parts come from design/components.css; the rows only decide who shares a
+   line, so at 1280x800 the bar is two rows and never a stack.
+
+   The width is the larger of the board's width and 720px, never wider than
+   the viewport minus the 16px gutters on each side, centred under the board
+   (the body centres it). The board's side is rebuilt from the two custom
+   properties lib/GameState.ts sizeBoard writes for the tiles; the !important
+   is because sizeBoard still stamps the plain board width on the element as
+   an inline style, and the bar's own rule must win over it. */
+#hud.me-hud {
+  box-sizing: border-box;
+  width: min(max(calc(var(--cell-size, 24px) * var(--grid-size, 11)), 720px), calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px);
+  margin: 0 auto;
+}
+/* One row of the bar: a wrapping flex line of its own, full width inside
+   the bar's padding. */
+.me-hud-row {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-24);
+}
+/* Row 1: the meters take the width the portrait leaves. Row 2: the stats
+   stretch and the tools keep their own size. The stats' padding and the
+   tool buttons' side padding tighten just enough that stats and tools
+   share row 2 at the bar's narrowest desktop width (720px). */
+#hud.me-hud .me-hud-meters {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+#hud.me-hud .me-stats {
+  flex: 1 1 280px;
+  min-width: 0;
+  gap: var(--space-4);
+}
+#hud.me-hud .me-stat {
+  padding: var(--space-4);
+}
+#hud.me-hud .me-tools {
+  flex: none;
+}
+#hud.me-hud .me-tools .me-btn {
+  padding-left: var(--space-8);
+  padding-right: var(--space-8);
+}
+#hud.me-hud .me-carried,
+#hud.me-hud .me-portrait {
+  flex: none;
+}
+
 .left-box {
   display: flex;
   align-items: center;
@@ -865,14 +965,19 @@ body {
   display: none;
 }
 
-/* Phones (design/components/HudBar, the is-phone layout): the HUD stacks —
-   portrait beside the meters, then the four stats in a row, then the carried
-   marker and the tools. Nothing may overflow the 390 px board. */
+/* Phones (design/components/HudBar, the is-phone layout): the bar takes the
+   full width inside the gutters and each row wraps as needed — portrait
+   beside the meters and the carried marker, then the four stats in a row,
+   then the tools. Nothing may overflow the 390 px viewport's gutters. */
 @media (max-width: 480px) {
   #hud.me-hud {
     flex-direction: column;
     align-items: stretch;
     padding: var(--space-8);
+  }
+
+  #hud.me-hud .me-hud-row {
+    gap: var(--space-8);
   }
 
   #hud.me-hud .hud-label-full {

@@ -10,7 +10,7 @@ import { ENEMY_KINDS } from '@/game/enemies';
 import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
-import { defaultSave, loadSave, resetProgress, writeSave, type SaveData, type StorageLike } from '@/game/save';
+import { defaultSave, loadSave, resetProgress, seedSeenOnce, writeSave, type SaveData, type StorageLike } from '@/game/save';
 import { countGear, noGear, sanitizeGear, type GearLevels } from '@/game/gear';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { formatTenths, nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
@@ -182,6 +182,17 @@ class GameState {
         // server render all get null storage and a fresh default save instead.
         this.storage = GameState.readStorage();
         this.save = loadSave(this.storage);
+        // The wardrobe's "New" markers are initialised once, here, at load:
+        // a save that has never stored one gets its currently unlocked traits
+        // recorded as seen and the seeded save lands in storage at once, so
+        // the reading is not redone on every reload. A feat earned later then
+        // keeps its traits unseen and wears "New" until the wardrobe is next
+        // opened (game/save.ts seedSeenOnce).
+        const seeded = seedSeenOnce(this.save);
+        if (seeded !== this.save) {
+            this.save = seeded;
+            writeSave(this.storage, this.save);
+        }
         // The mode is remembered in the save; anything unknown plays Descent.
         this.modeId = GameState.readModeSetting(this.save.settings);
         // A new calendar day wipes the stored Daily best before it is read.
@@ -785,8 +796,9 @@ class GameState {
     /** The title menu's Wardrobe entry: opens the look picker, remembering
      *  which feat-unlocked cards the save has not seen yet so they can carry
      *  the New tag until the panel is next closed. Free traits never do, and
-     *  an old save without markers loaded with everything already seen
-     *  (game/save.ts loadSave), so it never wakes up covered in New tags. */
+     *  an old save without markers was seeded once at load with everything
+     *  already seen (game/save.ts seedSeenOnce), so it never wakes up
+     *  covered in New tags. */
     openWardrobe(): void {
         if (this.screen !== 'title') return;
         this.newTraitKeys = GameState.unlockedTraitKeys(this.save.feats)

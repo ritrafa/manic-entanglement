@@ -15,10 +15,14 @@ function cssVars(vars: Record<string, string>): React.CSSProperties {
 }
 
 /**
- * The HUD is the design's HudBar (design/components/HudBar): one wrapping row
- * at the board's width (lib/GameState.ts sizeBoard writes the width to #hud),
- * the player's PFP portrait, the energy and score meters, the four gear-sprite
- * stats, the carried marker and the tool buttons — no emoji anywhere.
+ * The HUD is the design's HudBar (design/components/HudBar), widened to fit:
+ * two me-hud-row rows inside #hud, whose width styles/globals.css sets to the
+ * larger of the board's width and 720px, never past the viewport minus the
+ * 16px gutters, centred under the board. Row 1 carries the player's PFP
+ * portrait, the wallet's button, the energy and score meters and the carried
+ * marker; row 2 the four gear-sprite stats and the tool buttons — no emoji
+ * anywhere. On a phone the bar takes the full width inside the gutters and
+ * each row wraps as needed, so nothing runs off the edge.
  *
  * The portrait is built locally from the current loadout (game/sprite.ts
  * pfpLayers), never from the NFT's image address, so it matches the loadout at
@@ -39,6 +43,7 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
 
     return (
         <div id="hud" className="me-hud">
+        <div className="me-hud-row">
             {/* The reptile's PFP: the 16-grid portrait layers of the current
                 look stacked at 48px on well — never the runner here. */}
             <div className="me-portrait">
@@ -84,6 +89,16 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                     <i />
                 </div>
             </div>
+            {/* Gear picked up since the last exit: kept by reaching it, lost
+                on death (game/run.ts). The marker shows only while something
+                is carried, and rides row 1 so row 2 stays stats and tools. */}
+            {model.carried > 0 && (
+                <span className="me-carried" title="Reach the exit to keep it">
+                    Carried {model.carried}
+                </span>
+            )}
+        </div>
+        <div className="me-hud-row">
             {/* Each stat carries the gear sprite that changes it (design/README.md,
                 Iconography): gloves attack, shield defense, speed clock, boots
                 step cost — 24px pixels, no emoji. */}
@@ -118,16 +133,9 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                     <b>{model.stepPct}%</b>
                 </div>
             </div>
-            {/* Gear picked up since the last exit: kept by reaching it, lost
-                on death (game/run.ts). The marker shows only while something
-                is carried. */}
-            {model.carried > 0 && (
-                <span className="me-carried" title="Reach the exit to keep it">
-                    Carried {model.carried}
-                </span>
-            )}
             {/* The two tool buttons: Anchor and Twist, spent by click, tap or keys 1 and 2. */}
             <ToolBar gameState={gameState} />
+        </div>
             {/* Spoken by assistive technology when the shell has something to
                 say (game/settings.ts announcement): Energy low, Level N,
                 Paused, Game over. Invisible on screen, polite in the reader. */}

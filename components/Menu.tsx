@@ -39,6 +39,11 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
  * off a focused button — see game/keys.ts — so one Enter starts exactly one
  * run), and the first button is focused when the menu appears. Mouse and touch
  * tap the buttons directly.
+ *
+ * The buttons sit in two columns (styles/globals.css) so the whole menu fits
+ * below the painting without hidden scrolling at 1280x800. Where the board is
+ * small enough that the menu still must scroll, a "More" hint fades in at the
+ * bottom edge until the player has scrolled to the last entry.
  */
 const Menu: React.FC<MenuProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -52,6 +57,31 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
 
     const showsArt = model.screen === 'title' || model.screen === 'howto' || model.screen === 'countdown';
     const showsButtons = model.screen === 'title';
+
+    // The "More" hint: true while the menu scrolls and the bottom entries are
+    // out of view. The scroll container is the .title-menu box itself
+    // (styles/globals.css hides the bar and scrolls the menu inside).
+    // Recomputed on scroll, on resize and whenever the menu (or the mode
+    // blurb's length) re-renders; the effect is harmless on a menu that
+    // fits, where the hint simply never shows.
+    const menuBoxRef = useRef<HTMLDivElement | null>(null);
+    const [moreBelow, setMoreBelow] = useState(false);
+    useEffect(() => {
+        if (!showsButtons) return;
+        const box = menuBoxRef.current;
+        if (!box) return;
+        const update = () => {
+            const hidden = box.scrollHeight - box.clientHeight;
+            setMoreBelow(hidden > 4 && box.scrollTop < hidden - 4);
+        };
+        update();
+        box.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+        return () => {
+            box.removeEventListener('scroll', update);
+            window.removeEventListener('resize', update);
+        };
+    }, [showsButtons, model.mode, model.modeBlurb, model.modeBestText]);
 
     // The menu appearing (first show or a return to the title) starts at the
     // top: the reset is a render-time state adjustment, not an effect, so the
@@ -92,7 +122,10 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
     if (!showsArt) return null;
 
     return (
-        <div className={model.screen === 'countdown' ? 'title-menu dimmed' : 'title-menu'}>
+        <div
+            className={model.screen === 'countdown' ? 'title-menu dimmed' : 'title-menu'}
+            ref={menuBoxRef}
+        >
             <img src="/images/title.png" alt="Manic Entanglement" className="title-art" draggable={false} />
             {showsButtons && (
                 <div className="me-menu" onKeyDown={handleKeyDown} role="menu" aria-label="Main menu">
@@ -127,7 +160,7 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                         <button
                             key={item.id}
                             role="menuitem"
-                            className={item.id === 'play' ? 'me-btn me-btn-primary' : 'me-btn'}
+                            className={item.id === 'play' ? 'me-btn me-btn-primary me-menu-wide' : 'me-btn'}
                             ref={(element) => {
                                 buttonRefs.current[index] = element;
                             }}
@@ -142,6 +175,13 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                             {item.label}
                         </button>
                     ))}
+                </div>
+            )}
+            {/* The scroll hint: words plus a chevron over a fade, never an
+                emoji, and never in the way of a tap. */}
+            {showsButtons && moreBelow && (
+                <div className="menu-more-hint" aria-hidden="true">
+                    More
                 </div>
             )}
         </div>

@@ -608,3 +608,27 @@
   board's top-left corner where the old background-position anchored the zoom,
   and `#maze` gained `overflow: hidden` so the oversized layer never shows
   outside the board. Reduced motion and high contrast still stop and dim it.
+
+- E49: finished the pre-merge design review at 1280x800 and 390x844. The HUD
+  no longer sizes to the board alone: `styles/globals.css` gives `#hud` the
+  larger of the board's width and 720px, never past the viewport minus the
+  16px gutters, centred under the board (the rule wins over sizeBoard's
+  inline width with `!important`), and `components/Hud.tsx` now renders two
+  `me-hud-row` rows — row 1 portrait, wallet, meters and the carried marker,
+  row 2 the four stats and the tools — so desktop is at most two rows and a
+  390px phone takes the full width inside the gutters, wrapping without
+  overflow. The galaxy shed its 13-board layer: `#maze::before` is `inset: 0`
+  behind the tiles with `will-change` and `contain: paint`, and
+  `@keyframes moveBackground` animates the original way again —
+  `background-size` 600% -> 300% and `background-position` 0 0 ->
+  -1000px -500px, 45s ease-in-out infinite alternate; reduced motion and
+  high contrast still stop and dim it. The title menu fits below the painting
+  at 1280x800: a shorter art band, tighter margins and a two-column button
+  grid (Play spans both), and where it still must scroll `components/Menu.tsx`
+  fades in a "More" hint at the bottom edge until the last entry is in view.
+  And the wardrobe's "New" tag tells the truth for feats earned before its
+  first opening: `game/save.ts` no longer re-seeds the seen markers on every
+  read — `seedSeenOnce` records the then-unlocked traits plus the `SEEN_INIT`
+  key once, `lib/GameState.ts` applies it at load and writes it at once, so a
+  feat earned later stays unseen until the wardrobe opens, all covered by the
+  marker cases in `game/save.test.ts`.

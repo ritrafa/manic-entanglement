@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  SEEN_INIT,
   SAVE_KEY,
   defaultSave,
+  hasSeenMarkers,
   loadSave,
   resetProgress,
+  seedSeenOnce,
   writeSave,
   type SaveData,
   type StorageLike,
@@ -207,31 +210,43 @@ describe("resetProgress", () => {
 });
 
 describe("the wardrobe's trait-seen markers", () => {
-  it("treats an old save without any trait marker as already seen", () => {
-    // A save written before the wardrobe kept "new" markers: no seen field
-    // at all, and one with only the old messages, must both keep loading —
-    // and what its feats already unlocked reads as seen, so an old save
-    // never wakes up with "New" tags on traits earned long ago.
+  it("loads the seen record exactly as stored, seeding nothing on read", () => {
+    // loadSave is pure: a save written before the wardrobe kept "new"
+    // markers comes back with no trait keys. The one-time seed is a separate
+    // step (seedSeenOnce), applied and written at load, so a marker-less
+    // save is not re-read as "everything seen" on every reload.
     const old = loadSave(storageWith('{ "v": 1, "best": { "descent": 12 }, "feats": ["first-exit"] }'));
-    expect(old.seen).toEqual({ "trait:Body:Pink": true });
+    expect(old.seen).toEqual({});
     expect(old.best.descent).toBe(12);
     expect(old.feats).toEqual(["first-exit"]);
-    const messages = loadSave(storageWith('{ "v": 1, "seen": { "howto": true } }'));
-    expect(messages.seen).toEqual({ howto: true });
-    // A fresh save with no feats gains no markers from the seed.
-    expect(loadSave(storageWith('{ "v": 1 }')).seen).toEqual({});
+    expect(hasSeenMarkers(old)).toBe(false);
+  });
+
+  it("seeds an unmarked save once: its feats' traits and the init key", () => {
+    const old = loadSave(storageWith('{ "v": 1, "feats": ["first-exit"] }'));
+    const seeded = seedSeenOnce(old);
+    expect(seeded).not.toBe(old);
+    expect(seeded.seen).toEqual({ "trait:Body:Pink": true, [SEEN_INIT]: true });
+    expect(hasSeenMarkers(seeded)).toBe(true);
+    // A save with only the old messages keeps them and gains the init key.
+    const messages = seedSeenOnce(loadSave(storageWith('{ "v": 1, "seen": { "howto": true } }')));
+    expect(messages.seen).toEqual({ howto: true, [SEEN_INIT]: true });
+    // A fresh save with no feats gains only the init key: the seed has run,
+    // so the first feat earned later will still wear its "New" tags.
+    expect(seedSeenOnce(loadSave(storageWith('{ "v": 1 }'))).seen).toEqual({ [SEEN_INIT]: true });
   });
 
   it("seeds every trait the stored feats unlock, and only those", () => {
     // Free traits (Body Green, Eye Regular, Head Hood and the like) are in
     // no UNLOCKS entry, so they never appear; every feat trait does.
-    const loaded = loadSave(storageWith(
+    const seeded = seedSeenOnce(loadSave(storageWith(
       '{ "v": 1, "feats": ["first-exit", "collector"] }',
-    ));
-    expect(loaded.seen).toEqual({
+    )));
+    expect(seeded.seen).toEqual({
       "trait:Body:Pink": true,
       "trait:Back:Billhook": true,
       "trait:Head:Crown": true,
+      [SEEN_INIT]: true,
     });
   });
 
@@ -243,6 +258,25 @@ describe("the wardrobe's trait-seen markers", () => {
       '{ "v": 1, "feats": ["first-exit", "depth-5"], "seen": { "howto": true, "trait:Body:Pink": true } }',
     ));
     expect(loaded.seen).toEqual({ howto: true, "trait:Body:Pink": true });
+    expect(hasSeenMarkers(loaded)).toBe(true);
+    expect(seedSeenOnce(loaded)).toBe(loaded);
+  });
+
+  it("seeds once for good: a feat earned after the seed stays new", () => {
+    // The bug E49 fixes: a save that never stored a marker used to read as
+    // everything seen on every reload, so a feat earned before the wardrobe
+    // was first opened never showed "New". The seeded save is written at
+    // load, so the seed is not redone: a feat earned later stays unseen.
+    const storage = storageWith('{ "v": 1, "feats": ["first-exit"] }');
+    const seeded = seedSeenOnce(loadSave(storage));
+    expect(writeSave(storage, seeded)).toBe(true);
+    // The player earns depth-5 (Eye One) without opening the wardrobe.
+    const later = { ...seeded, feats: [...seeded.feats, "depth-5"] };
+    expect(writeSave(storage, later)).toBe(true);
+    const reloaded = loadSave(storage);
+    expect(reloaded.seen).toEqual({ "trait:Body:Pink": true, [SEEN_INIT]: true });
+    expect(seedSeenOnce(reloaded)).toBe(reloaded);
+    expect(reloaded.seen["trait:Eye:One"]).toBeUndefined();
   });
 
   it("keeps trait markers through a write and a load", () => {
@@ -260,5 +294,8 @@ describe("the wardrobe's trait-seen markers", () => {
       '{ "v": 1, "seen": { "trait:Body:Gold": true, "bogus": "yes", "count": 3 } }',
     ));
     expect(loaded.seen).toEqual({ "trait:Body:Gold": true });
+    // A trait key survived, so the save counts as marked and seeds nothing.
+    expect(hasSeenMarkers(loaded)).toBe(true);
+    expect(seedSeenOnce(loaded)).toBe(loaded);
   });
 });
