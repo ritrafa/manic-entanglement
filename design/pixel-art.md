@@ -111,9 +111,12 @@ The NFT image is built by the server from the loadout, never drawn by hand and n
 
 1. Take the five trait names of the loadout. Skip `None`.
 2. Stack their PFP masters (`<Trait>pfp.png`, 16 x 16) at the same origin in draw order: Back, Body, Clothes, Eye, Head. Plain alpha-over; alpha is 0 or 255, so there is no blending.
-3. Put the stack on the background the collection already uses, as one flat colour filling all 16 x 16 pixels. If the collection has no background rule, use `well` (`#020806`). Do not leave the NFT image transparent.
-4. Scale the 16 x 16 result with nearest neighbour by a whole number: 20 for the standard 320 x 320 image. Larger sizes are 640 (40) and 960 (60). Never a size that is not a whole multiple of 16.
-5. Export as PNG, RGB, no metadata, no colour profile. The same loadout must always give the same bytes.
+3. Scale the 16 x 16 stack with nearest neighbour by a whole number: 20 for the standard 320 x 320 image. Larger sizes are 640 (40) and 960 (60). Never a size that is not a whole multiple of 16.
+4. Put the scaled stack on the background (owner's rule, 2026-11-13), filling the whole image. Never leave the NFT image transparent.
+   - **Standard:** one flat very dark green, `void` (`#06120d`).
+   - **Feat reward:** the Solana gradient, earned by a feat. A smooth linear gradient at the image's full resolution, top left `#9945FF` (purple) to bottom right `#14F195` (green). It is the one place the system allows a gradient and the one thing that is not pixelated: the reptile on top stays crisp pixel art.
+   - The background is part of the loadout and is saved with it, like a trait.
+5. Export as PNG, RGB, no metadata, no colour profile. The same loadout must always give the same bytes (draw the gradient with fixed integer maths, no dithering).
 
 - Stacking the 320 x 320 exports (`<Trait>.png`) gives the same picture and is allowed, as long as each export equals its master times 20. Check that when a trait is added. Today one file fails the check: the Cosmonaut export does not match its master. Regenerate it from the master.
 - The in-game PFP (HUD, wardrobe, wallet, toasts) is the same stack of masters, shown live at 48, 96 or 144px on `well`. What the player sees in the HUD is what is on chain after a save.
