@@ -1162,3 +1162,34 @@
   code), `app/api/run/start/route.test.ts` (503, the pinned Daily seed, the
   DAS-stubbed start state, body refusals) and `lib/runStart.test.ts` (every
   failure falls back to null, junk in the reply is dropped).
+
+- E71: the reptile metadata and image routes are in (NFT-PLAN N4). The NFT URI
+  now points at the game itself: /api/reptile/<asset>/<v>.json with the sibling
+  <v>.png, where <v> is the eight-hex progressVersion (E69) of the on-chain
+  attribute list, so every save writes a fresh URL for wallets and marketplaces.
+  The new `lib/server/das.ts` gathers the server-side DAS helper: the endpoint
+  from SOLANA_RPC_URL with NEXT_PUBLIC_RPC_URL as the fallback (the run/start
+  route imports it instead of keeping its own copy), a never-throws `dasGetAsset`
+  telling found from missing from error, and defensive readers for the grouping,
+  the attribute list and the asset's name. GET /api/reptile/[asset]/[file]
+  (Node runtime, force-dynamic) checks the base58 id (32-44) and the eight-hex
+  file name before anything is fetched (400 otherwise), answers 502 with no
+  cache on any DAS failure and 404 for an unknown id or an asset outside
+  REPTILE_COLLECTION. The JSON is Metaplex standard: the on-chain name, the
+  collection description, the game as external_url, image and properties.files
+  aimed at the same-v sibling, and attributes carrying the stored look exactly
+  as the holder wrote it (an old-timer's Clothes `White` reads `White`), the
+  Background, each earned mode best, Best Depth, the five displayStats numbers
+  at one decimal like the HUD, and the feat count - the bitmasks never show.
+  The PNG stacks the 16x16 PFP masters, read from disk under public/images/nft
+  (named in next.config.mjs's outputFileTracingIncludes so the deploy ships
+  them), nearest-neighbour at exactly 32x through sharp, over the flat void or
+  a smooth vector Solana gradient; an unknown look value draws the way
+  sanitizeLook falls back. A <v> equal to the current version caches
+  immutably for a year; a stale one renders the reptile as it is now with
+  s-maxage=300 so old URIs never rot.
+  `app/api/reptile/[asset]/[file]/route.test.ts` stubs DAS with a fetch double
+  and decodes the reply back with sharp: the JSON fields and the hidden keys,
+  the 400/404/502 refusals, both cache headers, the 512x512 canvas, master
+  pixels surviving the scaling exact and the gradient's two colours at the
+  corners within 4.

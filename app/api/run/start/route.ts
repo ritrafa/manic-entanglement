@@ -13,6 +13,7 @@ import { noGear, sanitizeGear, type GearLevels } from "@/game/gear";
 import { decodeAttributes } from "@/game/nftProgress";
 import { REPTILE_COLLECTION } from "@/lib/reptile";
 import { issueToken, signingAvailable, type RunStartState } from "@/lib/server/runToken";
+import { dasUrl } from "@/lib/server/das";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,16 +55,6 @@ async function readBody(request: Request, maxBytes: number): Promise<Record<stri
 /** Today UTC as the yyyymmdd number dailySeed hashes. */
 function todayUtcYyyymmdd(now: Date): number {
     return now.getUTCFullYear() * 10000 + (now.getUTCMonth() + 1) * 100 + now.getUTCDate();
-}
-
-/** The DAS endpoint: SOLANA_RPC_URL first, NEXT_PUBLIC_RPC_URL as the fallback. */
-function dasUrl(): string | null {
-    for (const candidate of [process.env.SOLANA_RPC_URL, process.env.NEXT_PUBLIC_RPC_URL]) {
-        if (typeof candidate !== "string") continue;
-        const url = candidate.trim();
-        if (url !== "" && url.startsWith("https://")) return url;
-    }
-    return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
