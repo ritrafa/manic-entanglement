@@ -64,7 +64,7 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
     // that would miss its context). WalletGate holds the wallet hooks behind
     // a dynamic import so they are never called conditionally here and the
     // wallet code stays off the first load until the button is clicked.
-    const hasWallet = rpcUrl() !== null;
+    const hasWallet = rpcUrl() !== null && model.settings.wallet;
 
     return (
         <div id="hud" className="me-hud" ref={hudRef}>

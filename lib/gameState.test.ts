@@ -56,6 +56,9 @@ beforeEach(() => {
         localStorage: storage,
     });
     vi.stubGlobal('Image', class { src = ''; });
+    // A run that begins starts the frame clock; no frames are drawn here.
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
 });
 
 afterEach(() => {
@@ -219,16 +222,18 @@ describe('a connected run asks for its seed when the countdown starts', () => {
         try {
             const gs = new GameState();
             const calls: string[] = [];
-            vi.stubGlobal('fetch', (async (url: string) => {
-                calls.push(url);
+            vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+                calls.push(`${init?.method ?? 'GET'} ${url}`);
                 return new Response('{}', { status: 503 });
             }) as unknown as typeof fetch);
 
             gs.setWallet('11111111111111111111111111111111');
             expect(gs.getSnapshot().walletLinked).toBe(true);
+            // Connecting wakes the start function once.
+            expect(calls).toEqual(['GET /api/run/start']);
 
             expect(gs.startGame()).toBe(true);
-            expect(calls).toEqual(['/api/run/start']);
+            expect(calls).toEqual(['GET /api/run/start', 'POST /api/run/start']);
 
             gs.setWallet(null);
             expect(gs.getSnapshot().walletLinked).toBe(false);
@@ -245,6 +250,111 @@ describe('a connected run asks for its seed when the countdown starts', () => {
             let calls = 0;
             vi.stubGlobal('fetch', (async () => { calls += 1; return new Response('{}'); }) as typeof fetch);
             expect(gs.startGame()).toBe(true);
+            expect(calls).toBe(0);
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+});
+
+const WALLET = '11111111111111111111111111111111';
+
+/** Let the fake timers and the awaited fetches settle. */
+async function settle(ms: number): Promise<void> {
+    await vi.advanceTimersByTimeAsync(ms);
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+}
+
+describe('a start the server never answers asks the player (no silent unverified run)', () => {
+    test('a failed start shows the prompt at go; Play unverified begins a local run', async () => {
+        vi.useFakeTimers();
+        try {
+            const gs = new GameState();
+            vi.stubGlobal('fetch', (async () => { throw new TypeError('offline'); }) as unknown as typeof fetch);
+            gs.setWallet(WALLET);
+            expect(gs.startGame()).toBe(true);
+            await settle(3100);
+
+            expect(gs.getSnapshot().verifyPrompt).toBe('ask');
+
+            gs.playUnverified();
+            expect(gs.getSnapshot().verifyPrompt).toBeNull();
+            expect(gs.getSnapshot().verified).toBe(false);
+            expect(gs.run.phase).not.toBe('ready');
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+
+    test('Retry that gets a token begins a verified run', async () => {
+        vi.useFakeTimers();
+        try {
+            const gs = new GameState();
+            let answer = false;
+            vi.stubGlobal('fetch', (async (_url: string, init?: RequestInit) => {
+                if (init?.method !== 'POST') return new Response(null, { status: 204 });
+                if (!answer) throw new TypeError('offline');
+                return Response.json({ token: 'tok.mac', seed: 42, start: { gear: {}, feats: [], pickedUp: [] } });
+            }) as unknown as typeof fetch);
+            gs.setWallet(WALLET);
+            gs.startGame();
+            await settle(3100);
+            expect(gs.getSnapshot().verifyPrompt).toBe('ask');
+
+            answer = true;
+            const retry = gs.retryVerification();
+            expect(gs.getSnapshot().verifyPrompt).toBe('retrying');
+            await retry;
+
+            expect(gs.getSnapshot().verifyPrompt).toBeNull();
+            expect(gs.getSnapshot().verified).toBe(true);
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+
+    test('a server with verification switched off plays unverified without asking', async () => {
+        vi.useFakeTimers();
+        try {
+            const gs = new GameState();
+            vi.stubGlobal('fetch', (async () => Response.json({ error: 'verification off' }, { status: 503 })) as unknown as typeof fetch);
+            gs.setWallet(WALLET);
+            gs.startGame();
+            await settle(3100);
+
+            expect(gs.getSnapshot().verifyPrompt).toBeNull();
+            expect(gs.getSnapshot().verified).toBe(false);
+            expect(gs.run.phase).not.toBe('ready');
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('Settings can switch wallet and verification off', () => {
+    test('off: no wallet is linked, nothing is asked of the server, the reptile is let go', () => {
+        vi.useFakeTimers();
+        try {
+            const gs = new GameState();
+            let calls = 0;
+            vi.stubGlobal('fetch', (async () => { calls += 1; return new Response(null, { status: 204 }); }) as unknown as typeof fetch);
+            gs.setWallet(WALLET);
+            gs.setReptile({ asset: 'asset', number: '1', look: null });
+            calls = 0;
+
+            gs.setSetting('wallet', false);
+            expect(gs.getSettings().wallet).toBe(false);
+            expect(gs.getSnapshot().walletLinked).toBe(false);
+            expect(gs.getSnapshot().hasReptile).toBe(false);
+
+            // A late report from the closing wallet box links nothing either.
+            gs.setWallet(WALLET);
+            expect(gs.getSnapshot().walletLinked).toBe(false);
+            gs.startGame();
             expect(calls).toBe(0);
         } finally {
             vi.clearAllTimers();

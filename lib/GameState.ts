@@ -83,6 +83,8 @@ export interface GameSnapshot extends HudModel {
     /** True while a wallet is connected: a run that then plays without a
      *  token shows "Not verified", so the player knows it will not count. */
     walletLinked: boolean;
+    /** The "verification did not answer" prompt at "go" (null while none). */
+    verifyPrompt: 'ask' | 'retrying' | null;
     /** Signed proofs waiting in the save to be saved to the NFT (E70);
      *  the wallet box prints "N runs to save" and the save panel (E72)
      *  offers them to the reptile. */
@@ -147,6 +149,22 @@ export async function requestRunStart(
     fetchImpl: typeof fetch = fetch,
     timeoutMs: number = RUN_START_TIMEOUT_MS,
 ): Promise<ServerStart | null> {
+    const reply = await requestRunStartReply(mode, wallet, fetchImpl, timeoutMs);
+    return reply === 'off' ? null : reply;
+}
+
+/**
+ * requestRunStart, telling one failure apart: 'off' when the server says
+ * verification is switched off (503 "verification off", no secret set), so
+ * the shell plays unverified without asking; null for every other failure,
+ * which the shell offers to retry.
+ */
+export async function requestRunStartReply(
+    mode: ModeId,
+    wallet: string,
+    fetchImpl: typeof fetch = fetch,
+    timeoutMs: number = RUN_START_TIMEOUT_MS,
+): Promise<ServerStart | 'off' | null> {
     if (typeof wallet !== 'string' || !BASE58_WALLET.test(wallet)) return null;
     try {
         const controller = new AbortController();
@@ -158,6 +176,11 @@ export async function requestRunStart(
                 body: JSON.stringify({ mode, wallet }),
                 signal: controller.signal,
             });
+            if (response.status === 503) {
+                const off: unknown = await response.json().catch(() => null);
+                return typeof off === 'object' && off !== null
+                    && (off as Record<string, unknown>).error === 'verification off' ? 'off' : null;
+            }
             if (!response.ok) return null;
             const reply: unknown = await response.json();
             if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) return null;
@@ -347,7 +370,12 @@ class GameState {
     private pendingServer: ServerStart | null = null;
     /** The /api/run/start call the running countdown made when it began, so
      *  the server has the whole countdown to answer; null without a wallet. */
-    private serverStart: Promise<ServerStart | null> | null = null;
+    private serverStart: Promise<ServerStart | 'off' | null> | null = null;
+    /** The "verification did not answer" prompt at "go": 'ask' offers Retry
+     *  and Play unverified, 'retrying' while a retry is out; null otherwise. */
+    private verifyPrompt: 'ask' | 'retrying' | null = null;
+    /** The wallet address last warmed for, so one connect wakes the server once. */
+    private warmedFor: string | null = null;
     /** The token of the live verified run; null while the run is local (E70).
      *  Its proof is posted when the run ends. */
     private activeToken: string | null = null;
@@ -388,7 +416,7 @@ class GameState {
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
         this.look = fitLook(sanitizeLook(this.save.look), this.save.feats, this.save.pickedUp);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null, verified: false, walletLinked: false, pendingProofs: this.save.pendingProofs.length, hasReptile: false, lookPickedSinceLoad: false };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null, verified: false, walletLinked: false, verifyPrompt: null, pendingProofs: this.save.pendingProofs.length, hasReptile: false, lookPickedSinceLoad: false };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -1061,6 +1089,17 @@ class GameState {
      */
     setSetting(key: keyof Settings, value: unknown): void {
         this.settings = sanitizeSettings({ ...this.settings, [key]: value });
+        // Wallet and verification switched off: the box closes, so the loaded
+        // reptile goes with it (the wardrobe's Save hides) and no run asks
+        // the server for a seed. The wallet box sets the address again when
+        // it is switched back on and opened.
+        if (key === 'wallet' && !this.settings.wallet) {
+            this.wallet = null;
+            this.warmedFor = null;
+            this.reptile = null;
+            this.lookPickedSinceLoad = false;
+            this.lookPicks = {};
+        }
         this.save = { ...this.save, settings: { ...this.save.settings, ...this.settings } };
         writeSave(this.storage, this.save);
         this.applySettings();
@@ -1173,7 +1212,8 @@ class GameState {
         if (this.countdownTimers !== null) return false;
         if (this.run.phase !== 'ready' && this.run.phase !== 'dead') return false;
         // A connected wallet asks for the run's seed now, while 3-2-1 plays.
-        this.serverStart = this.wallet !== null ? requestRunStart(this.modeId, this.wallet) : null;
+        const wallet = this.linkedWallet();
+        this.serverStart = wallet !== null ? requestRunStartReply(this.modeId, wallet) : null;
         const mazeContainerElement = document.getElementById('maze-container');
         // The title art stays on screen, dimmed by the page while the screen is
         // "countdown"; only the number is drawn here, over it.
@@ -1223,6 +1263,7 @@ class GameState {
         this.startSeq += 1;
         this.pendingServer = null;
         this.serverStart = null;
+        this.verifyPrompt = null;
         if (this.countdownTimers === null) return;
         this.countdownTimers.forEach(clearTimeout);
         this.countdownTimers = null;
@@ -1238,6 +1279,10 @@ class GameState {
     setWallet(address: string | null): void {
         const clean = typeof address === 'string' && BASE58_WALLET.test(address) ? address : null;
         this.wallet = clean;
+        if (clean !== null && clean !== this.warmedFor && this.settings.wallet) {
+            this.warmedFor = clean;
+            this.warmRunStart();
+        }
         this.publishHud();
     }
 
@@ -1320,13 +1365,68 @@ class GameState {
         this.pendingServer = null;
         const request = this.serverStart;
         this.serverStart = null;
-        if (request !== null && this.wallet !== null) {
-            const server = await request;
+        if (request !== null && this.linkedWallet() !== null) {
+            const reply = await request;
             if (seq !== this.startSeq) return;
-            this.pendingServer = server;
+            if (reply === null) {
+                // The server did not answer: never slip into an unverified
+                // run silently - the player chooses (Retry / Play unverified).
+                this.verifyPrompt = 'ask';
+                this.publishHud();
+                return;
+            }
+            this.pendingServer = reply === 'off' ? null : reply;
         }
         if (seq !== this.startSeq) return;
         this.beginRun();
+    }
+
+    /** The prompt's Retry: ask the server once more; a token begins the
+     *  verified run, another failure brings the prompt back. */
+    async retryVerification(): Promise<void> {
+        const wallet = this.linkedWallet();
+        if (this.verifyPrompt !== 'ask') return;
+        if (wallet === null) {
+            this.playUnverified();
+            return;
+        }
+        const seq = this.startSeq;
+        this.verifyPrompt = 'retrying';
+        this.publishHud();
+        const reply = await requestRunStartReply(this.modeId, wallet);
+        if (seq !== this.startSeq || this.verifyPrompt !== 'retrying') return;
+        if (reply === null) {
+            this.verifyPrompt = 'ask';
+            this.publishHud();
+            return;
+        }
+        this.verifyPrompt = null;
+        this.pendingServer = reply === 'off' ? null : reply;
+        this.beginRun();
+    }
+
+    /** The prompt's Play unverified: the run begins local, as without a wallet. */
+    playUnverified(): void {
+        if (this.verifyPrompt === null) return;
+        this.verifyPrompt = null;
+        this.pendingServer = null;
+        this.beginRun();
+    }
+
+    /** The connected wallet, or null when none is connected or the player
+     *  switched wallet and verification off in Settings. */
+    private linkedWallet(): string | null {
+        return this.settings.wallet ? this.wallet : null;
+    }
+
+    /** Wake the run-start function when a wallet connects, so the first
+     *  run's token request does not wait on a cold server. Fire and forget. */
+    private warmRunStart(): void {
+        try {
+            void fetch('/api/run/start', { method: 'GET' }).catch(() => {});
+        } catch {
+            // No fetch here (tests, very old browsers): nothing to warm.
+        }
     }
 
     /**
@@ -1514,7 +1614,8 @@ class GameState {
             newTraits: [...this.newTraitKeys],
             heldTrait: this.run.heldTrait === null ? null : { ...this.run.heldTrait },
             verified: this.activeToken !== null,
-            walletLinked: this.wallet !== null,
+            walletLinked: this.linkedWallet() !== null,
+            verifyPrompt: this.verifyPrompt,
             pendingProofs: this.save.pendingProofs.length,
             hasReptile: this.reptile !== null,
             lookPickedSinceLoad: this.lookPickedSinceLoad,
@@ -1541,6 +1642,7 @@ class GameState {
             && sameHeldTrait(this.hudSnapshot.heldTrait, next.heldTrait)
             && this.hudSnapshot.verified === next.verified
             && this.hudSnapshot.walletLinked === next.walletLinked
+            && this.hudSnapshot.verifyPrompt === next.verifyPrompt
             && this.hudSnapshot.pendingProofs === next.pendingProofs
             && this.hudSnapshot.hasReptile === next.hasReptile
             && this.hudSnapshot.lookPickedSinceLoad === next.lookPickedSinceLoad) {

@@ -72,6 +72,7 @@ describe("sanitizeSettings", () => {
             touch: "dpad",
             haptics: false,
             keys: { ...DEFAULT_SETTINGS.keys, up: ["KeyI", "ArrowUp"] },
+            wallet: false,
         };
         expect(sanitizeSettings(good)).toEqual(good);
     });
@@ -81,6 +82,12 @@ describe("sanitizeSettings", () => {
         expect(kept.musicVol).toBe(0.25);
         expect((kept as unknown as Record<string, unknown>).theme).toBe("midnight");
         expect(kept).toEqual({ ...DEFAULT_SETTINGS, musicVol: 0.25, theme: "midnight" });
+    });
+
+    it("wallet and verification is on by default and only a real boolean turns it off", () => {
+        expect(sanitizeSettings({}).wallet).toBe(true);
+        expect(sanitizeSettings({ wallet: false }).wallet).toBe(false);
+        expect(sanitizeSettings({ wallet: "no" }).wallet).toBe(true);
     });
 
     it("touch and haptics keep valid values and default on broken ones", () => {

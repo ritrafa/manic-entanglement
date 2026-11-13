@@ -39,12 +39,37 @@ const Overlay: React.FC<OverlayProps> = ({ gameState }) => {
 
     // The panel is modal while it shows: focus its first button when it appears.
     useEffect(() => {
-        if (open) firstButtonRef.current?.focus();
-    }, [open, model.screen]);
+        if (open || model.verifyPrompt === 'ask') firstButtonRef.current?.focus();
+    }, [open, model.screen, model.verifyPrompt]);
 
     // The wardrobe is the shell's other modal panel; it lives in its own
     // component and comes along so the shell mounts one dialog owner.
     if (model.screen === 'wardrobe') return <WardrobePanel gameState={gameState} />;
+
+    // "go" came but the server never answered for the token: the player
+    // picks - retry, or play this run unverified (it will not count).
+    if (model.screen === 'countdown' && model.verifyPrompt !== null) {
+        const retrying = model.verifyPrompt === 'retrying';
+        return (
+            <Panel label="Verification did not answer" title="Not verified yet">
+                <p className="me-status" role="status">
+                    {retrying ? 'Asking the server again...' : 'The server did not answer in time.'}
+                </p>
+                <p className="me-hint">An unverified run plays as normal but will not count toward minting or saving your reptile.</p>
+                <div className="me-panel-actions">
+                    <button
+                        className="me-btn me-btn-primary"
+                        ref={firstButtonRef}
+                        disabled={retrying}
+                        onClick={() => void gameState.retryVerification()}
+                    >
+                        {retrying ? 'Retrying...' : 'Retry'}
+                    </button>
+                    <button className="me-btn" disabled={retrying} onClick={() => gameState.playUnverified()}>Play unverified</button>
+                </div>
+            </Panel>
+        );
+    }
 
     if (!open) return null;
 

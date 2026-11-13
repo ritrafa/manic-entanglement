@@ -35,6 +35,9 @@ export interface Settings {
     haptics: boolean;
     /** The keyboard mapping the Controls screen edits (game/keys.ts). */
     keys: KeyMap;
+    /** True shows the wallet box and verifies runs with a connected wallet;
+     *  false hides every wallet and NFT feature and plays purely local. */
+    wallet: boolean;
 }
 
 /** The starting point: heard but gentle, calm by default, shake on. */
@@ -49,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
     touch: "swipe",
     haptics: true,
     keys: DEFAULT_KEYS,
+    wallet: true,
 };
 
 /** The accepted motion settings, in the order the screen offers them. */
@@ -106,6 +110,7 @@ export function sanitizeSettings(value: unknown): Settings {
             : DEFAULT_SETTINGS.touch,
         haptics: readBoolean(source.haptics, DEFAULT_SETTINGS.haptics),
         keys: sanitizeKeys(source.keys),
+        wallet: readBoolean(source.wallet, DEFAULT_SETTINGS.wallet),
     };
     // The extras first, the checked fields over them: unknown keys survive.
     return { ...source, ...checked } as Settings;
@@ -175,6 +180,7 @@ export const SETTING_ROWS: readonly SettingRow[] = [
         ],
     },
     { id: "haptics", label: "Vibrate on events", kind: "toggle" },
+    { id: "wallet", label: "Wallet and verified runs", kind: "toggle" },
 ];
 
 /** The two snapshots announcement compares: the whole HUD model plus the screen. */

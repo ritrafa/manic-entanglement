@@ -117,6 +117,12 @@ async function loadStartState(wallet: string): Promise<RunStartState> {
     }
 }
 
+/** A wake-up call: the shell pings this when a wallet connects so the first
+ *  real start does not wait on a cold function. Reads nothing, says nothing. */
+export function GET(): Response {
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+}
+
 export async function POST(request: Request): Promise<Response> {
     if (!signingAvailable()) return json({ error: "verification off" }, 503);
 
