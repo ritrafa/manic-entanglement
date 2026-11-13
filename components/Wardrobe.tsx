@@ -211,7 +211,7 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                                 <i style={cssVars({ '--v': `${unlockedPct}%` })} />
                             </div>
                         </div>
-                        <div className="me-col">
+                        <div className="me-col wardrobe-grid-col">
                             <div className="me-tabs" role="tablist" aria-label="Trait layers">
                                 {LAYER_ORDER.map((name) => (
                                     <button
@@ -291,14 +291,21 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                             </div>
                             </div>
                         </div>
-                    </div>
-                    <p className="me-hint" style={{ textAlign: 'center' }}>
-                        {newCount > 0
-                            ? `${newCount} new ${newCount === 1 ? 'trait' : 'traits'} since you last looked. Earn feats to unlock more.`
-                            : 'Earn feats to unlock more looks.'}
-                    </p>
-                    <div className="me-panel-actions">
-                        <button className="me-btn me-btn-primary" ref={firstButtonRef} onClick={closeWardrobe}>Back</button>
+                        {/* E62 (the E61 review): the hint and the Back button
+                            are part of the layout now. On the desktop the
+                            grid column spans the panel's whole height beside
+                            them and they sit under the preview, in the left
+                            column that used to stay empty below it; on a
+                            phone the one-column layout drops them after the
+                            grid, where they were. */}
+                        <p className="me-hint wardrobe-hint" style={{ textAlign: 'center' }}>
+                            {newCount > 0
+                                ? `${newCount} new ${newCount === 1 ? 'trait' : 'traits'} since you last looked. Earn feats to unlock more.`
+                                : 'Earn feats to unlock more looks.'}
+                        </p>
+                        <div className="me-panel-actions wardrobe-actions">
+                            <button className="me-btn me-btn-primary" ref={firstButtonRef} onClick={closeWardrobe}>Back</button>
+                        </div>
                     </div>
                 </div>
             </section>

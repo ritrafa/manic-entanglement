@@ -1253,6 +1253,16 @@ body {
   #hud.me-hud .me-tool .me-tool-key {
     display: none;
   }
+
+  /* E62 (the E61 review): "ANCHOR0" read as one word. The count keeps a
+     space-4 of its own after the name — on top of the button's gap, so
+     the two never touch whatever the button's width — and the display
+     face the desktop button gives it, so "Anchor 0" reads as two words
+     in the same voice. */
+  #hud.me-hud .me-tools .me-btn .me-count {
+    margin-left: var(--space-4);
+    font: 400 16px/24px var(--font-display);
+  }
 }
 
 /* --- Settings, accessibility and the player's own asks ----------------------
@@ -1478,7 +1488,8 @@ body {
    Only what the sheet cannot say lives here: the scrim that covers the whole
    viewport so the panel can reach the design's 720 px beside the board (the
    board is only ~500 px, and a panel as wide as the board showed one card per
-   row), the two-column layout, the stage sizes with their phone drops, the
+   row), the two-column layout with its full-panel-height grid column and
+   sticky preview (E62), the stage sizes with their phone drops, the
    three-card phone grid and the locked hint's ink-dim. */
 #maze-container .me-scrim.wardrobe-scrim {
   /* Fixed to the viewport, not the board: the panel gets the whole screen to
@@ -1506,7 +1517,11 @@ body {
      once instead of a two-and-a-half-row window. */
   display: flex;
   flex-direction: column;
-  max-height: 100%;
+  /* E62 (the E61 review): the panel is the screen between the scrim's
+     gutters, so the grid below gets the panel's whole height and at
+     1280x800 four rows of cards show at once. */
+  max-height: calc(100vh - var(--space-24) * 2);
+  max-height: calc(100dvh - var(--space-24) * 2);
 }
 .wardrobe-panel .me-panel-body {
   flex: 1 1 auto;
@@ -1515,9 +1530,14 @@ body {
 .wardrobe-layout {
   display: grid;
   grid-template-columns: 284px minmax(0, 1fr);
+  /* E62: three rows, and the grid column's row is exactly the height the
+     panel has left (an auto row would size to the cards and the column
+     would overflow the panel instead of scrolling its grid). Rows two and
+     three are the hint and the Back button, under the preview. */
+  grid-template-rows: minmax(min-content, 1fr) auto auto;
   gap: var(--space-16);
-  /* The body's flex column (E61): the layout takes the height the hint and
-     the Back button leave, and can shrink to it. */
+  /* The body's flex column (E61): the layout takes the body's height and
+     can shrink to it. */
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -1545,11 +1565,12 @@ body {
   color: var(--ink-dim);
 }
 /* With about twenty traits per layer (E60's batch) the open grid scrolls,
-   but it now uses the panel's height (E61): the grid area is the panel's
-   whole right column below the tabs — well past 60% of the viewport on the
-   desktop — and the tabs and the stage stay put while the cards move. The
-   wrapper carries the scroll cue: a fade over the grid's bottom edge, shown
-   by components/Wardrobe.tsx only while cards below are out of sight. */
+   and it takes the panel's whole height (E61, E62): the grid column spans
+   the panel from the tabs to its bottom edge, so at 1280x800 four rows of
+   cards show at once, and the tabs and the stage stay put while the cards
+   move. The wrapper carries the scroll cue: a fade over the grid's bottom
+   edge, shown by components/Wardrobe.tsx only while cards below are out of
+   sight. */
 .wardrobe-grid-wrap {
   position: relative;
   flex: 1 1 auto;
@@ -1572,6 +1593,31 @@ body {
   padding-right: var(--space-4);
   scrollbar-width: thin;
 }
+@media (min-width: 641px) {
+  /* Desktop (E62, the E61 review): the grid column spans the panel's whole
+     height — the hint and the Back button sit under the preview, in the
+     left column that used to stay empty below it — and the preview rides
+     sticky at the top of that column while the grid scrolls. */
+  .wardrobe-stage {
+    grid-column: 1;
+    grid-row: 1;
+    position: sticky;
+    top: 0;
+    align-self: start;
+  }
+  .wardrobe-grid-col {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+  .wardrobe-hint {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .wardrobe-actions {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
 @media (max-width: 640px) {
   /* Phones: the stage goes above the tabs, the PFP drops to 96 px and the
      runner to 48 px, and the grid is three cards wide. On desktop the design's
@@ -1579,6 +1625,9 @@ body {
      cards per row. */
   .wardrobe-layout {
     grid-template-columns: minmax(0, 1fr);
+    /* E62: one column, items in document order — stage, tabs and grid,
+       then the hint and Back, exactly as the panel scrolled before. */
+    grid-template-rows: none;
   }
   .wardrobe-stage {
     order: -1;

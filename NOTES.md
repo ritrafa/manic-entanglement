@@ -856,3 +856,21 @@
   under one screen pixel per art pixel) and gives `--trait-bracket` a whole
   pixel value, so no fractional scale touches the sprite or its outline at
   any cell size.
+
+- E62: the two layout faults the review of E61 left behind are fixed. On the
+  desktop the wardrobe's trait grid now takes the panel's whole height: the
+  panel is capped at the viewport between the scrim's gutters
+  (`max-height: calc(100dvh - var(--space-24) * 2)`), `.wardrobe-layout` got
+  explicit rows (`minmax(min-content, 1fr) auto auto`, an auto row had sized
+  itself to the cards), the grid column spans all three beside the hint and
+  the Back button, and `components/Wardrobe.tsx` moved that hint and that
+  button into the layout as `.wardrobe-hint` and `.wardrobe-actions` so they
+  sit under the preview, in the left column that used to stay empty below it
+  — at 1280x800 four rows of cards show at once, the tabs and the preview
+  stay put while the grid scrolls, and the preview column rides `position:
+  sticky` at its top. Phones are unchanged: below 641 px the layout is the
+  plain one-column stack again (`grid-template-rows: none`, the stage first)
+  and the scrim still scrolls the whole panel. And the phone tool buttons
+  (E57's row) read "Anchor 0" now, not "ANCHOR0": in the `max-width: 480px`
+  block `#hud.me-hud .me-tools .me-btn .me-count` keeps a `--space-4` of its
+  own after the name and the display face the desktop button gives it.
