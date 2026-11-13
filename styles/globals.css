@@ -26,27 +26,36 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  height: 100vh;
-  height: 100dvh;
+  /* Top-aligned column (E51): the content starts at the top of the screen
+     and flows down, on phones and desktop alike. The page may scroll
+     vertically when its content is taller than the screen (the title screen
+     on a short phone); during play the board area keeps touch-action: none,
+     so swipes there never scroll the page. */
+  justify-content: flex-start;
+  min-height: 100vh;
+  min-height: 100dvh;
   /* viewportFit=cover runs the page under notches and browser bars: the page
-     itself keeps its content inside the safe area. */
+     itself keeps its content inside the safe area, padded by space-16. */
   box-sizing: border-box;
   padding:
-    env(safe-area-inset-top)
+    calc(env(safe-area-inset-top) + var(--space-16))
     env(safe-area-inset-right)
-    env(safe-area-inset-bottom)
+    calc(env(safe-area-inset-bottom) + var(--space-16))
     env(safe-area-inset-left);
-  overflow: hidden;
   overscroll-behavior: none;
 }
 
+/* The column itself is the body: the shell's children — the board area, the
+   HUD, the D-pad, and on the title screen the title block — are the body's
+   flex items, top-aligned and centred horizontally. */
 .game-container {
   display: contents;
-  height: 100vh;
-  height: 100dvh;
-  width: 100vw;
-  overflow: hidden;
+}
+/* On the title screen the title block takes the board's place in the column,
+   so the board area stands down; the board itself stays in the DOM, mounted
+   and ready for the first run. */
+.game-container[data-screen='title'] #maze-container {
+  display: none;
 }
 /* The drifting galaxy lives on #maze::before, a layer exactly the size of
    the board (inset: 0) sitting behind the tiles: no oversized canvas, so the
@@ -126,12 +135,10 @@ body {
   pointer-events: none;
 }
 
-/* The title menu (components/Menu.tsx, design/components/MenuList): the title
-   painting keeps its own band across the top, shown whole at its own aspect
-   ratio so its lettering never gets cut, with a line under it, and the
-   me-menu sits below the band on void — nothing overlaps the painting and no
-   gradient covers it. The art also shows behind the how-to and, dimmed,
-   behind the countdown. */
+/* The title art over the board area while the how-to panel shows or the
+   countdown runs (components/Menu.tsx): the picture shown whole at its own
+   aspect ratio, centred on void, dimmed under the countdown; the panels sit
+   on their scrim above it. */
 .title-menu {
   position: absolute;
   inset: 0;
@@ -139,27 +146,17 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   background: var(--void);
-  overflow-y: auto;
-  /* The menu scrolls inside without the browser's white scrollbar. */
-  scrollbar-width: none;
 }
-.title-menu::-webkit-scrollbar {
-  display: none;
-}
-.title-art {
+.title-menu .title-art {
   flex: none;
-  /* The painting is a square, so the band keeps its own aspect ratio: the
-     whole lettering ("Manic Entanglement") shows at 1280x800 and 390x844,
-     cropped by nothing. The band's height stays short enough that the
-     two-column button grid below it still fits inside the board-sized menu
-     at 1280x800 — the menu trims its own spacing for the painting, never
-     the other way round. */
-  height: clamp(120px, 34%, 260px);
-  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  /* The painting keeps its own aspect ratio: cropped by nothing. */
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   border-bottom: var(--border-thick) solid var(--line);
-  box-sizing: border-box;
   /* The buttons are the only interactive part of the menu; the art is scenery. */
   pointer-events: none;
   user-select: none;
@@ -168,63 +165,60 @@ body {
   /* The countdown runs over the dimmed title, as the plain picture did before. */
   opacity: 0.5;
 }
-.title-menu .me-menu {
-  /* Two columns, so the five entries are three button rows under the mode
-     row: with the spacing trimmed (tight margins, space-4 gaps, and a
-     tighter mode row below) the whole menu fits under the painting without
-     hidden scrolling at 1280x800, and where it still must scroll (a phone's
-     small board) the .menu-more-hint below says there is more. */
+
+/* The title screen (components/Menu.tsx, design/components/MenuList): the
+   title block takes the board's place in the page's top-aligned column, at
+   the content width (up to 720 px, inside the 16 px gutters): the painting
+   band at its own aspect ratio with the whole lettering, then the mode
+   picker, the buttons and the best line at their natural height. Nothing
+   inside it scrolls by itself; where the block is taller than the screen the
+   page itself scrolls. */
+.title-screen {
   box-sizing: border-box;
-  margin: var(--space-4) 0 0;
-  padding: 0 var(--space-16);
+  width: min(720px, calc(100vw - 32px));
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.title-screen .title-art {
+  flex: none;
+  box-sizing: border-box;
+  /* The whole painting at its own aspect ratio, cropped by nothing; the cap
+     keeps the menu under it on screen at 1280x800, where the page must not
+     need scrolling to reach the buttons. */
+  width: min(100%, 420px);
+  height: auto;
+  object-fit: contain;
+  border-bottom: var(--border-thick) solid var(--line);
+  /* The buttons are the only interactive part of the menu; the art is scenery. */
+  pointer-events: none;
+  user-select: none;
+}
+/* Two columns, so the five entries are three button rows under the mode row;
+   at their natural height they and the best line all show without any inner
+   scrolling at 390x844 and 1280x800. */
+.title-screen .me-menu {
+  box-sizing: border-box;
+  margin: var(--space-16) 0 0;
+  padding: 0;
   width: min(440px, 100%);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-8);
 }
-/* The mode row trims its inner padding and gaps for the menu's own sake as
-   well, so the whole menu reaches 1280x800 without hidden scrolling; the
-   design's spacing stands on every other me-mode. */
-.title-menu .me-mode {
-  padding: var(--space-4);
-  gap: var(--space-4);
+.title-screen .me-mode {
+  padding: var(--space-8);
+  gap: var(--space-8);
 }
-.title-menu .me-menu .me-mode,
-.title-menu .me-menu .me-menu-wide {
+.title-screen .me-menu .me-mode,
+.title-screen .me-menu .me-menu-wide {
   grid-column: 1 / -1;
 }
 /* The mode row takes the inset ring while it is focused, like the buttons. */
-.title-menu .me-mode:focus-visible {
+.title-screen .me-mode:focus-visible {
   outline: var(--border-thin) solid var(--ink);
   outline-offset: -6px;
-}
-/* Shown while the menu scrolls and the bottom entries are out of view: a
-   word and a CSS chevron as the menu's own last row, inside its bottom edge
-   (components/Menu.tsx decides when it shows). It is part of the menu's
-   flow, not an overlay pinned to the scroll box, so it never covers other
-   text — on a phone it sits under the last button row, not on the mode
-   row's best line. Pointer-events none: it is a hint, not a control. */
-.menu-more-hint {
-  grid-column: 1 / -1;
-  box-sizing: border-box;
-  margin: 0;
-  padding: var(--space-4) 0 0;
-  text-align: center;
-  font: 400 12px/16px var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--ink);
-  pointer-events: none;
-}
-.menu-more-hint::after {
-  content: '';
-  display: block;
-  width: 8px;
-  height: 8px;
-  margin: var(--space-4) auto 0;
-  border-right: var(--border-thin) solid var(--ink);
-  border-bottom: var(--border-thin) solid var(--ink);
-  transform: rotate(45deg);
 }
 
 /* The 3-2-1 the shell drops over the dimmed title while a run starts. */
@@ -895,7 +889,8 @@ body {
   box-sizing: border-box;
   width: min(max(calc(var(--cell-size, 24px) * var(--grid-size, 11)), 720px), calc(100vw - 32px)) !important;
   max-width: calc(100vw - 32px);
-  margin: 0 auto;
+  /* The bar sits under the board with one space-8 of air, centred. */
+  margin: var(--space-8) auto 0;
 }
 /* One row of the bar: a wrapping flex line of its own, full width inside
    the bar's padding. */
@@ -1182,8 +1177,9 @@ body {
 
 /* --- Touch controls: the optional D-pad and the pause button ----------------------- */
 
-/* The cross (design/components/DPad) sits below the board, centred; the keys
-   belong to the game: no pan, zoom, text selection or long-press menu. */
+/* The cross (design/components/DPad) is the column's last item, below the
+   HUD and centred; the keys belong to the game: no pan, zoom, text selection
+   or long-press menu. */
 .me-dpad {
   margin: var(--space-8) auto 0;
 }

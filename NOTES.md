@@ -651,3 +651,19 @@
   hint renders as the menu's own last row inside its bottom edge — in the
   flow, not pinned over the scroll box — so on a phone it sits under the
   last button row instead of covering the mode row's best line.
+- E51: the page is a top-aligned column and the title screen left the board's
+  box. `styles/globals.css` puts `body` at `justify-content: flex-start` with
+  `padding-block` of `space-16` plus the safe-area insets and a `min-height`
+  of `100dvh` (no fixed height, no `overflow: hidden`), so content starts at
+  the top on phones and desktop and the page itself scrolls when it is taller
+  than the screen; during play the board keeps `touch-action: none`, so
+  swipes never scroll it. `components/Menu.tsx` draws the title screen as a
+  `.title-screen` block that `app/page.tsx` places in the column where the
+  board was (the board area hides via
+  `.game-container[data-screen='title'] #maze-container`, the board staying
+  mounted); at up to 720 px inside the gutters the painting shows whole at
+  its own aspect ratio (capped at 420 px so the buttons stay on screen at
+  1280x800), then the mode picker, the buttons and the best line at their
+  natural height — nothing scrolls inside, so the "More" hint and its rules
+  are gone. The how-to and the countdown keep the title art as a board-sized
+  overlay, dimmed under the countdown as before.

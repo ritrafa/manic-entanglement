@@ -91,7 +91,12 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
     return (
         <>
         <TouchLayer onPress={handlePress} onRelease={handleRelease}>
-        <div className="game-container">
+        <div className="game-container" data-screen={model.screen}>
+
+            {/* On the title screen the title block takes the board's place in
+                the column (the board area itself stands down, styles/globals.css);
+                the HUD and the D-pad follow it, top-aligned. */}
+            {model.screen === 'title' && <Menu gameState={gameState} />}
 
             <div id="maze-container">
                 <div id="maze"/>
@@ -103,9 +108,10 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
                         <span className="me-pause-bars" aria-hidden="true"><i /><i /></span>
                     </button>
                 )}
-                {/* The title art, the menu buttons and the how-to come from the
-                    shell's screen: the art shows on title, howto and countdown. */}
-                <Menu gameState={gameState} />
+                {/* The title art over the board comes from the shell's screen:
+                    it shows (dimmed under the countdown) on howto and countdown;
+                    on the title the whole block sits in the column above. */}
+                {model.screen !== 'title' && <Menu gameState={gameState} />}
                 <HowTo gameState={gameState} />
                 <SettingsPanel gameState={gameState} />
                 <ControlsPanel gameState={gameState} />
@@ -113,13 +119,13 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
                 <Overlay gameState={gameState} />
             </div>
 
-            {/* The optional D-pad sits below the board, above the HUD, and
-                hides while a panel is open. */}
+            <Hud gameState={gameState} />
+
+            {/* The optional D-pad is the column's last item, below the HUD,
+                and hides while a panel is open. */}
             {coarse && !panelOpen && model.settings.touch === 'dpad' && (
                 <DPad onPress={handlePress} onRelease={handleRelease} />
             )}
-
-            <Hud gameState={gameState} />
         </div>
         </TouchLayer>
         <Analytics/>
