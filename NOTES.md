@@ -688,3 +688,21 @@
   390x844, and the HUD's stats (`components/Hud.tsx`) always use the short
   labels Atk, Def, Clock and Step — one set at every width, so nothing is cut
   at 1280.
+
+- E53: Turned the Knot's forecast into ghost walls drawn with the game's own
+  wall art. `game/view.ts` now exports `gridAfterForecast` (a copy of the wall
+  grid with the sealing edges filled and the opening edges emptied),
+  `tileCodeAt` (the sixteen-picture neighbour numbering maze.ts uses) and
+  `markTiles(forecast, grid)`, whose marks carry the code each tile will have
+  after the change; `lib/board.ts` `syncMarks` draws an incoming wall as an
+  `img.mark-incoming` of that picture on the marks layer and puts
+  `wall-outgoing` on the outgoing wall's own tile in the tiles layer, clearing
+  the class from every tile on each update so none keeps it after the change.
+  `styles/globals.css` breathes the two with one 1.6s alternate opacity cycle
+  (0.1 to 0.2 in, 0.8 to 0.9 out), stills them at 0.15 and 0.85 under
+  `prefers-reduced-motion` and `[data-motion="reduced"]`, and at 0.35 and 0.65
+  under `[data-contrast="true"]`; the old dashed-outline and hatch
+  `.mark-open` / `.mark-close` rules and their contrast variants are gone, the
+  stalker chevrons untouched. `game/view.test.ts` checks the incoming code
+  comes from the forecast-applied grid and matches the real wallGrid after a
+  walked shift.

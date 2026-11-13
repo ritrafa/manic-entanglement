@@ -590,10 +590,14 @@ body {
    tool sprites exist), disabled at 0 charges, the armed Cut in the pressed
    look. Nothing of the old copies survives. */
 
-/* The forecast's wall marks, one .mark element per wall tile, replaced on
-   each update. The two kinds differ by shape and pattern, not only colour,
-   so they read in greyscale too: an opening wall gets a dashed gold outline
-   (the wall still shows through), a sealing wall a diagonal white hatch. */
+/* The forecast's ghost walls, drawn with the game's own wall art. An
+   incoming wall (a sealing edge) is one .mark-incoming image on this marks
+   layer: the real wall picture it will become, breathing faint between 10%
+   and 20%. An outgoing wall (an opening edge) gets no element here at all:
+   lib/board.ts puts .wall-outgoing on the wall's own tile in the tiles
+   layer, where it breathes just below full strength, between 80% and 90%.
+   Both share one 1.6s alternate breath; reduced motion stills them at 15%
+   and 85%, high contrast stills them at 35% and 65% so the two differ. */
 .marks {
   position: absolute;
   left: 0;
@@ -611,19 +615,33 @@ body {
   box-sizing: border-box;
 }
 
-.mark-open {
-  border: 2px dashed #ffd700;
-  border-radius: 3px;
+.mark-incoming {
+  image-rendering: pixelated;
+  animation: mark-breathe-in 1.6s ease-in-out infinite alternate;
 }
 
-.mark-close {
-  background-image: repeating-linear-gradient(
-    45deg,
-    rgba(255, 255, 255, 0.85) 0,
-    rgba(255, 255, 255, 0.85) 2px,
-    rgba(255, 255, 255, 0) 2px,
-    rgba(255, 255, 255, 0) 6px
-  );
+.wall-outgoing {
+  animation: mark-breathe-out 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes mark-breathe-in {
+  from {
+    opacity: 0.1;
+  }
+
+  to {
+    opacity: 0.2;
+  }
+}
+
+@keyframes mark-breathe-out {
+  from {
+    opacity: 0.8;
+  }
+
+  to {
+    opacity: 0.9;
+  }
 }
 
 /* The stalker's intent (game/run.ts, lib/board.ts): a small chevron on the
@@ -896,6 +914,16 @@ body {
   .me-meter.is-low > i {
     animation: none;
   }
+
+  .mark-incoming {
+    animation: none;
+    opacity: 0.15;
+  }
+
+  .wall-outgoing {
+    animation: none;
+    opacity: 0.85;
+  }
 }
 
 /* The HUD is the design's HudBar (design/components/HudBar), widened to fit:
@@ -1067,6 +1095,16 @@ body {
   animation: none;
 }
 
+[data-motion="reduced"] .mark-incoming {
+  animation: none;
+  opacity: 0.15;
+}
+
+[data-motion="reduced"] .wall-outgoing {
+  animation: none;
+  opacity: 0.85;
+}
+
 /* Clear shapes (low vision and colour blindness): every entity the player
    must find gets a white 2 px outline, the forecast marks draw thicker, the
    galaxy dims to 40% and stands still, and the HUD sits pure white on solid
@@ -1079,18 +1117,14 @@ body {
   outline-offset: -1px;
 }
 
-[data-contrast="true"] .mark-open {
-  border-width: 4px;
+[data-contrast="true"] .mark-incoming {
+  animation: none;
+  opacity: 0.35;
 }
 
-[data-contrast="true"] .mark-close {
-  background-image: repeating-linear-gradient(
-    45deg,
-    #ffffff 0,
-    #ffffff 4px,
-    rgba(255, 255, 255, 0) 4px,
-    rgba(255, 255, 255, 0) 8px
-  );
+[data-contrast="true"] .wall-outgoing {
+  animation: none;
+  opacity: 0.65;
 }
 
 [data-contrast="true"] #maze::before {

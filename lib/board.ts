@@ -555,23 +555,41 @@ export class Board {
         this.knotElement.classList.toggle('knot-frozen', run.anchored > 0);
     }
 
-    /** Replace the wall marks with one element per tile the forecast changes. */
+    /**
+     * Redraw the forecast's ghost walls: an incoming wall is the real wall
+     * picture on the marks layer, breathing faint; an outgoing wall is its own
+     * tile in the tiles layer, breathing just below full strength through the
+     * `wall-outgoing` class. The class is cleared from every tile on each
+     * update, so no wall keeps it after the change has happened.
+     */
     private syncMarks(run: Run): void {
         if (!this.marksLayer) return;
+        for (const row of this.tileImages) {
+            for (const image of row) image.classList.remove('wall-outgoing');
+        }
         const forecast = run.forecast;
         if (!forecast) {
             this.marksLayer.replaceChildren();
             return;
         }
         const marks: HTMLElement[] = [];
-        for (const mark of markTiles(forecast)) {
-            const element = document.createElement('div');
-            element.className = `mark mark-${mark.kind}`;
-            element.style.left = `${mark.tx * this.cell}px`;
-            element.style.top = `${mark.ty * this.cell}px`;
-            element.style.width = `${this.cell}px`;
-            element.style.height = `${this.cell}px`;
-            marks.push(element);
+        for (const mark of markTiles(forecast, run.maze.wallGrid)) {
+            if (mark.kind === 'open') {
+                // The wall that will go away breathes on its own tile element.
+                const tile = this.tileImages[mark.ty]?.[mark.tx];
+                if (tile) tile.classList.add('wall-outgoing');
+                continue;
+            }
+            // The wall that will appear: its real picture, faint and breathing.
+            const image = document.createElement('img');
+            image.className = 'mark mark-incoming';
+            image.src = `${WALL_IMAGE_BASE}${mark.code}.png`;
+            image.alt = '';
+            image.style.left = `${mark.tx * this.cell}px`;
+            image.style.top = `${mark.ty * this.cell}px`;
+            image.style.width = `${this.cell}px`;
+            image.style.height = `${this.cell}px`;
+            marks.push(image);
         }
         // A stalker's intent (game/run.ts): a small chevron on the cell it means
         // to step to, pointing from the stalker toward that cell.
