@@ -285,14 +285,23 @@ body {
   outline-offset: -6px;
 }
 
-/* The 3-2-1 the shell drops over the dimmed title while a run starts. */
+/* The 3-2-1 the shell drops over the dimmed title while a run starts (E63).
+   It sits dead centre of the board area: margin: 0 and line-height: 1 kill
+   the <p>'s default 1em vertical margins and its tall line box, which at the
+   old viewport-sized font pushed the digit out of the overflow-hidden
+   container so only its top showed. The size is set inline, in pixels, from
+   the board area by startGame() in lib/GameState.ts (never larger than the
+   board); this font-size is only the fallback for a container it cannot
+   measure. */
 .game-countdown {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  margin: 0;
+  line-height: 1;
   font-family: var(--font-display);
-  font-size: min(40vw, 40vh);
+  font-size: 160px;
   color: var(--ink);
   text-align: center;
   z-index: 2;

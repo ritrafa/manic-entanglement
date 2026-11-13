@@ -874,3 +874,22 @@
   (E57's row) read "Anchor 0" now, not "ANCHOR0": in the `max-width: 480px`
   block `#hud.me-hud .me-tools .me-btn .me-count` keeps a `--space-4` of its
   own after the name and the display face the desktop button gives it.
+
+- E63: the two phone reports about the board's overlays are fixed. The 3-2-1
+  now shows whole and dead centre over the board area: `.game-countdown`
+  (styles/globals.css) kills the `<p>`'s default `margin: 1em 0` and its tall
+  line box (`margin: 0`, `line-height: 1`), which at the old viewport-sized
+  font pushed the digit past the bottom of the overflow-hidden
+  `#maze-container` so only its top edge showed, and `startGame()` in
+  `lib/GameState.ts` sizes the digit inline, in pixels, from the board area
+  itself (half the container's shorter side, never larger than the board)
+  instead of `min(40vw, 40vh)` — checked at 403x900, 390x844 and 1280x800.
+  And two floating texts in one tick (an enemy kill and the boost it drops)
+  no longer print on top of each other: `game/fx.ts` gained the pure
+  `floatLineOffset(active, cellX, cellY, now)` — given the texts still rising
+  (their cells and start times) it replays the stack in start order and
+  answers the new text's offset, one 24 px line under the lowest earlier text
+  whose cell is the same or a neighbour, 0 when nothing nearby is on screen —
+  with a describe block in `game/fx.test.ts`; `float()` in `lib/board.ts`
+  only keeps the list of live texts, prunes the finished ones and adds the
+  returned offset to the element's `top`.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FxLimiter, fxFor, lowEnergy, type Fx, type Motion } from "@/game/fx";
+import { FLOAT_LINE_PX, FLOAT_RISE_MS, FxLimiter, floatLineOffset, fxFor, lowEnergy, type FloatText, type Fx, type Motion } from "@/game/fx";
 import type { GameEvent } from "@/game/events";
 
 const EXIT = { x: 2, y: 0 };
@@ -133,6 +133,81 @@ describe("lowEnergy", () => {
         expect(lowEnergy(NaN)).toBe(false);
         expect(lowEnergy(0)).toBe(true);
         expect(lowEnergy(1)).toBe(false);
+    });
+});
+
+describe("floatLineOffset", () => {
+    const t = (x: number, y: number, startedAt: number): FloatText => ({ x, y, startedAt });
+
+    it("starts at the cell when nothing is on the board", () => {
+        expect(floatLineOffset([], 3, 4, 1000)).toBe(0);
+    });
+
+    it("starts one line under a text still rising on the same cell", () => {
+        const active = [t(3, 4, 1000)];
+        expect(floatLineOffset(active, 3, 4, 1100)).toBe(FLOAT_LINE_PX);
+    });
+
+    it("counts a neighbour cell (one away) as the same column", () => {
+        expect(floatLineOffset([t(3, 4, 1000)], 4, 4, 1100)).toBe(FLOAT_LINE_PX);
+        expect(floatLineOffset([t(3, 4, 1000)], 2, 3, 1100)).toBe(FLOAT_LINE_PX);
+    });
+
+    it("ignores a text two cells away on any axis", () => {
+        expect(floatLineOffset([t(5, 4, 1000)], 3, 4, 1100)).toBe(0);
+        expect(floatLineOffset([t(3, 6, 1000)], 3, 4, 1100)).toBe(0);
+    });
+
+    it("ignores a text whose rise is over (2500 ms and older)", () => {
+        expect(floatLineOffset([t(3, 4, 0)], 3, 4, FLOAT_RISE_MS)).toBe(0);
+        expect(floatLineOffset([t(3, 4, 0)], 3, 4, FLOAT_RISE_MS - 1)).toBe(FLOAT_LINE_PX);
+    });
+
+    it("ignores a text that starts in the future", () => {
+        expect(floatLineOffset([t(3, 4, 2000)], 3, 4, 1000)).toBe(0);
+    });
+
+    it("stacks three texts on one cell as 0, 24 and 48", () => {
+        const first = t(3, 4, 0);
+        const second = t(3, 4, 10);
+        expect(floatLineOffset([first], 3, 4, 10)).toBe(FLOAT_LINE_PX);
+        expect(floatLineOffset([first, second], 3, 4, 20)).toBe(2 * FLOAT_LINE_PX);
+    });
+
+    it("puts the new text one line under the lowest nearby, not one per text", () => {
+        // Two texts two cells apart share no line (both sit on line 0); the
+        // new one, near both, must go one line under them, not two.
+        const active = [t(0, 0, 0), t(2, 0, 10)];
+        expect(floatLineOffset(active, 1, 0, 20)).toBe(FLOAT_LINE_PX);
+    });
+
+    it("replays the whole stack in start order, whatever order it arrives in", () => {
+        const a = t(0, 0, 0); // line 0
+        const b = t(1, 0, 10); // near a: line 1
+        const c = t(0, 0, 20); // near a and b: line 2
+        expect(floatLineOffset([c, b, a], 0, 0, 30)).toBe(3 * FLOAT_LINE_PX);
+    });
+
+    it("keeps two far-apart columns independent", () => {
+        const far = t(9, 9, 0);
+        const near = t(3, 4, 10);
+        expect(floatLineOffset([far, near], 3, 4, 20)).toBe(FLOAT_LINE_PX);
+        expect(floatLineOffset([far, near], 9, 9, 20)).toBe(FLOAT_LINE_PX);
+    });
+
+    it("answers 0 for nonsense instead of throwing", () => {
+        expect(floatLineOffset([t(NaN, 4, 0)], 3, 4, 1000)).toBe(0);
+        expect(floatLineOffset([t(3, 4, NaN)], 3, 4, 1000)).toBe(0);
+        expect(floatLineOffset([t(3, 4, 0)], NaN, 4, 1000)).toBe(0);
+        expect(floatLineOffset([t(3, 4, 0)], 3, 4, NaN)).toBe(0);
+    });
+
+    it("uses a whole number of 24 px lines", () => {
+        expect(FLOAT_LINE_PX).toBe(24);
+        const active = [t(3, 4, 0), t(3, 4, 10), t(3, 4, 20)];
+        const offset = floatLineOffset(active, 3, 4, 30);
+        expect(offset).toBe(3 * 24);
+        expect(offset % FLOAT_LINE_PX).toBe(0);
     });
 });
 

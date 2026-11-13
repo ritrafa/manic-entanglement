@@ -11,7 +11,7 @@ import type { BoardViewport } from '@/game/layout';
 import { cameraOffset } from '@/game/camera';
 import type { CameraWindow } from '@/game/camera';
 import { entityPx, markTiles, tileDiff } from '@/game/view';
-import type { Fx, FxTone } from '@/game/fx';
+import { FLOAT_RISE_MS, floatLineOffset, type Fx, type FloatText, type FxTone } from '@/game/fx';
 
 /** Tile pictures live at images/<code>.png. */
 const WALL_IMAGE_BASE = '/images/';
@@ -127,6 +127,8 @@ export class Board {
     private tilesLayer: HTMLElement | null = null;
     private entitiesLayer: HTMLElement | null = null;
     private fxLayer: HTMLElement | null = null;
+    /** The floating texts still on the board (float() stacks new ones near them). */
+    private floatTexts: FloatText[] = [];
     /** The layer inside .fx holding the forecast's wall marks, replaced on each update. */
     private marksLayer: HTMLElement | null = null;
 
@@ -260,16 +262,27 @@ export class Board {
         if (this.lastRun && this.playerElement) this.placeAll(this.lastRun);
     }
 
-    /** Float a text over the given cell of the maze; it goes when its animation ends. */
+    /**
+     * Float a text over the given cell of the maze; it goes when its animation
+     * ends. Texts that are still rising near the cell (game/fx.ts
+     * floatLineOffset) push the new one down whole lines, so two events in one
+     * tick read as a column instead of printing over each other.
+     */
     float(text: string, cellX: number, cellY: number): void {
         if (!this.fxLayer) return;
+        const now = Date.now();
+        // Forget the texts whose rise is over: they leave the board with their
+        // animation and share no line with anything that starts now.
+        this.floatTexts = this.floatTexts.filter((t) => now - t.startedAt < FLOAT_RISE_MS);
+        const stackOffset = floatLineOffset(this.floatTexts, cellX, cellY, now);
+        this.floatTexts.push({ x: cellX, y: cellY, startedAt: now });
         const message = document.createElement('div');
         message.className = 'message';
         message.textContent = text;
         const { x, y } = entityPx(cellX, cellY, this.cell);
         // left/top, not a transform: the moveUp animation owns the transform.
         message.style.left = `${x}px`;
-        message.style.top = `${y}px`;
+        message.style.top = `${y + stackOffset}px`;
         message.addEventListener('animationend', () => message.remove(), { once: true });
         this.fxLayer.appendChild(message);
     }

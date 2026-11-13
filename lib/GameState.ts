@@ -1002,7 +1002,18 @@ class GameState {
         const countdownElement = document.createElement('p');
         countdownElement.className = 'game-countdown';
         countdownElement.textContent = '3';
-        mazeContainerElement?.appendChild(countdownElement);
+        if (mazeContainerElement) {
+            // E63: the digit is sized from the board area, never the viewport,
+            // and never larger than the board itself: half the shorter side of
+            // the container it is centred in. margin: 0 and line-height: 1 in
+            // styles/globals.css keep the box exactly the digit, so the whole
+            // number shows at 403x900, 390x844 and 1280x800 alike.
+            const boardSide = Math.min(mazeContainerElement.clientWidth, mazeContainerElement.clientHeight);
+            if (Number.isFinite(boardSide) && boardSide > 0) {
+                countdownElement.style.fontSize = `${Math.floor(boardSide / 2)}px`;
+            }
+            mazeContainerElement.appendChild(countdownElement);
+        }
         this.sfxEngine.play(beepVoices(3), 'sfx');
 
         const timers: ReturnType<typeof setTimeout>[] = [];

@@ -140,3 +140,73 @@ export function hapticFor(event: GameEvent): number {
             return 0;
     }
 }
+
+// --- Floating texts (drawn by float() in lib/board.ts) -----------------------
+// Two run events in one tick (an enemy kill and the boost it drops) each get
+// a floating line over their cell. Left alone they start on the very same
+// pixel and rise as one unreadable smear. floatLineOffset is the whole
+// decision: a pure count of the lines already stacked near the new text, so
+// the board only has to apply what it returns.
+
+/** The line box of a .message (styles/globals.css: font 16px/24px): one line. */
+export const FLOAT_LINE_PX = 24;
+/** Milliseconds a floating text rises (the CSS moveUp animation's length). */
+export const FLOAT_RISE_MS = 2500;
+
+/** One floating text on the board: the cell it started on and the moment
+    (milliseconds) its rise began. */
+export interface FloatText {
+    x: number;
+    y: number;
+    startedAt: number;
+}
+
+/** True when two cells are the same or touch, each axis at most one apart. */
+function cellsNear(ax: number, ay: number, bx: number, by: number): boolean {
+    return Math.abs(ax - bx) <= 1 && Math.abs(ay - by) <= 1;
+}
+
+/** A usable cell/time entry, or false for nonsense the board should ignore. */
+function usable(text: FloatText): boolean {
+    return Number.isFinite(text.x) && Number.isFinite(text.y) && Number.isFinite(text.startedAt);
+}
+
+/**
+ * The pixel offset below its cell where a new floating text must start so it
+ * never overlaps one already on screen: `active` holds the texts still on the
+ * board (their cells and start times, in any order), the new one starts at
+ * (cellX, cellY) at `now` (all times milliseconds). Texts are stacked in
+ * start order; each sits one line below the lowest earlier text whose cell is
+ * the same or a neighbour. The answer is the new text's offset in pixels: a
+ * whole number of FLOAT_LINE_PX lines, 0 when nothing nearby is still rising.
+ */
+export function floatLineOffset(
+    active: readonly FloatText[],
+    cellX: number,
+    cellY: number,
+    now: number,
+): number {
+    if (!Number.isFinite(cellX) || !Number.isFinite(cellY) || !Number.isFinite(now)) return 0;
+    // Only texts whose rise is running can share the board with the new one.
+    const rising = active
+        .filter((text) => usable(text) && text.startedAt <= now && now - text.startedAt < FLOAT_RISE_MS)
+        .sort((a, b) => a.startedAt - b.startedAt);
+    // Replay the stack in start order: each text's line is one under the
+    // lowest earlier text near its cell. Then answer for the new text.
+    const stacked: FloatText[] = [];
+    const lines: number[] = [];
+    let best = -1;
+    for (let i = 0; i < rising.length; i += 1) {
+        const text = rising[i];
+        let line = 0;
+        for (let j = 0; j < stacked.length; j += 1) {
+            if (cellsNear(text.x, text.y, stacked[j].x, stacked[j].y)) {
+                line = Math.max(line, lines[j] + 1);
+            }
+        }
+        stacked.push(text);
+        lines.push(line);
+        if (cellsNear(cellX, cellY, text.x, text.y)) best = Math.max(best, line);
+    }
+    return (best + 1) * FLOAT_LINE_PX;
+}
