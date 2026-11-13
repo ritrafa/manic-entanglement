@@ -1115,3 +1115,50 @@
   idempotent merge and watermark, the refused locked looks, and the whole
   list of a full save (every feat and trait, the longest names, 13-digit
   `Synced`) at 521 of the 560 bytes the mint transaction fits.
+
+- E70: verified runs are in (NFT-PLAN N2, Q17): the server issues the seed and
+  replays the log, and the result comes back as a signed proof. The new
+  `lib/server/runToken.ts` is the signing pen: HMAC-SHA256 over node:crypto
+  with `RUN_TOKEN_SECRET`, texts shaped `base64url(json).base64url(mac)`, a
+  constant-time MAC compare, and two context strings so a proof can never read
+  as a token or a token as a proof; `issueToken`/`readToken` and
+  `signProof`/`readProof`, each reader validating the payload's shape after
+  the MAC (base58 wallet 32-44, finite issuedAt, a mode from MODES, a
+  non-negative numeric tally with its mode text and nested toolsUsed map
+  allowed, finite score, { layer, trait } pickups, known gear ids at integer
+  levels) and answering null for anything else. `lib/nft/` will import
+  `readProof` from this path; the proof payload is exactly the
+  `{ wallet, issuedAt, mode, tally, score, pickedUp, gear }` that
+  `mergeProgress` (E69) takes as a run. The two new routes (app/api/run/**,
+  Node runtime): POST /api/run/start takes { mode, wallet }, answers 503
+  { error: "verification off" } without the secret, caps the body at 1 kB,
+  validates mode and wallet, draws the seed as 32 random bits - or
+  `dailySeed` of the UTC day for Daily - reads the wallet's reptile through
+  DAS `getAssetsByOwner` on SOLANA_RPC_URL (NEXT_PUBLIC_RPC_URL as the
+  fallback) into a decoded start state (gear, feats, traits) or defaults, and
+  replies { token, seed, start }. POST /api/run/verify takes { token, log }
+  up to 512 kB and replays it against the token: same seed, mode and start
+  header, the tick milliseconds inside `now - issuedAt + 5000`, a token under
+  24 hours, a move rate the Stepper could have produced (never closer than
+  CONFIG.stepMs, 10% slack), and a replay that ends on a dead, finished or
+  abandoned run - then { proof }, else 400 with the reason code (bad_token,
+  mismatch, too_fast, bad_log, expired). Nothing is stored: proofs are
+  stateless and the NFT's Synced watermark stops reuse. The shell: with a
+  wallet connected (components/WalletBox.tsx reports it through
+  `gameState.setWallet`), the countdown's finish calls /api/run/start through
+  the exported `requestRunStart`, waiting at most 2 s - on success the run
+  plays on the server's seed and start state and the HUD wears a small
+  "Verified" mark; on any failure or timeout it plays exactly as before,
+  local and unverified, and a countdown cancelled mid-wait starts nothing
+  (a generation counter). When a verified run ends its `encodeLog(lastRunLog)`
+  goes to /api/run/verify and the proof lands in the save's new
+  `pendingProofs` (game/save.ts `addPendingProof`: newest 50 kept, over-30-day
+  ones dropped, old saves load with an empty list); the wallet box prints
+  "N runs to save", a hint only until the save card arrives. Tests:
+  `lib/server/runToken.test.ts` (tampers, the two kinds refusing each other,
+  well-signed bad shapes), `app/api/run/verify/route.test.ts` (a real bot run
+  at stepper pace earns a proof; a sped-up log, a changed seed, a wrong start
+  state, a too-fast move rate, an unended run and a stale token each get their
+  code), `app/api/run/start/route.test.ts` (503, the pinned Daily seed, the
+  DAS-stubbed start state, body refusals) and `lib/runStart.test.ts` (every
+  failure falls back to null, junk in the reply is dropped).

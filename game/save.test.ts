@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_PENDING_PROOFS,
+  PENDING_PROOF_MAX_AGE_MS,
   SEEN_INIT,
   SAVE_KEY,
+  addPendingProof,
   defaultSave,
   hasSeenMarkers,
   loadSave,
+  proofIssuedAt,
   resetProgress,
   seedSeenOnce,
   writeSave,
@@ -48,6 +52,7 @@ describe("defaultSave", () => {
       feats: [],
       look: null,
       pickedUp: [],
+      pendingProofs: [],
       seen: {},
     });
   });
@@ -188,6 +193,7 @@ describe("resetProgress", () => {
       feats: ["dash"],
       look: { Body: "Blue" },
       pickedUp: [{ layer: "Head", trait: "Miner" }],
+      pendingProofs: [],
       seen: { howto: true },
     };
     const reset = resetProgress(save);
@@ -324,5 +330,75 @@ describe("the wardrobe's trait-seen markers", () => {
     // A trait key survived, so the save counts as marked and seeds nothing.
     expect(hasSeenMarkers(loaded)).toBe(true);
     expect(seedSeenOnce(loaded)).toBe(loaded);
+  });
+});
+
+/** A proof text the save's pruning can read: base64url(json).base64url(mac).
+ *  The signature is not checked here - that is lib/server/runToken.ts. */
+function proofText(issuedAt: number): string {
+  const body = Buffer.from(JSON.stringify({ issuedAt, mode: "descent" }), "utf8").toString("base64url");
+  return `${body}.${"A".repeat(40)}`;
+}
+
+describe("pendingProofs (E70)", () => {
+  it("a fresh save starts with an empty list", () => {
+    expect(defaultSave().pendingProofs).toEqual([]);
+  });
+
+  it("an old save without the field loads with an empty list", () => {
+    const loaded = loadSave(storageWith('{ "v": 1, "best": { "descent": 12 } }'));
+    expect(loaded.pendingProofs).toEqual([]);
+  });
+
+  it("keeps only strings from a stored list", () => {
+    const loaded = loadSave(storageWith('{ "v": 1, "pendingProofs": ["a.b", 5, null, "c.d"] }'));
+    expect(loaded.pendingProofs).toEqual(["a.b", "c.d"]);
+  });
+
+  it("round-trips through storage", () => {
+    const save = defaultSave();
+    save.pendingProofs = [proofText(1000)];
+    const storage = fakeStorage();
+    expect(writeSave(storage, save)).toBe(true);
+    expect(loadSave(storage).pendingProofs).toEqual([proofText(1000)]);
+  });
+
+  it("adds a proof at the end", () => {
+    const save = defaultSave();
+    const next = addPendingProof(save, proofText(1000), 2000);
+    expect(next.pendingProofs).toEqual([proofText(1000)]);
+    expect(save.pendingProofs).toEqual([]);
+  });
+
+  it("refuses a text that is not shaped like a proof", () => {
+    const save = { ...defaultSave(), pendingProofs: [proofText(1000)] };
+    for (const junk of ["", "no-dot", "a.b.c", "not-json.sig", "e30.x"]) {
+      expect(addPendingProof(save, junk, 2000).pendingProofs).toEqual(save.pendingProofs);
+    }
+  });
+
+  it("drops proofs older than thirty days", () => {
+    const old = proofText(0);
+    const fresh = proofText(20_000);
+    const save = { ...defaultSave(), pendingProofs: [old, fresh] };
+    const now = PENDING_PROOF_MAX_AGE_MS + 20_000; // the old one is past the line
+    const next = addPendingProof(save, proofText(now), now);
+    expect(next.pendingProofs).toEqual([fresh, proofText(now)]);
+  });
+
+  it("keeps the newest fifty", () => {
+    const many = Array.from({ length: 60 }, (_, i) => proofText(i));
+    const save = { ...defaultSave(), pendingProofs: many };
+    const next = addPendingProof(save, proofText(100), 200);
+    expect(next.pendingProofs).toHaveLength(MAX_PENDING_PROOFS);
+    expect(next.pendingProofs[0]).toBe(proofText(11));
+    expect(next.pendingProofs[MAX_PENDING_PROOFS - 1]).toBe(proofText(100));
+  });
+
+  it("reads the issuedAt out of a proof, and null out of anything else", () => {
+    expect(proofIssuedAt(proofText(12345))).toBe(12345);
+    expect(proofIssuedAt("junk")).toBeNull();
+    expect(proofIssuedAt("e30.x")).toBeNull(); // {} carries no issuedAt
+    expect(proofIssuedAt(null)).toBeNull();
   });
 });

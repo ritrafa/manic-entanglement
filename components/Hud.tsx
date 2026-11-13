@@ -135,6 +135,15 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                     {model.heldTrait.trait}
                 </span>
             )}
+            {/* A verified run (E70): the seed came from the server and its
+                log will be replayed there for a signed proof. The small mark
+                rides row 1 so the player can tell, at a glance, that this
+                run counts for the NFT. */}
+            {model.verified && (
+                <span className="me-verified" role="status" title="Server-seeded run, verified on finish">
+                    Verified
+                </span>
+            )}
         </div>
         <div className="me-hud-row">
             {/* Each stat carries the gear sprite that changes it (design/README.md,

@@ -1251,6 +1251,18 @@ body {
   image-rendering: pixelated;
 }
 
+/* A verified run (E70): the server issued its seed and will replay its log
+   for a signed proof. The small mark rides the HUD's first row. */
+#hud.me-hud .me-verified {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-8);
+  border: var(--border-thin) solid var(--gold);
+  color: var(--gold);
+  font: 400 16px/24px var(--font-display);
+  text-transform: uppercase;
+}
+
 .left-box {
   display: flex;
   align-items: center;

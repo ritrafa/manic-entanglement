@@ -1,5 +1,5 @@
 import { Run } from '@/game/run';
-import { RecordingRun, type RunLog } from '@/game/runlog';
+import { RecordingRun, encodeLog, type RunLog } from '@/game/runlog';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
@@ -12,15 +12,15 @@ import { ENEMY_KINDS } from '@/game/enemies';
 import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
-import { defaultSave, loadSave, resetProgress, seedSeenOnce, writeSave, type SaveData, type StorageLike } from '@/game/save';
-import { countGear, noGear, sanitizeGear, type GearLevels } from '@/game/gear';
+import { addPendingProof, defaultSave, loadSave, resetProgress, seedSeenOnce, writeSave, type SaveData, type StorageLike } from '@/game/save';
+import { GEAR_IDS, countGear, noGear, sanitizeGear, type GearLevels } from '@/game/gear';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { formatTenths, nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
 import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules } from '@/game/modes';
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { MODIFIER_INFO } from '@/game/modifiers';
 import { evaluateFeats, featById, updateTotals } from '@/game/feats';
-import { UNLOCKS, fitLook, isUnlocked, unlockedBy } from '@/game/wardrobe';
+import { UNLOCKS, fitLook, isUnlocked, unlockedBy, type HeldTrait } from '@/game/wardrobe';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -76,6 +76,104 @@ export interface GameSnapshot extends HudModel {
      *  null. The HUD shows its PFP icon beside the carried gear: reaching the
      *  exit keeps it, dying, quitting or restarting loses it (game/run.ts). */
     heldTrait: { layer: string; trait: string; rarity: string } | null;
+    /** True while the live run started from a server-issued token (E70):
+     *  the HUD shows a small "Verified" mark beside the wallet box. */
+    verified: boolean;
+    /** Signed proofs waiting in the save to be saved to the NFT (E70);
+     *  the wallet box prints "N runs to save". A hint only: the save button
+     *  arrives with a later card. */
+    pendingProofs: number;
+}
+
+/** The state a verified run must begin with, as /api/run/start hands it out
+ *  (E70): the on-chain progress the server read for this wallet. */
+export interface RunStartState {
+    gear: Record<string, number>;
+    feats: string[];
+    pickedUp: HeldTrait[];
+}
+
+/** The reply of /api/run/start: the signed token, the seed it carries and
+ *  the state the run must begin with. */
+export interface ServerStart {
+    token: string;
+    seed: number;
+    start: RunStartState;
+}
+
+/** A base58 address of the length Solana wallets have (E70). */
+const BASE58_WALLET = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** The longest a /api/run/start call may hold the countdown back (E70). */
+const RUN_START_TIMEOUT_MS = 2000;
+
+/**
+ * Ask the server to issue a run token (E70): at most RUN_START_TIMEOUT_MS of
+ * waiting, and null on any failure - no network, a 503 without the secret, a
+ * timeout, broken JSON or a wrong-shaped reply all read the same way. The
+ * shell then plays exactly as before: local seed, local save, unverified.
+ * Free of DOM: the fetch implementation comes in as an argument, so tests
+ * hand in their own.
+ */
+export async function requestRunStart(
+    mode: ModeId,
+    wallet: string,
+    fetchImpl: typeof fetch = fetch,
+    timeoutMs: number = RUN_START_TIMEOUT_MS,
+): Promise<ServerStart | null> {
+    if (typeof wallet !== 'string' || !BASE58_WALLET.test(wallet)) return null;
+    try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetchImpl('/api/run/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode, wallet }),
+                signal: controller.signal,
+            });
+            if (!response.ok) return null;
+            const reply: unknown = await response.json();
+            if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) return null;
+            const record = reply as Record<string, unknown>;
+            const token = record.token;
+            const seed = record.seed;
+            const start = record.start;
+            if (typeof token !== 'string' || token === '') return null;
+            if (!Number.isInteger(seed) || (seed as number) < 0) return null;
+            if (typeof start !== 'object' || start === null || Array.isArray(start)) return null;
+            const startRecord = start as Record<string, unknown>;
+            const gear = typeof startRecord.gear === 'object' && startRecord.gear !== null
+                ? startRecord.gear as Record<string, unknown>
+                : {};
+            const cleanGear: Record<string, number> = {};
+            for (const [id, level] of Object.entries(gear)) {
+                // Only known gear ids and whole non-negative levels are trusted.
+                if (!(GEAR_IDS as readonly string[]).includes(id)) continue;
+                if (typeof level === 'number' && Number.isInteger(level) && level >= 0) cleanGear[id] = level;
+            }
+            const feats = Array.isArray(startRecord.feats)
+                ? startRecord.feats.filter((entry): entry is string => typeof entry === 'string')
+                : [];
+            const pickedUp: HeldTrait[] = Array.isArray(startRecord.pickedUp)
+                ? startRecord.pickedUp.flatMap((entry) => (
+                    typeof entry === 'object' && entry !== null
+                        && typeof (entry as Record<string, unknown>).layer === 'string'
+                        && typeof (entry as Record<string, unknown>).trait === 'string'
+                        ? [{
+                            layer: (entry as Record<string, unknown>).layer as string,
+                            trait: (entry as Record<string, unknown>).trait as string,
+                        }]
+                        : []
+                ))
+                : [];
+            return { token, seed: seed as number, start: { gear: cleanGear, feats, pickedUp } };
+        } finally {
+            clearTimeout(timer);
+        }
+    } catch {
+        return null;
+    }
 }
 
 /** True when two feat lists hold the same ids in the same order. */
@@ -205,6 +303,19 @@ class GameState {
      *  verify card (NFT-PLAN N1): the last run that died, finished or was
      *  abandoned, ready to encode and send. Nothing is sent from here. */
     public lastRunLog: RunLog | null = null;
+    /** The connected wallet's address, set by components/WalletBox.tsx; null
+     *  while no wallet is connected (E70). Only a connected run asks the
+     *  server for its seed. */
+    private wallet: string | null = null;
+    /** The server start awaited by the running countdown, applied by the
+     *  beginRun it belongs to; null for a local run (E70). */
+    private pendingServer: ServerStart | null = null;
+    /** The token of the live verified run; null while the run is local (E70).
+     *  Its proof is posted when the run ends. */
+    private activeToken: string | null = null;
+    /** Counts countdown generations: a start that finished waiting after its
+     *  countdown was cancelled or superseded never begins a run (E70). */
+    private startSeq: number = 0;
     /** Names of the feats the last finished run earned; the summary prints them. */
     private lastFeatNames: string[] = [];
     /** "Layer Trait" texts the last run's new feats unlocked; the summary prints them. */
@@ -239,7 +350,7 @@ class GameState {
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
         this.look = fitLook(sanitizeLook(this.save.look), this.save.feats, this.save.pickedUp);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null, verified: false, pendingProofs: this.save.pendingProofs.length };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -1045,7 +1156,7 @@ class GameState {
             this.countdownTimers = null;
             countdownElement.remove();
             this.sfxEngine.play(beepVoices(0), 'sfx'); // the higher "go" beep
-            this.beginRun();
+            void this.beginVerifiedRun();
         }, 3000));
 
         this.countdownTimers = timers;
@@ -1054,10 +1165,70 @@ class GameState {
 
     /** Cancel a running countdown, leaving no timer behind. */
     private cancelCountdown(): void {
+        // A start still waiting on /api/run/start belongs to this countdown:
+        // the generation bump tells it that no run waits for it any more (E70).
+        this.startSeq += 1;
+        this.pendingServer = null;
         if (this.countdownTimers === null) return;
         this.countdownTimers.forEach(clearTimeout);
         this.countdownTimers = null;
         document.querySelector('.game-countdown')?.remove();
+    }
+
+    /**
+     * The wallet box reports the connected address (E70): null disconnects.
+     * Only ever called from components/WalletBox.tsx; anything that is not a
+     * base58 address reads as no wallet. The next run asks the server for its
+     * seed only while an address stands here.
+     */
+    setWallet(address: string | null): void {
+        const clean = typeof address === 'string' && BASE58_WALLET.test(address) ? address : null;
+        this.wallet = clean;
+    }
+
+    /**
+     * The countdown's finish (E70): with a wallet connected, ask the server
+     * for the run's seed and start state - at most 2 s - and then begin. Any
+     * failure or timeout begins the run exactly as before, local and
+     * unverified; nothing here may block the player. A countdown cancelled
+     * while the call waits leaves this method without a run to begin.
+     */
+    private async beginVerifiedRun(): Promise<void> {
+        const seq = this.startSeq;
+        this.pendingServer = null;
+        if (this.wallet !== null) {
+            const server = await requestRunStart(this.modeId, this.wallet);
+            if (seq !== this.startSeq) return;
+            this.pendingServer = server;
+        }
+        if (seq !== this.startSeq) return;
+        this.beginRun();
+    }
+
+    /**
+     * Send a verified run's log to /api/run/verify (E70) and store the signed
+     * proof in the save. Fire and forget: offline, a refused log or any
+     * failure simply leaves no proof behind - the run itself already ended
+     * normally, and nothing here may block or throw at the shell.
+     */
+    private async postVerify(token: string, log: RunLog): Promise<void> {
+        try {
+            const response = await fetch('/api/run/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, log: encodeLog(log) }),
+            });
+            if (!response.ok) return;
+            const reply: unknown = await response.json();
+            if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) return;
+            const proof = (reply as Record<string, unknown>).proof;
+            if (typeof proof !== 'string' || proof === '') return;
+            this.save = addPendingProof(this.save, proof, Date.now());
+            writeSave(this.storage, this.save);
+            this.publishHud();
+        } catch {
+            // Nothing happens offline: the proof is simply not there.
+        }
     }
 
     /** Start (or restart) the run at level 1 and set the clock going. */
@@ -1072,7 +1243,21 @@ class GameState {
         this.rollDailyDay();
         // The run is built fresh under the chosen mode's rules: its own seed
         // (the calendar day for Daily) and its own gear (no bank without gear).
-        this.run = new RecordingRun({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
+        // A verified run (E70) takes the seed the server issued and the start
+        // state it read on-chain; the mode's own rules still decide whether
+        // gear rides at all. Without a server start nothing changes.
+        const server = this.pendingServer;
+        this.pendingServer = null;
+        this.activeToken = server === null ? null : server.token;
+        this.run = new RecordingRun({
+            seed: server === null ? this.seedForMode() : server.seed,
+            gear: this.modeRules.gear
+                ? sanitizeGear(server === null ? this.save.gear : server.start.gear)
+                : noGear(),
+            mode: this.modeRules,
+            feats: server === null ? this.save.feats : server.start.feats,
+            pickedUp: server === null ? this.save.pickedUp : server.start.pickedUp,
+        });
         // The bar and the "new high score" claim measure this run against the best it started with.
         this.bestBeforeRun = this.storedBest() ?? 0;
         this.highScore = this.bestBeforeRun;
@@ -1204,6 +1389,8 @@ class GameState {
             pickedUp: [...this.save.pickedUp],
             newTraits: [...this.newTraitKeys],
             heldTrait: this.run.heldTrait === null ? null : { ...this.run.heldTrait },
+            verified: this.activeToken !== null,
+            pendingProofs: this.save.pendingProofs.length,
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -1224,7 +1411,9 @@ class GameState {
             && sameFeats(this.hudSnapshot.feats, next.feats)
             && sameLook(this.hudSnapshot.look, next.look)
             && samePickups(this.hudSnapshot.pickedUp, next.pickedUp)
-            && sameHeldTrait(this.hudSnapshot.heldTrait, next.heldTrait)) {
+            && sameHeldTrait(this.hudSnapshot.heldTrait, next.heldTrait)
+            && this.hudSnapshot.verified === next.verified
+            && this.hudSnapshot.pendingProofs === next.pendingProofs) {
             return;
         }
         this.hudSnapshot = next;
@@ -1239,6 +1428,11 @@ class GameState {
     private rememberRunLog(): void {
         if (this.run instanceof RecordingRun && this.run.started) {
             this.lastRunLog = this.run.getLog();
+            // A verified run's story goes to the server for its proof (E70):
+            // fire and forget, the run itself is already settled locally.
+            const token = this.activeToken;
+            this.activeToken = null;
+            if (token !== null) void this.postVerify(token, this.lastRunLog);
         }
     }
 

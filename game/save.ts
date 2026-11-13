@@ -33,6 +33,10 @@ export interface SaveData {
      *  with an empty one; entries naming no real trait simply never unlock
      *  anything (game/wardrobe.ts checks them against TRAITS). */
     pickedUp: HeldTrait[];
+    /** Signed run proofs waiting to be saved to the NFT (E70): each is
+     *  one signed proof text from the verify route, newest last. Old saves
+     *  carry no list and load with an empty one. */
+    pendingProofs: string[];
     /** One-time messages already shown ("howto" and the like), plus the
      *  wardrobe's trait markers, one key per card as trait:<Layer>:<Trait>,
      *  and the init key (SEEN_INIT) that records the markers as initialised.
@@ -60,6 +64,7 @@ export function defaultSave(): SaveData {
         feats: [],
         look: null,
         pickedUp: [],
+        pendingProofs: [],
         seen: {},
     };
 }
@@ -147,6 +152,13 @@ function keepPickups(value: unknown): HeldTrait[] {
     return kept;
 }
 
+/** A copy of a stored proof list keeping only strings. A missing or
+ *  non-array value gives [] (E70): an old save loads with an empty list. */
+function keepProofs(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry): entry is string => typeof entry === "string");
+}
+
 /** A copy of a stored record keeping only strings. */
 function keepStrings(value: unknown): Record<string, string> | null {
     if (!isRecord(value)) return null;
@@ -200,6 +212,7 @@ export function loadSave(storage: StorageLike): SaveData {
         feats,
         look: keepStrings(parsed.look),
         pickedUp: keepPickups(parsed.pickedUp),
+        pendingProofs: keepProofs(parsed.pendingProofs),
         seen,
     } as SaveData;
 }
@@ -235,4 +248,60 @@ export function writeSave(storage: StorageLike, data: SaveData): boolean {
     } catch {
         return false;
     }
+}
+
+/** The most pending proofs the save keeps (E70): the newest, older ones drop. */
+export const MAX_PENDING_PROOFS = 50;
+
+/** A pending proof older than this is dropped (E70): 30 days. */
+export const PENDING_PROOF_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** One base64url segment as text, padding restored; null when it is not. */
+function decodeBase64UrlSegment(part: string): string | null {
+    try {
+        const normal = part.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = normal + "=".repeat((4 - (normal.length % 4)) % 4);
+        return atob(padded);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The issuedAt a proof text carries, read without checking the signature
+ * (that happens server-side, in lib/server/runToken.ts). The proof is
+ * `base64url(json).base64url(mac)`; anything not shaped like that, or whose
+ * payload carries no finite issuedAt, answers null. Pure: atob only, no
+ * node:crypto, so the browser shell can prune its own list.
+ */
+export function proofIssuedAt(proof: unknown): number | null {
+    if (typeof proof !== "string") return null;
+    const parts = proof.split(".");
+    if (parts.length !== 2) return null;
+    const json = decodeBase64UrlSegment(parts[0]);
+    if (json === null) return null;
+    let payload: unknown;
+    try {
+        payload = JSON.parse(json);
+    } catch {
+        return null;
+    }
+    if (!isRecord(payload)) return null;
+    const issuedAt = payload.issuedAt;
+    return typeof issuedAt === "number" && Number.isFinite(issuedAt) ? issuedAt : null;
+}
+
+/**
+ * The save with one more signed proof (E70): the new proof joins the end,
+ * unreadable ones and proofs older than 30 days drop, and only the newest 50
+ * survive. The proof text itself is never touched - it is the signed object
+ * the mint card will send later.
+ */
+export function addPendingProof(save: SaveData, proof: string, now: number): SaveData {
+    if (proofIssuedAt(proof) === null) return save;
+    const kept = save.pendingProofs.filter((entry) => {
+        const issuedAt = proofIssuedAt(entry);
+        return issuedAt !== null && now - issuedAt <= PENDING_PROOF_MAX_AGE_MS;
+    });
+    return { ...save, pendingProofs: [...kept, proof].slice(-MAX_PENDING_PROOFS) };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { loadReptile } from '@/lib/reptile';
@@ -61,6 +61,18 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
     const { publicKey, disconnect } = useWallet();
     const [status, setStatus] = useState<LoadStatus>('idle');
     const [reptile, setReptile] = useState<FoundReptile | null>(null);
+    // The pending-proof count (E70): the shell keeps signed runs in the save
+    // until the player saves them to the NFT; the box only hints at it.
+    const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
+
+    // Tell the shell which wallet is connected (E70): only then does a run
+    // ask /api/run/start for its seed. Leaving the box disconnects it too.
+    useEffect(() => {
+        gameState.setWallet(publicKey ? publicKey.toBase58() : null);
+        return () => {
+            gameState.setWallet(null);
+        };
+    }, [publicKey, gameState]);
 
     const handleCheckAssets = useCallback(async () => {
         if (!publicKey) return;
@@ -90,6 +102,11 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
         <div className="left-box">
             <div className="me-wallet">
                 <WalletMultiButton />
+                {model.pendingProofs > 0 && (
+                    <p className="me-hint" role="status">
+                        {model.pendingProofs} {model.pendingProofs === 1 ? 'run' : 'runs'} to save
+                    </p>
+                )}
                 {address !== undefined && status !== 'found' && (
                     <button
                         type="button"
