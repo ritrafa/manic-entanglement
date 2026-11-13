@@ -1025,3 +1025,29 @@
   leaves, the longest trait name fits the 84 px card, and the measured page
   (game/pages.ts arithmetic) holds 3x2 cards on the phone and 4x3 on the
   desktop.
+
+- The Knot is the black hole and touching it hurts: `public/images/knot.gif`
+  (the black hole GIF, moved out of `exit.gif`) is now the Knot's picture —
+  `.knot` in `styles/globals.css` shows it with `background-size: cover` and
+  `image-rendering: pixelated` instead of the gold ring, teal centre and
+  `knot-pulse` (the GIF animates by itself), while `.knot-frozen` reads as a
+  square `outline: 2px dashed var(--gold)` with the reduced opacity; the
+  element, its transform glide and `placeKnot` are unchanged. `Run.move`
+  (game/run.ts) checks once per successful move, after the forecast walk,
+  whether the player's cell is `maze.origin`'s: it is then, loses
+  `CONFIG.knotHurt` (5, game/config.ts) and emits the new
+  `{ type: "hurt"; cost; x; y }` event (game/events.ts) — never on a blocked
+  move, a tool use, a stalker's step or the move that reaches the exit, and
+  it still hurts while an Anchor holds; a death it causes uses the existing
+  `"move"` cause and joins no tally or score. `game/fx.ts` answers `hurt`
+  with the fight's answer, smaller (a red burst of `FX.hurtBurstCount` on the
+  cell and a red flash of `FX.hurtFlashMs`, no shake; a fade when reduced),
+  `game/audio/sfx.ts` reuses the fight's voices, the floating text reads
+  `-5 Energy` like a fight's toll, and the how-to line (game/menu.ts) says
+  touching the Knot costs a little energy, beside `/images/knot.gif`. The
+  seeded replays in `game/forecast.test.ts` were re-captured (they gained the
+  hurt events) and the HOWTO length cap moved 90 to 95 for the new line.
+  Blocked: the doorway for `exit.gif` (commit 76f9565) could not be restored
+  here — the clone carries no git history and the binary is nowhere in the
+  sandbox, so `exit.gif` still holds the black hole; re-run the two git
+  commands from the owner's card when history is available.

@@ -16,6 +16,9 @@ export type GameEvent =
     | { type: "start" }
     | { type: "levelStart"; level: number; size: number; modifier: ModifierId | null }
     | { type: "move"; x: number; y: number; dx: number; dy: number }
+    /** The player ended a move on the Knot's cell (game/run.ts): `cost` energy
+     *  was lost there. Never on a blocked move, a tool use or the exit. */
+    | { type: "hurt"; cost: number; x: number; y: number }
     | { type: "blocked"; dx: number; dy: number }
     | { type: "pickup"; item: PickupType; text: string; x: number; y: number }
     | { type: "tool"; id: ToolId; dx?: number; dy?: number }

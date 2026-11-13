@@ -1792,3 +1792,96 @@ describe("Run trait pickups: holding, keeping and losing", () => {
 function runTraitMatches(trait: { layer: string; trait: string } | null, entry: { layer: string; trait: string }): boolean {
   return trait !== null && trait.layer === entry.layer && trait.trait === entry.trait;
 }
+
+// --- Touching the Knot costs energy (owner direction 2026-11-13) --------------
+
+/** A free run whose maze stands still: the Anchor is spent up front, so moves
+ *  apply no forecast walk and the Knot stays exactly where it is put. */
+function stillRun(seed: number): Run {
+  const run = freeRun(seed);
+  run.tools.anchor = 1;
+  expect(run.useTool("anchor")).toBe(true);
+  run.takeEvents();
+  return run;
+}
+
+/** What one ordinary step costs right now: a clean move far from the Knot. */
+function stepCostOf(run: Run): number {
+  const origin = { ...run.maze.origin };
+  const step = openStep(run);
+  const before = run.energy;
+  expect(run.move(step.dx, step.dy)).toBe(true);
+  run.takeEvents();
+  run.maze.origin = origin;
+  return before - run.energy;
+}
+
+describe("Run Knot hurt", () => {
+  it("a move that ends on the Knot's cell costs the step plus knotHurt and emits one hurt event", () => {
+    const run = stillRun(71);
+    const cost = stepCostOf(run);
+    const step = openStep(run);
+    const x = run.player.x + step.dx;
+    const y = run.player.y + step.dy;
+    run.maze.origin = { x, y };
+    const before = run.energy;
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(run.energy).toBe(before - cost - CONFIG.knotHurt);
+    expect(eventsOf(run, "hurt")).toEqual([{ type: "hurt", cost: CONFIG.knotHurt, x, y }]);
+  });
+
+  it("a move that ends elsewhere costs the step alone and emits no hurt", () => {
+    const run = stillRun(72);
+    const cost = stepCostOf(run);
+    const step = openStep(run);
+    // The Knot stands on the cell the player leaves: the destination is not it.
+    run.maze.origin = { x: run.player.x, y: run.player.y };
+    const before = run.energy;
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(run.energy).toBe(before - cost);
+    expect(eventsOf(run, "hurt")).toHaveLength(0);
+  });
+
+  it("a hurt that takes energy to 0 or below ends the run with cause move", () => {
+    const run = stillRun(73);
+    const cost = stepCostOf(run);
+    const step = openStep(run);
+    run.maze.origin = { x: run.player.x + step.dx, y: run.player.y + step.dy };
+    run.energy = cost + CONFIG.knotHurt; // the step and the hurt leave exactly 0
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(run.phase).toBe("dead");
+    const deaths = eventsOf(run, "dead");
+    expect(deaths).toHaveLength(1);
+    expect(deaths[0]).toMatchObject({ type: "dead", cause: "move" });
+  });
+
+  it("reaching the exit never emits hurt, even when the Knot stands on it", () => {
+    const run = startedRun(74);
+    run.items = [];
+    run.enemies = [];
+    run.tools.anchor = 1;
+    expect(run.useTool("anchor")).toBe(true);
+    run.takeEvents();
+    const step = openStep(run);
+    const x = run.player.x + step.dx;
+    const y = run.player.y + step.dy;
+    run.exit = { x, y };
+    run.maze.origin = { x, y };
+    const before = run.energy;
+    expect(run.move(step.dx, step.dy)).toBe(true);
+    expect(run.phase).toBe("clear");
+    expect(eventsOf(run, "hurt")).toHaveLength(0);
+    expect(run.energy).toBe(before - run.stats.consumption);
+  });
+
+  it("a blocked move toward the Knot hurts nothing and emits no hurt", () => {
+    const run = stillRun(75);
+    const step = blockedStep(run);
+    if (step === null) return; // this maze has all four sides open
+    run.maze.origin = { x: run.player.x + step.dx, y: run.player.y + step.dy };
+    const before = run.energy;
+    expect(run.move(step.dx, step.dy)).toBe(false);
+    expect(run.energy).toBe(before);
+    expect(eventsOf(run, "hurt")).toHaveLength(0);
+  });
+});

@@ -53,6 +53,7 @@ Each is a copy of a file in this repo (see the group READMEs in the design syste
 | `762b4180ea5b2d49dc15619370ee8249` | Items | `backpack.gif` |
 | `b3f55a8fa8ab22e979736f3ca68cca30` | Items | `enemy.gif` |
 | `e95d0754002732ad5a52c59d916b5b7f` | Items | `exit.gif` |
+| `731e44d7e6db61f0a692cfd26b89bc19` | Items | `knot.gif` |
 | `ef9b245b6f809639ffd2383fc0f16e24` | Tiles | `0101.png` |
 | `fa233c2625d7fa66250c3884d7fe1dd8` | Tiles | `1010.png` |
 | `a2367d52633cd181d4ca57bde9ef21eb` | Tiles | `1111.png` |

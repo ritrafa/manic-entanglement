@@ -9,6 +9,7 @@ export function eventMessage(event: GameEvent): string | null {
         case 'pickup':
             return event.text;
         case 'fight':
+        case 'hurt':
             return `-${event.cost} Energy`;
         default:
             return null;

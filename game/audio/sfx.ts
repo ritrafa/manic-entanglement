@@ -73,6 +73,8 @@ export function sfxFor(event: GameEvent, ctx: SfxContext): Voice[] {
             const d = streakDegree(ctx.streak);
             return [pickupNote(d, 0), pickupNote(d + 1, 0.07)];
         }
+        case "hurt":
+            // The Knot's bite sounds like a fight: same voices, same length.
         case "fight":
             // A harsh falling saw over a low square, gone in about 0.15 s.
             return [
