@@ -3,6 +3,8 @@
 // pass a plain object; the browser passes its local storage; the server passes
 // null), so nothing here reaches for a global.
 
+import { UNLOCKS } from "./wardrobe";
+
 /** The slice of Storage the save needs, or null where storage is missing or blocked. */
 export type StorageLike = {
     getItem(key: string): string | null;
@@ -27,8 +29,12 @@ export interface SaveData {
     look: Record<string, string> | null;
     /** One-time messages already shown ("howto" and the like), plus the
      *  wardrobe's trait markers, one key per card as trait:<Layer>:<Trait>.
-     *  Saves kept before the markers existed simply hold no trait keys and
-     *  load unchanged: every missing key reads as "not seen yet". */
+     *  Only traits a feat unlocks can be new; free traits never carry a
+     *  marker. A save kept before the markers existed holds no trait key at
+     *  all, and loadSave then seeds one for every trait its feats already
+     *  unlocked: an old save reads as everything seen, never waking up with
+     *  "New" tags. From the first marker on, an unseen feat trait stays new
+     *  until the wardrobe is next closed. */
     seen: Record<string, boolean>;
 }
 
@@ -67,6 +73,17 @@ function keepNumbers(value: unknown): Record<string, number> {
         if (typeof entry === "number" && Number.isFinite(entry) && entry >= 0) kept[key] = entry;
     }
     return kept;
+}
+
+/** The seen keys of every trait these feats unlock, form trait:<Layer>:<Trait>
+ *  (the unlock table lives in game/wardrobe.ts; free traits are not in it and
+ *  never carry a marker). */
+function featTraitKeys(feats: readonly string[]): string[] {
+    const keys: string[] = [];
+    for (const id of feats) {
+        for (const entry of UNLOCKS[id] ?? []) keys.push(`trait:${entry.layer}:${entry.trait}`);
+    }
+    return keys;
 }
 
 /** A copy of a stored record keeping only true flags (the seen markers). */
@@ -113,6 +130,18 @@ export function loadSave(storage: StorageLike): SaveData {
     }
     if (!isRecord(parsed) || parsed.v !== 1) return defaultSave();
     const fresh = defaultSave();
+    const feats = Array.isArray(parsed.feats)
+        ? parsed.feats.filter((f): f is string => typeof f === "string")
+        : fresh.feats;
+    const seen = keepBooleans(parsed.seen);
+    // A save written before the wardrobe kept trait markers holds no trait key
+    // at all: seed one for every trait its feats already unlocked, so an old
+    // save reads as everything seen and nothing wears a "New" tag. A save that
+    // carries markers is left exactly as kept: a feat trait missing from it is
+    // genuinely new, unlocked since the wardrobe was last closed.
+    if (!Object.keys(seen).some((key) => key.startsWith("trait:"))) {
+        for (const key of featTraitKeys(feats)) seen[key] = true;
+    }
     return {
         ...fresh,
         ...parsed,
@@ -121,9 +150,9 @@ export function loadSave(storage: StorageLike): SaveData {
         settings: keepRecord(parsed.settings, fresh.settings),
         gear: keepNumbers(parsed.gear),
         totals: keepNumbers(parsed.totals),
-        feats: Array.isArray(parsed.feats) ? parsed.feats.filter((f): f is string => typeof f === "string") : fresh.feats,
+        feats,
         look: keepStrings(parsed.look),
-        seen: keepBooleans(parsed.seen),
+        seen,
     } as SaveData;
 }
 

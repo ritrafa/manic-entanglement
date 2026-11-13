@@ -207,15 +207,42 @@ describe("resetProgress", () => {
 });
 
 describe("the wardrobe's trait-seen markers", () => {
-  it("loads an old save without any trait marker, seen and all", () => {
+  it("treats an old save without any trait marker as already seen", () => {
     // A save written before the wardrobe kept "new" markers: no seen field
-    // at all, and one with only the old messages, must both keep loading.
+    // at all, and one with only the old messages, must both keep loading —
+    // and what its feats already unlocked reads as seen, so an old save
+    // never wakes up with "New" tags on traits earned long ago.
     const old = loadSave(storageWith('{ "v": 1, "best": { "descent": 12 }, "feats": ["first-exit"] }'));
-    expect(old.seen).toEqual({});
+    expect(old.seen).toEqual({ "trait:Body:Pink": true });
     expect(old.best.descent).toBe(12);
     expect(old.feats).toEqual(["first-exit"]);
     const messages = loadSave(storageWith('{ "v": 1, "seen": { "howto": true } }'));
     expect(messages.seen).toEqual({ howto: true });
+    // A fresh save with no feats gains no markers from the seed.
+    expect(loadSave(storageWith('{ "v": 1 }')).seen).toEqual({});
+  });
+
+  it("seeds every trait the stored feats unlock, and only those", () => {
+    // Free traits (Body Green, Eye Regular, Head Hood and the like) are in
+    // no UNLOCKS entry, so they never appear; every feat trait does.
+    const loaded = loadSave(storageWith(
+      '{ "v": 1, "feats": ["first-exit", "collector"] }',
+    ));
+    expect(loaded.seen).toEqual({
+      "trait:Body:Pink": true,
+      "trait:Back:Billhook": true,
+      "trait:Head:Crown": true,
+    });
+  });
+
+  it("leaves a marked save alone, so an unseen feat trait stays new", () => {
+    // A save that already carries markers is exactly the current version's:
+    // a feat trait missing from it was earned since the wardrobe last closed
+    // and must still read as new, not be silently seeded as seen.
+    const loaded = loadSave(storageWith(
+      '{ "v": 1, "feats": ["first-exit", "depth-5"], "seen": { "howto": true, "trait:Body:Pink": true } }',
+    ));
+    expect(loaded.seen).toEqual({ howto: true, "trait:Body:Pink": true });
   });
 
   it("keeps trait markers through a write and a load", () => {

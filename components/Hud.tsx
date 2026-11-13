@@ -39,51 +39,49 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
 
     return (
         <div id="hud" className="me-hud">
-            <div className="me-row hud-top-row">
-                {/* The reptile's PFP: the 16-grid portrait layers of the current
-                    look stacked at 48px on well — never the runner here. */}
-                <div className="me-portrait">
-                    <div className="me-sprite" style={cssVars({ '--s': '48px' })} role="img" aria-label="Your reptile">
-                        {pfpLayers(model.look).map((url) => (
-                            <img key={url} src={url} alt="" />
-                        ))}
-                    </div>
+            {/* The reptile's PFP: the 16-grid portrait layers of the current
+                look stacked at 48px on well — never the runner here. */}
+            <div className="me-portrait">
+                <div className="me-sprite" style={cssVars({ '--s': '48px' })} role="img" aria-label="Your reptile">
+                    {pfpLayers(model.look).map((url) => (
+                        <img key={url} src={url} alt="" />
+                    ))}
                 </div>
-                {hasWallet && <WalletGate gameState={gameState} />}
-                <div className="me-hud-meters">
-                    {/* Low energy lives here, on the bar itself: the meter takes
-                        is-low, the label and number turn to danger and the label
-                        says "Energy low" — colour plus words, never colour alone. */}
-                    <span className={`me-label${model.energyLow ? ' me-danger' : ''}`}>
-                        {model.energyLow ? 'Energy low' : 'Energy'}
-                    </span>
-                    <span className={`me-num ${model.energyLow ? 'me-danger' : 'me-energy'}`}>
-                        {model.energyText}
-                    </span>
-                    <div
-                        className={`me-meter${model.energyLow ? ' is-low' : ''}`}
-                        style={cssVars({ '--v': `${model.energyPct}%` })}
-                        role="progressbar"
-                        aria-label="Energy"
-                        aria-valuenow={Math.round(model.energyPct)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                    >
-                        <i />
-                    </div>
-                    <span className="me-label">Score</span>
-                    <span className="me-num me-gold">{model.scoreText}</span>
-                    <div
-                        className="me-meter is-gold"
-                        style={cssVars({ '--v': `${model.bestPct}%` })}
-                        role="progressbar"
-                        aria-label="Progress toward best score"
-                        aria-valuenow={Math.round(model.bestPct)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                    >
-                        <i />
-                    </div>
+            </div>
+            {hasWallet && <WalletGate gameState={gameState} />}
+            <div className="me-hud-meters">
+                {/* Low energy lives here, on the bar itself: the meter takes
+                    is-low, the label and number turn to danger and the label
+                    says "Energy low" — colour plus words, never colour alone. */}
+                <span className={`me-label${model.energyLow ? ' me-danger' : ''}`}>
+                    {model.energyLow ? 'Energy low' : 'Energy'}
+                </span>
+                <span className={`me-num ${model.energyLow ? 'me-danger' : 'me-energy'}`}>
+                    {model.energyText}
+                </span>
+                <div
+                    className={`me-meter${model.energyLow ? ' is-low' : ''}`}
+                    style={cssVars({ '--v': `${model.energyPct}%` })}
+                    role="progressbar"
+                    aria-label="Energy"
+                    aria-valuenow={Math.round(model.energyPct)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                >
+                    <i />
+                </div>
+                <span className="me-label">Score</span>
+                <span className="me-num me-gold">{model.scoreText}</span>
+                <div
+                    className="me-meter is-gold"
+                    style={cssVars({ '--v': `${model.bestPct}%` })}
+                    role="progressbar"
+                    aria-label="Progress toward best score"
+                    aria-valuenow={Math.round(model.bestPct)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                >
+                    <i />
                 </div>
             </div>
             {/* Each stat carries the gear sprite that changes it (design/README.md,
@@ -92,12 +90,18 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
             <div className="me-stats">
                 <div className="me-stat">
                     <img className="me-icon" src="/images/gloves.gif" alt="" />
-                    <span className="me-label">Attack</span>
+                    <span className="me-label">
+                        <span className="hud-label-full">Attack</span>
+                        <span className="hud-label-short">Atk</span>
+                    </span>
                     <b>{model.attack}</b>
                 </div>
                 <div className="me-stat">
                     <img className="me-icon" src="/images/shield.gif" alt="" />
-                    <span className="me-label">Defense</span>
+                    <span className="me-label">
+                        <span className="hud-label-full">Defense</span>
+                        <span className="hud-label-short">Def</span>
+                    </span>
                     <b>{model.defense}</b>
                 </div>
                 <div className="me-stat">
@@ -107,7 +111,10 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                 </div>
                 <div className="me-stat">
                     <img className="me-icon" src="/images/boots.gif" alt="" />
-                    <span className="me-label">Step cost</span>
+                    <span className="me-label">
+                        <span className="hud-label-full">Step cost</span>
+                        <span className="hud-label-short">Step</span>
+                    </span>
                     <b>{model.stepPct}%</b>
                 </div>
             </div>

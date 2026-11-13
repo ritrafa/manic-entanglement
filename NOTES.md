@@ -572,3 +572,29 @@
   design parts cannot say: the 720 px panel, the two-column layout, the
   stage sizes with their phone drops and the three-card phone grid. No chain
   feature was added: saving and minting come later.
+
+- E47: fixed what the pre-merge review of E42-E46 saw at 1280x800 and 390x844.
+  `styles/globals.css`: the wardrobe scrim (`wardrobe-scrim` in
+  `components/Wardrobe.tsx`) is now `position: fixed; inset: 0` above the
+  board, so the panel reaches the design's 720 px beside it and the design's
+  `me-grid` fills several TraitCards per row instead of one card per row over
+  a 1650 px scroll; a taller-than-the-phone panel scrolls inside the scrim on
+  auto margins, and the stage's gold meter is `flex: none`, keeping its 16 px
+  height instead of stretching down the column. `components/Hud.tsx` dropped
+  the `me-row hud-top-row` wrapper: portrait, wallet button, meters, stats,
+  carried marker and tools are direct children of the one wrapping `me-hud`
+  row at every viewport width, and each stat label now carries both words
+  (`hud-label-full` / `hud-label-short`) with the phone media query showing
+  the HudBar's short Atk, Def, Clock and Step, so nothing runs off the edge
+  at 390 px. `components/Menu.tsx` focuses the first menu button with
+  `focus({ preventScroll: true })`, so the page stays at the top, the title
+  painting keeps its whole band and the menu sits below it; the touch pause
+  button (`app/page.tsx`) now stands down on the title and the countdown as it
+  already did on every panel. The leftovers went too: `#maze-container`'s top
+  corners are square, the closed wallet button in `components/WalletGate.tsx`
+  is a `me-btn` (its `.wallet-open` sheet and the unused `.status-*` rules
+  left `styles/globals.css`), and the New tag tells the truth:
+  `lib/GameState.ts` only marks feat-unlocked traits as new (free traits never
+  are), and `loadSave` in `game/save.ts` seeds the seen markers for every
+  trait a marker-less old save's feats already unlocked, so such a save loads
+  as already seen, all covered by the wardrobe cases in `game/save.test.ts`.

@@ -65,7 +65,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px 10px 0px 0px;
   overflow: hidden;
   /* Touches on the board belong to the game: no browser pan, zoom or double-tap. */
   touch-action: none;
@@ -809,34 +808,16 @@ body {
 /* The HUD is the design's HudBar (design/components/HudBar): components/Hud.tsx
    renders #hud as one me-hud row and lib/GameState.ts sizeBoard writes the
    board's width onto it, so on desktop it is one wrapping row at the board's
-   width. The portrait (me-portrait), meters (me-meter), stats (me-stat) and
-   carried marker (me-carried) all come from design/components.css; only the
-   closed wallet button below still draws its own sheet. */
+   width — one wrapping row, never a stack of rows. The portrait
+   (me-portrait), meters (me-meter), stats (me-stat), carried marker
+   (me-carried) and the wallet's closed button (me-btn) all come from
+   design/components.css. */
 .left-box {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-8);
   flex: none;
-}
-
-/* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
-   in the wallet panel on click. The open box itself is the design's
-   me-wallet (design/components/WalletBox), styled in design/components.css. */
-.wallet-open {
-  color: white;
-  background-color: rgba(0, 0, 0, 0.8);
-  border: none;
-  padding: 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  margin-top: 5px;
-  width: 120px;
-}
-
-.wallet-open:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 /* Custom styling for wallet adapter button */
@@ -863,9 +844,17 @@ body {
   height: 20px;
 }
 
+/* The stat labels carry both words (design/components/HudBar: "On a phone
+   shorten labels to Atk, Def, Clock, Step"); only one set shows, so the four
+   stats fit the phone width without running off the edge. The hidden set
+   leaves the accessibility tree too — a reader hears one label, not two. */
+.hud-label-short {
+  display: none;
+}
+
 /* Phones (design/components/HudBar, the is-phone layout): the HUD stacks —
    portrait beside the meters, then the four stats in a row, then the carried
-   marker and the tools. */
+   marker and the tools. Nothing may overflow the 390 px board. */
 @media (max-width: 480px) {
   #hud.me-hud {
     flex-direction: column;
@@ -873,8 +862,12 @@ body {
     padding: var(--space-8);
   }
 
-  #hud.me-hud .hud-top-row {
-    flex-wrap: nowrap;
+  #hud.me-hud .hud-label-full {
+    display: none;
+  }
+
+  #hud.me-hud .hud-label-short {
+    display: inline;
   }
 
   #hud.me-hud .me-hud-meters {
@@ -895,14 +888,6 @@ body {
     flex: 1;
     padding-left: var(--space-4);
     padding-right: var(--space-4);
-  }
-
-  /* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
-     in the wallet panel on click. */
-  .wallet-open {
-    width: auto;
-    padding: 4px 8px;
-    margin-top: 0;
   }
 }
 
@@ -972,7 +957,6 @@ body {
   background-blend-mode: multiply;
 }
 
-[data-contrast="true"] .wallet-open,
 [data-contrast="true"] .me-panel {
   background-color: #000000;
   color: #ffffff;
@@ -1114,11 +1098,32 @@ body {
 /* The wardrobe (components/Wardrobe.tsx, design/components/Wardrobe): the
    panel is a me-panel on the scrim and the parts are the design's me-tabs,
    me-grid, me-trait, me-sprite, me-tag and me-pips from design/components.css.
-   Only what the sheet cannot say lives here: the wider panel (720 px, per
-   design/README), the two-column layout, the stage sizes with their phone
-   drops, the three-card phone grid and the locked hint's ink-dim. */
+   Only what the sheet cannot say lives here: the scrim that covers the whole
+   viewport so the panel can reach the design's 720 px beside the board (the
+   board is only ~500 px, and a panel as wide as the board showed one card per
+   row), the two-column layout, the stage sizes with their phone drops, the
+   three-card phone grid and the locked hint's ink-dim. */
+#maze-container .me-scrim.wardrobe-scrim {
+  /* Fixed to the viewport, not the board: the panel gets the whole screen to
+     be 720 px wide on, and it rides above the touch controls. */
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  /* A panel taller than the phone screen scrolls inside the scrim instead of
+     being clipped at both ends. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+#maze-container .me-scrim.wardrobe-scrim::-webkit-scrollbar {
+  display: none;
+}
 #maze-container .me-scrim > .me-panel.wardrobe-panel {
   max-width: min(720px, 100%);
+  /* margin auto keeps a taller-than-the-screen panel centred without the
+     flex centring clipping its top inside the scrolling scrim. */
+  margin: auto;
+  flex: none;
 }
 .wardrobe-layout {
   display: grid;
@@ -1130,6 +1135,11 @@ body {
 }
 .wardrobe-stage {
   align-items: stretch;
+}
+/* The gold progress meter keeps its natural 16 px height: in this column a
+   growing flex item would stretch it down the whole stage. */
+.wardrobe-stage .me-meter {
+  flex: none;
 }
 .wardrobe-pfp {
   --s: 144px;
@@ -1144,7 +1154,9 @@ body {
 }
 @media (max-width: 640px) {
   /* Phones: the stage goes above the tabs, the PFP drops to 96 px and the
-     runner to 48 px, and the grid is three cards wide. */
+     runner to 48 px, and the grid is three cards wide. On desktop the design's
+     me-grid (auto-fill of 120 px cards) fills the 720 px panel with several
+     cards per row. */
   .wardrobe-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1161,52 +1173,4 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     justify-items: center;
   }
-}
-
-/* --- Status pages (app/error.tsx, app/not-found.tsx) ------------------------
-   The crash and 404 routes render inside the same body, so they inherit the
-   game's gradient and centring; this only shapes the panel and its button. */
-.status-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin: 1rem;
-  max-width: 420px;
-  text-align: center;
-}
-.status-title {
-  margin: 0;
-  color: #ffd700;
-  font-size: 26px;
-}
-.status-line {
-  margin: 0;
-  opacity: 0.85;
-}
-.status-digest {
-  margin: 0;
-  font-size: 13px;
-  opacity: 0.7;
-}
-.status-digest code {
-  color: #1bbf85;
-  word-break: break-all;
-}
-.status-button,
-.status-button:visited {
-  font: inherit;
-  font-size: 18px;
-  padding: 10px 24px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  text-decoration: none;
-  cursor: pointer;
-}
-.status-button:hover,
-.status-button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
 }

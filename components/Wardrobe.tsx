@@ -65,19 +65,21 @@ function RarityPips({ layer, trait }: { layer: Layer; trait: string }): React.Re
 
 /**
  * The wardrobe is the design's grid of TraitCards (design/components/Wardrobe
- * and TraitCard): one tab per layer, one card per trait of the open layer —
+ * and TraitCard): one tab per layer, a multi-column grid of cards for the
+ * open layer —
  * its PFP layer over a ghost of the body, its name, its state (On, New,
  * Locked with the feat that unlocks it) and its rarity pips. Choosing an
  * available card equips it; locked cards never change the stage. Above the
  * grid the current look shows in both renditions side by side: the PFP as
  * "Your NFT" and the animated runner as "In the maze".
  *
- * A trait unlocked since the wardrobe was last closed carries the New tag;
- * the markers live in the save's `seen` record (game/save.ts) through
- * the snapshot's newTraits (GameState.openWardrobe) and markTraitsSeen, and
- * old saves without them load as they are. Every card is reachable by Tab, locked ones included, and Esc or
- * the Back button closes the panel. The rules of game/wardrobe.ts decide what
- * may be worn; nothing here changes them.
+ * A trait a feat unlocked since the wardrobe was last closed carries the New
+ * tag; free traits never do. The markers live in the save's `seen` record
+ * (game/save.ts) through the snapshot's newTraits (GameState.openWardrobe)
+ * and markTraitsSeen, and an old save that never carried markers loads with
+ * everything already seen. Every card is reachable by Tab, locked ones
+ * included, and Esc or the Back button closes the panel. The rules of
+ * game/wardrobe.ts decide what may be worn; nothing here changes them.
  */
 const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -144,7 +146,7 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
     const newCount = [...newKeys].length;
 
     return (
-        <div className="me-scrim" onKeyDown={handleKeyDown}>
+        <div className="me-scrim wardrobe-scrim" onKeyDown={handleKeyDown}>
             <section className="me-panel wardrobe-panel" role="dialog" aria-modal="true" aria-label="Wardrobe">
                 <h2 className="me-panel-title">Wardrobe</h2>
                 <div className="me-panel-body">

@@ -64,10 +64,13 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
 
     // The first button takes focus when the menu appears, and the focused entry
     // follows the index the arrow keys move; the last slot is the mode row.
+    // preventScroll keeps the page at the top: the menu sits below the title
+    // painting's own band, and focusing Play must never scroll the taller menu
+    // (and with it the painting) out of view.
     useEffect(() => {
         if (!showsButtons) return;
-        if (focusIndex === modeSlot) modeRowRef.current?.focus();
-        else buttonRefs.current[focusIndex]?.focus();
+        if (focusIndex === modeSlot) modeRowRef.current?.focus({ preventScroll: true });
+        else buttonRefs.current[focusIndex]?.focus({ preventScroll: true });
     }, [focusIndex, showsButtons, modeSlot]);
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {

@@ -49,6 +49,12 @@ function useCoarsePointer(): boolean {
  * button and the D-pad stand down (design/components/Panel and DPad). */
 const PANEL_SCREENS: readonly Screen[] = ['howto', 'paused', 'settings', 'keys', 'over', 'feats', 'wardrobe'];
 
+/** On top of the panels, the screens where the touch pause button also stands
+ *  down: the title menu owns the title (a pause there would pause nothing),
+ *  and the countdown runs on its own. The button sat over the title menu
+ *  until E47 hid it here too. */
+const PAUSE_HIDDEN_SCREENS: readonly Screen[] = [...PANEL_SCREENS, 'title', 'countdown'];
+
 interface GameShellProps {
     gameState: GameState;
 }
@@ -65,6 +71,8 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
     // A panel (pause, game over, settings, how-to, controls, feats, wardrobe)
     // owns the screen: the touch pause button and the D-pad hide while one shows.
     const panelOpen = PANEL_SCREENS.includes(model.screen);
+    // The pause button additionally stands down on the title and countdown.
+    const pauseHidden = PAUSE_HIDDEN_SCREENS.includes(model.screen);
 
     // Held directions go straight to the Stepper's cadence, exactly like keys;
     // taps never come here — the browser's own click drives the title and the
@@ -89,8 +97,8 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
                 <div id="maze"/>
                 {/* The touch pause button: the same toggle Esc and P use, a
                     48 px icon button with the CSS pause mark, hidden while a
-                    panel is open. */}
-                {coarse && !panelOpen && (
+                    panel is open and on the title and countdown. */}
+                {coarse && !pauseHidden && (
                     <button type="button" className="me-btn me-btn-icon pause-button" aria-label="Pause" onClick={() => gameState.togglePause()}>
                         <span className="me-pause-bars" aria-hidden="true"><i /><i /></span>
                     </button>

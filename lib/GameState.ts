@@ -18,7 +18,7 @@ import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules }
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { MODIFIER_INFO } from '@/game/modifiers';
 import { evaluateFeats, featById, updateTotals } from '@/game/feats';
-import { UNLOCKS, fitLook, isUnlocked } from '@/game/wardrobe';
+import { UNLOCKS, fitLook, isUnlocked, unlockedBy } from '@/game/wardrobe';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -63,9 +63,9 @@ export interface GameSnapshot extends HudModel {
     feats: string[];
     /** The look the reptile wears now (game/sprite.ts); the wardrobe edits it. */
     look: Look;
-    /** The trait cards unlocked since the wardrobe was last closed, as the
-     *  save's seen keys trait:<Layer>:<Trait>; the wardrobe shows a New tag
-     *  on exactly these. */
+    /** The feat-unlocked trait cards earned since the wardrobe was last
+     *  closed, as the save's seen keys trait:<Layer>:<Trait>; the wardrobe
+     *  shows a New tag on exactly these. Free traits never appear here. */
     newTraits: string[];
 }
 
@@ -783,8 +783,10 @@ class GameState {
     }
 
     /** The title menu's Wardrobe entry: opens the look picker, remembering
-     *  which wearable cards the save has not seen yet so they can carry the
-     *  New tag until the panel is next closed. */
+     *  which feat-unlocked cards the save has not seen yet so they can carry
+     *  the New tag until the panel is next closed. Free traits never do, and
+     *  an old save without markers loaded with everything already seen
+     *  (game/save.ts loadSave), so it never wakes up covered in New tags. */
     openWardrobe(): void {
         if (this.screen !== 'title') return;
         this.newTraitKeys = GameState.unlockedTraitKeys(this.save.feats)
@@ -797,13 +799,17 @@ class GameState {
         this.dispatch('back');
     }
 
-    /** Every wearable trait as a seen key of the form trait:<Layer>:<Trait>.
-     *  A bare (None) trait never carries a marker: there is nothing new to see. */
+    /** Every trait these feats unlock that the player may wear, as a seen key
+     *  of the form trait:<Layer>:<Trait>. Only feat grants can be new: free
+     *  traits and bare (None) ones never carry a marker, so a first visit to
+     *  the wardrobe shows no New tag on the traits that were always wearable. */
     private static unlockedTraitKeys(feats: readonly string[]): string[] {
         const keys: string[] = [];
         for (const layer of LAYER_ORDER) {
             for (const trait of TRAITS[layer]) {
-                if (trait !== 'None' && isUnlocked(layer, trait, feats)) keys.push(`trait:${layer}:${trait}`);
+                if (trait !== 'None' && unlockedBy(layer, trait) !== null && isUnlocked(layer, trait, feats)) {
+                    keys.push(`trait:${layer}:${trait}`);
+                }
             }
         }
         return keys;
