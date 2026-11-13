@@ -106,12 +106,24 @@ export function tileCodeAt(grid: string[][], x: number, y: number): string {
  * The wall-grid tiles to mark for a forecast, with the picture code each tile
  * carries after the change: an incoming ("close") tile gets the code of the
  * wall that will stand there, computed from the grid with the forecast applied.
+ *
+ * `tileShown`, when given, is the Blackout view of the wall grid (see
+ * game/modifiers.ts visibleCells and lib/board.ts tileShown): a tile it
+ * answers false for is hidden, and a hidden tile gets no mark at all. The
+ * outgoing breathing class would otherwise override the hidden tile's low
+ * opacity and reveal a wall Blackout must hide, and a ghost wall must not
+ * preview a change where the player cannot see the wall it previews.
  */
-export function markTiles(forecast: ForecastEdges, grid: string[][]): MarkTile[] {
+export function markTiles(
+    forecast: ForecastEdges,
+    grid: string[][],
+    tileShown?: (tx: number, ty: number) => boolean,
+): MarkTile[] {
     const after = gridAfterForecast(grid, forecast);
     const marks: MarkTile[] = [];
     const push = (edge: { x: number; y: number; dir: "r" | "d" }, kind: "open" | "close") => {
         const { tx, ty } = edgeTile(edge);
+        if (tileShown && !tileShown(tx, ty)) return;
         marks.push({ tx, ty, kind, code: tileCodeAt(after, tx, ty) });
     };
     for (const edge of forecast.opens) push(edge, "open");

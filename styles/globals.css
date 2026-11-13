@@ -172,11 +172,15 @@ body {
    band at its own aspect ratio with the whole lettering, then the mode
    picker, the buttons and the best line at their natural height. Nothing
    inside it scrolls by itself; where the block is taller than the screen the
-   page itself scrolls. */
+   page itself scrolls. Auto margins (E55) centre it vertically in the space
+   between the safe-area insets when it is shorter than the viewport, and
+   resolve to zero when it is taller, so a tall block still starts at the top
+   and the page scrolls as before. Play, countdown and how-to keep their top
+   alignment. */
 .title-screen {
   box-sizing: border-box;
   width: min(720px, calc(100vw - 32px));
-  margin: 0 auto;
+  margin: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -329,7 +333,9 @@ body {
 /* Blackout (game/modifiers.ts, lib/board.ts): on an entangled level the tiles
    outside the view fade to a hint of their picture and the entities standing
    on them vanish; the shell re-marks the cells on every update. The forecast
-   marks live on the fx layer and stay visible everywhere. */
+   never brightens a hidden tile: lib/board.ts gives no hidden tile the
+   .wall-outgoing breathing and draws no .mark-incoming ghost on one, so the
+   0.06 below is the last word on any tile outside the view. */
 .wall-image.unseen {
   opacity: 0.06;
 }

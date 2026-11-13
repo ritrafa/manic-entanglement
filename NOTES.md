@@ -717,3 +717,21 @@
   `MODES` carries a size field. The board still fits any viewport:
   `game/layout.ts` `boardLayout` shrinks the cell as the maze grows and
   `MIN_CELL` stays the floor.
+
+- E55: the forecast no longer reveals Blackout's hidden walls, and the title
+  centres on tall screens. `game/view.ts` `markTiles` takes an optional
+  `tileShown(tx, ty)` view and drops every mark on a tile it answers false
+  for; `lib/board.ts` `syncMarks` hands it the same `tileShown` the tiles use,
+  so on a Blackout level a hidden wall never gets the `wall-outgoing`
+  breathing — whose 0.8-to-0.9 opacity used to override the hidden tile's
+  0.06 and show the wall at 85% — and no `mark-incoming` ghost picture is
+  drawn on a hidden tile either: outside the view the 0.06 fade is the last
+  word, and the forecast only ever marks walls the player can already see.
+  `game/view.test.ts` pins the rule for both mark kinds and for an
+  everything-hidden / everything-shown view. `styles/globals.css` gives
+  `.title-screen` `margin: auto` instead of `margin: 0 auto`: the flex auto
+  margins centre the title block vertically between the safe-area insets when
+  it is shorter than the viewport (~460 px of emptiness gone at 403x900) and
+  resolve to zero when it is taller, so a tall block still starts at the top
+  and the page scrolls as before; countdown, how-to and play keep their top
+  alignment.

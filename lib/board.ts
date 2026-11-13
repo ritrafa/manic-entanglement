@@ -561,6 +561,12 @@ export class Board {
      * tile in the tiles layer, breathing just below full strength through the
      * `wall-outgoing` class. The class is cleared from every tile on each
      * update, so no wall keeps it after the change has happened.
+     *
+     * On a Blackout level the forecast never makes a hidden tile more visible:
+     * `markTiles` gets the same view `syncTileVisibility` dims (through
+     * `tileShown`), so a hidden wall gets no `wall-outgoing` breathing (whose
+     * 0.8 to 0.9 opacity would override the hidden tile's 0.06 and reveal it)
+     * and no incoming ghost picture either.
      */
     private syncMarks(run: Run): void {
         if (!this.marksLayer) return;
@@ -573,7 +579,7 @@ export class Board {
             return;
         }
         const marks: HTMLElement[] = [];
-        for (const mark of markTiles(forecast, run.maze.wallGrid)) {
+        for (const mark of markTiles(forecast, run.maze.wallGrid, (tx, ty) => this.tileShown(tx, ty))) {
             if (mark.kind === 'open') {
                 // The wall that will go away breathes on its own tile element.
                 const tile = this.tileImages[mark.ty]?.[mark.tx];

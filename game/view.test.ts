@@ -159,6 +159,41 @@ describe("markTiles", () => {
     expect(tileCodeAt(gridAfterForecast(grid, forecast), 3, 5)).toBe("0010");
   });
 
+  it("skips the mark on hidden tiles and keeps it on shown ones (Blackout)", () => {
+    const forecast = {
+      opens: [{ x: 1, y: 2, dir: "r" as const }],
+      closes: [{ x: 1, y: 2, dir: "d" as const }],
+    };
+    // The opening wall's tile (4, 5) is hidden and the incoming tile (3, 6)
+    // shows: the hidden wall must get no outgoing breathing and the change it
+    // previews must not be marked.
+    const marks = markTiles(forecast, emptyGrid(), (tx, ty) => !(tx === 4 && ty === 5));
+    expect(marks).toEqual([{ tx: 3, ty: 6, kind: "close", code: "0000" }]);
+    // The other way round: no incoming ghost is drawn on a hidden tile.
+    expect(markTiles(forecast, emptyGrid(), (tx, ty) => !(tx === 3 && ty === 6))).toEqual([
+      { tx: 4, ty: 5, kind: "open", code: "0000" },
+    ]);
+    // Nothing shown, nothing marked; everything shown, everything marked.
+    expect(markTiles(forecast, emptyGrid(), () => false)).toEqual([]);
+    expect(markTiles(forecast, emptyGrid(), () => true)).toHaveLength(2);
+  });
+
+  it("marks only the tiles inside a Blackout-style view", () => {
+    const rng = createRng(7);
+    const maze = new Maze(7, 7, rng);
+    const walk = rollWalk(maze, rng, 3);
+    const forecast = forecastOf(maze, walk);
+    expect(forecast.opens.length + forecast.closes.length).toBeGreaterThan(0);
+    // A view like game/modifiers.ts visibleCells draws: only tiles touching
+    // wall-grid cell (1, 1) show.
+    const nearOriginLight = (tx: number, ty: number): boolean =>
+      tx >= 1 && tx <= 3 && ty >= 1 && ty <= 3;
+    const marks = markTiles(forecast, maze.wallGrid, nearOriginLight);
+    for (const mark of marks) expect(nearOriginLight(mark.tx, mark.ty)).toBe(true);
+    // Without the view the same forecast marks every one of its tiles.
+    expect(markTiles(forecast, maze.wallGrid).length).toBeGreaterThanOrEqual(marks.length);
+  });
+
   it("gives the incoming tiles the codes the walls carry after the walk", () => {
     let found = false;
     for (let seed = 1; seed < 200 && !found; seed++) {
