@@ -437,3 +437,16 @@
   in the held direction (no operations returned), so after a 300 px slide a 30 px perpendicular
   flick turns instead of having to beat the whole horizontal run from the original anchor; the
   class doc comment says so and `game/swipe.test.ts` pins the long-slide-then-turn sequence.
+- E42: Put the design system's foundations on every route: `app/layout.tsx` now imports, in order,
+  the fontsource CSS for Silkscreen (400, 700) and Atkinson Hyperlegible (400, 700),
+  `design/tokens.css`, `design/components.css` and `styles/globals.css`, so the 404 and error routes
+  are styled too (the globals import left `app/page.tsx`); the fonts come from the
+  `@fontsource/silkscreen` and `@fontsource/atkinson-hyperlegible` packages, never from Google
+  Fonts. `styles/globals.css` drops the green-to-purple gradient: `html, body` now sit on the flat
+  `var(--void)` ground with `var(--ink)` text in `var(--font-body)`, and every `img` renders with
+  `image-rendering: pixelated` so sprites and tiles stay crisp; all other selectors wait for their
+  screen-by-screen cards. `app/not-found.tsx` and `app/error.tsx` are rebuilt on the StatusPage
+  pattern (`me-statuspage`, `me-btn me-btn-primary`, a `.me-statuspage-strip` of three 48px
+  sprites): "404 / No corridor here / That page is not in this maze." with the two wall tiles and
+  the exit, and "The maze tangled itself" with an enemy between walls, keeping the digest line and
+  the "Try again" button that calls `reset()`. The theme colour stays `#08412c`.

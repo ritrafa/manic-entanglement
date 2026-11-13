@@ -12,7 +12,6 @@ import SettingsPanel from '../components/Settings';
 import ControlsPanel from '../components/Controls';
 import FeatsPanel from '../components/Feats';
 import type { Dir } from '../game/stepper';
-import '../styles/globals.css';
 import { Analytics } from "@vercel/analytics/react"
 
 /** Follow the coarse-pointer media query; the store re-renders when it flips. */

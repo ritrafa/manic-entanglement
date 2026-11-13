@@ -1,3 +1,27 @@
+/* Flat ground and the design system's body type on every route (the tokens
+   and both fonts load from app/layout.tsx). */
+html,
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+/* Pixel art stays crisp: sprites and tiles never get smoothed. */
+img {
+  image-rendering: pixelated;
+}
+
+/* Sprite strip of the StatusPage pattern (design/components/StatusPage):
+   three 48px sprites in a row above the headline. */
+.me-statuspage-strip {
+  display: flex;
+}
+.me-statuspage-strip img {
+  width: 48px;
+  height: 48px;
+}
+
 body {
   display: flex;
   flex-direction: column;
@@ -13,9 +37,6 @@ body {
     env(safe-area-inset-right)
     env(safe-area-inset-bottom)
     env(safe-area-inset-left);
-  background: linear-gradient(135deg, #08412c, #40154f);
-  color: white;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
   overscroll-behavior: none;
 }
