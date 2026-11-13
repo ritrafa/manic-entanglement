@@ -1051,3 +1051,29 @@
   here — the clone carries no git history and the binary is nowhere in the
   sandbox, so `exit.gif` still holds the black hole; re-run the two git
   commands from the owner's card when history is available.
+- E68: every run now records itself, and any recorded run replays to the
+  identical result. The new pure `game/runlog.ts` holds the `RunLog` shape
+  (`v: 1`, seed, mode id, gear, feats, pickedUp and an ordered event list of
+  start, whole-millisecond tick, move, tool, next level and abandon), the
+  compact `encodeLog`/`decodeLog` text pair (seven `|`-separated fields, a
+  self-delimiting event stream, runs of equal ticks collapsed to `t<ms>*<n>`
+  run-length entries, `decodeLog` null on anything malformed and capped at
+  200,000 events) and `RecordingRun`, a `Run` subclass with the same surface
+  that forwards every call and appends the event — only calls the run took are
+  logged, and a fractional tick keeps its remainder for the next call so the
+  log stores integers. `lib/GameState.ts` builds its run as a `RecordingRun`
+  in all three places, the frame loop now hands the run whole milliseconds
+  (the sub-millisecond fraction rides in `tickCarry` to the next frame), and
+  the shell keeps the last finished run's log in `lastRunLog` when the run
+  dies or finishes, for the verify card to send later; nothing leaves the
+  page yet. `game/replay.ts` is the pure `replay(log)`: it builds a fresh
+  `Run` from the log's own options (modifiers on, no overrides), applies the
+  events in order and answers `{ tally, score, depth, mode, pickedUp, gear,
+  ended }` — the banked traits read from the run's own "traitKept" events —
+  or null for an event no live shell could have produced (a tool with no
+  charge, a step or next level in the wrong phase). `game/replay.test.ts`
+  plays 200 seeds per mode through `RecordingRun`, encodes, decodes and
+  replays each log to a tally-, score-, depth- and trait-identical result,
+  catches an extra move, a changed tick and a swapped seed, throws malformed
+  texts at null, and proves a 15-minute bot run at 60 ticks a second encodes
+  under 64 kB.
