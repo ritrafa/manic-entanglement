@@ -11,7 +11,7 @@ import { FREE_TRAITS } from '@/game/wardrobe';
 import {
     decodeAttributes, encodeAttributes, mergeProgress, progressVersion, readProof,
     type ChosenLook, type ProofPayload,
-} from './_pending';
+} from './progress';
 import type { Chain, Simulation } from './chain';
 import { GENESIS_HASH, METADATA_BASE, parseAddress, type NftConfig } from './config';
 import { isReptileTransaction } from './shape';

@@ -1,6 +1,6 @@
 import { Keypair, VersionedTransaction } from '@solana/web3.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { decodeAttributes, encodeAttributes, mergeProgress, progressVersion } from './_pending';
+import { decodeAttributes, encodeAttributes, mergeProgress, progressVersion } from './progress';
 import { GENESIS_HASH, METADATA_BASE } from './config';
 import {
     MINT_GOAL_DEPTH, PROOF_MAX_AGE_MS, isStarterLook, mintAssetKeypair, prepareMint, prepareSave,

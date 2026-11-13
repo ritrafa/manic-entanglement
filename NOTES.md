@@ -146,11 +146,11 @@ is the signature: the transaction may still land). The quote is valid for
 about a minute (its blockhash); ask again rather than keeping one around.
 After a confirmed save, drop the proofs that were sent.
 
-### Pending interfaces
+### Interfaces
 
-`lib/nft/_pending.ts` holds stand-ins for E69 (`game/nftProgress.ts`) and
-E70 (`lib/server/runToken.ts`); it is the only file that would import them.
-Its header has the exact lines to replace it with once both have landed.
+`lib/nft/progress.ts` re-exports the codec and merge rule from E69
+(`game/nftProgress.ts`) and the signed proofs from E70
+(`lib/server/runToken.ts`); lib/nft imports them only through this file.
 `lib/nft/testkit.ts` signs test proofs through the same file.
 
 ### Devnet end to end
@@ -201,8 +201,8 @@ network fee unless the list gets longer; a value that gains a digit costs
 5,080 lamports once. The network fee is 5,000 lamports per signature (3 on a
 mint, 2 on a save) plus the priority fee. The Core program is byte-identical
 on both clusters (810,273 bytes, sha256 `af40bd111c783e4c...`), so mainnet
-should cost the same. These numbers come from the stand-in codec in
-`_pending.ts`; E69's real list will move the rent a little.
+should cost the same. These numbers came from the stand-in codec used
+before E69 landed; the real list moves the rent a little.
 
 An earlier run with `--local` (a `solana-test-validator`, Agave 2.3.12, with
 Core cloned from mainnet) passed the same 48 checks; its totals were higher

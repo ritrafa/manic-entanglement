@@ -4,7 +4,7 @@ import { createPublicKey, verify } from 'node:crypto';
 import type { AssetV1, CollectionV1 } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
 import { Keypair, type VersionedTransaction } from '@solana/web3.js';
-import { signProof, type ProofPayload } from './_pending';
+import { signProof, type ProofPayload } from './progress';
 import type { AccountState, AssetInfo, Chain, Simulation } from './chain';
 import { GENESIS_HASH, type NftConfig } from './config';
 import type { Deps } from './service';

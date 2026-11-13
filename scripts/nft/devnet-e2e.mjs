@@ -164,7 +164,7 @@ const vite = await createServer({
 const service = await vite.ssrLoadModule('/lib/nft/service.ts');
 const chainModule = await vite.ssrLoadModule('/lib/nft/chain.ts');
 const client = await vite.ssrLoadModule('/lib/nft/client.ts');
-const pending = await vite.ssrLoadModule('/lib/nft/_pending.ts');
+const pending = await vite.ssrLoadModule('/lib/nft/progress.ts');
 
 const chain = chainModule.rpcChain(rpc);
 if (local) chain.genesisHash = async () => GENESIS.devnet;
