@@ -15,6 +15,12 @@ export const HEIGHT_SHARE = 0.72;
  *  whole multiple of this, so sprites draw at whole multiples of their art. */
 export const PIXEL = 24;
 
+/** How close the largest fitting multiple of PIXEL must be to the whole-pixel
+ *  cell (a share of it) to be worth taking: below it the plain whole-pixel
+ *  cell stands, so a phone fills its width (E52, the owner's 2026-11-13
+ *  "board fills the width" decision replacing "crisp everywhere"). */
+export const PIXEL_SNAP_SHARE = 0.8;
+
 /** The blob is this many tiles across. */
 export const BLOB_TILES = 8;
 
@@ -35,8 +41,10 @@ export interface BlobRect {
  * Size a square board of `tiles` tiles per side for a `viewW` x `viewH` viewport.
  * The board fits in viewW * WIDTH_SHARE and viewH * HEIGHT_SHARE unless even
  * MIN_CELL would overflow, and `cell` is always a whole number of pixels: the
- * largest multiple of PIXEL that fits when it can afford one (the pixel grid),
- * the plain whole-pixel cell below that (small phones and deep levels).
+ * plain whole-pixel cell, snapped down to the largest multiple of PIXEL only
+ * when that multiple is at least PIXEL_SNAP_SHARE of it. Where the snap would
+ * cost a big slice of the board (a phone filling its width) the whole-pixel
+ * cell stands, so the art shrinks instead of the board.
  */
 export function boardLayout(viewW: number, viewH: number, tiles: number): BoardLayout {
     const usable = Math.min(viewW * WIDTH_SHARE, viewH * HEIGHT_SHARE);
@@ -44,9 +52,14 @@ export function boardLayout(viewW: number, viewH: number, tiles: number): BoardL
         ? Math.floor(usable / tiles)
         : MIN_CELL;
     if (!Number.isFinite(cell) || cell < MIN_CELL) cell = MIN_CELL;
-    // Whole multiples of the 24 px art where the screen allows; below 24 the
-    // plain whole-pixel cell stands (a phone and the deep levels stay playable).
-    if (cell >= PIXEL) cell = Math.floor(cell / PIXEL) * PIXEL;
+    // The 24 px art grid where it is close to the size the viewport affords
+    // (desktop: 52 -> 48, 27 -> 24); where the snap would throw away more than
+    // PIXEL_SNAP_SHARE of the cell (a phone at 34) the whole-pixel cell stands,
+    // so the board fills the width and only the art draws at a smaller scale.
+    if (cell >= PIXEL) {
+        const snapped = Math.floor(cell / PIXEL) * PIXEL;
+        if (snapped >= PIXEL_SNAP_SHARE * cell) cell = snapped;
+    }
     return { cell, board: cell * tiles };
 }
 

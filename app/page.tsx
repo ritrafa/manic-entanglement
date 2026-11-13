@@ -119,7 +119,10 @@ const GameShell: React.FC<GameShellProps> = ({ gameState }) => {
                 <Overlay gameState={gameState} />
             </div>
 
-            <Hud gameState={gameState} />
+            {/* The HUD shows from the countdown on: the title screen hides it
+                (E52), so its rows take no room and the title page fits the
+                viewport without scrolling at 403x900 and 1280x800. */}
+            {model.screen !== 'title' && <Hud gameState={gameState} />}
 
             {/* The optional D-pad is the column's last item, below the HUD,
                 and hides while a panel is open. */}

@@ -101,22 +101,18 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
         <div className="me-hud-row">
             {/* Each stat carries the gear sprite that changes it (design/README.md,
                 Iconography): gloves attack, shield defense, speed clock, boots
-                step cost — 24px pixels, no emoji. */}
+                step cost — 24px pixels, no emoji. The labels are always the
+                short set (E52): Atk, Def, Clock and Step fit every width, so
+                no stat is ever cut off at 1280 or anywhere else. */}
             <div className="me-stats">
                 <div className="me-stat">
                     <img className="me-icon" src="/images/gloves.gif" alt="" />
-                    <span className="me-label">
-                        <span className="hud-label-full">Attack</span>
-                        <span className="hud-label-short">Atk</span>
-                    </span>
+                    <span className="me-label">Atk</span>
                     <b>{model.attack}</b>
                 </div>
                 <div className="me-stat">
                     <img className="me-icon" src="/images/shield.gif" alt="" />
-                    <span className="me-label">
-                        <span className="hud-label-full">Defense</span>
-                        <span className="hud-label-short">Def</span>
-                    </span>
+                    <span className="me-label">Def</span>
                     <b>{model.defense}</b>
                 </div>
                 <div className="me-stat">
@@ -126,10 +122,7 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                 </div>
                 <div className="me-stat">
                     <img className="me-icon" src="/images/boots.gif" alt="" />
-                    <span className="me-label">
-                        <span className="hud-label-full">Step cost</span>
-                        <span className="hud-label-short">Step</span>
-                    </span>
+                    <span className="me-label">Step</span>
                     <b>{model.stepPct}%</b>
                 </div>
             </div>

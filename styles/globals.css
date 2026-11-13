@@ -184,12 +184,20 @@ body {
 .title-screen .title-art {
   flex: none;
   box-sizing: border-box;
-  /* The whole painting at its own aspect ratio, cropped by nothing; the cap
-     keeps the menu under it on screen at 1280x800, where the page must not
-     need scrolling to reach the buttons. */
+  /* The painting's lettering band, cropped by CSS (E52 — the file is never
+     edited): the 500 px square holds the whole "MANIC ENTANGLEMENT"
+     lettering in its top 150 px rows and its own painted "START" button far
+     below, which would read as a second, dead button beside the menu's real
+     Play. The band keeps the top 30% of the picture (aspect-ratio 500/150),
+     object-fit cover scales the painting to the band's width and object-
+     position pins the crop to the top, so the lettering shows in full and
+     the painted START never does. The cap keeps the menu under it on screen
+     at 1280x800, where the page must not need scrolling to reach the buttons. */
   width: min(100%, 420px);
   height: auto;
-  object-fit: contain;
+  aspect-ratio: 500 / 150;
+  object-fit: cover;
+  object-position: center top;
   border-bottom: var(--border-thick) solid var(--line);
   /* The buttons are the only interactive part of the menu; the art is scenery. */
   pointer-events: none;
@@ -253,6 +261,25 @@ body {
 }
 #maze-container .me-scrim > .me-panel::-webkit-scrollbar {
   display: none;
+}
+/* The pause panel (components/Overlay.tsx) is centred on the board, so at
+   390x844 its box is only as tall as the board: its own spacing runs tighter
+   (E52) — a shorter title strip, one space-8 of body padding and space-4
+   between the buttons — so all four entries, "Quit to title" last, show
+   without any inner scrolling. */
+#maze-container .me-panel.pause-panel .me-panel-title {
+  padding: var(--space-4) var(--space-12);
+}
+#maze-container .me-panel.pause-panel .me-panel-body {
+  padding: var(--space-8);
+}
+#maze-container .me-panel.pause-panel .me-panel-actions {
+  flex-direction: column;
+  gap: var(--space-4);
+}
+#maze-container .me-panel.pause-panel .me-panel-actions .me-btn {
+  width: 100%;
+  padding-bottom: 0;
 }
 /* Panel text follows the size setting; the design system's fixed display
    sizes (titles and buttons) stay as they are. */
@@ -968,13 +995,9 @@ body {
   height: 20px;
 }
 
-/* The stat labels carry both words (design/components/HudBar: "On a phone
-   shorten labels to Atk, Def, Clock, Step"); only one set shows, so the four
-   stats fit the phone width without running off the edge. The hidden set
-   leaves the accessibility tree too — a reader hears one label, not two. */
-.hud-label-short {
-  display: none;
-}
+/* The stat labels are always the short set — Atk, Def, Clock, Step
+   (design/components/HudBar, E52): one set at every width, so no long label
+   is ever cut off at 1280 or anywhere else. */
 
 /* Phones (design/components/HudBar, the is-phone layout): the bar takes the
    full width inside the gutters and each row wraps as needed — portrait
@@ -989,14 +1012,6 @@ body {
 
   #hud.me-hud .me-hud-row {
     gap: var(--space-8);
-  }
-
-  #hud.me-hud .hud-label-full {
-    display: none;
-  }
-
-  #hud.me-hud .hud-label-short {
-    display: inline;
   }
 
   #hud.me-hud .me-hud-meters {

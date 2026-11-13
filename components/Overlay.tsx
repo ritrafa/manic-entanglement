@@ -9,11 +9,13 @@ interface OverlayProps {
     gameState: GameState;
 }
 
-/** The one panel on the scrim (design/components/Panel), centred and scrolling inside. */
-function Panel(props: { label: string; title: string; children: React.ReactNode }): React.ReactElement {
+/** The one panel on the scrim (design/components/Panel), centred and scrolling
+ *  inside. `panelClass` adds a modifier for a panel that tightens its own
+ *  spacing in styles/globals.css (the pause panel, E52). */
+function Panel(props: { label: string; title: string; panelClass?: string; children: React.ReactNode }): React.ReactElement {
     return (
         <div className="me-scrim">
-            <section className="me-panel" role="dialog" aria-modal="true" aria-label={props.label}>
+            <section className={props.panelClass ? `me-panel ${props.panelClass}` : 'me-panel'} role="dialog" aria-modal="true" aria-label={props.label}>
                 <h2 className="me-panel-title">{props.title}</h2>
                 <div className="me-panel-body">{props.children}</div>
             </section>
@@ -48,7 +50,7 @@ const Overlay: React.FC<OverlayProps> = ({ gameState }) => {
 
     if (model.screen === 'paused') {
         return (
-            <Panel label="Paused" title="Paused">
+            <Panel label="Paused" title="Paused" panelClass="pause-panel">
                 <div className="me-panel-actions">
                     <button className="me-btn me-btn-primary" ref={firstButtonRef} onClick={() => gameState.resume()}>Resume</button>
                     <button className="me-btn" onClick={() => gameState.restart()}>Restart</button>

@@ -667,3 +667,24 @@
   natural height — nothing scrolls inside, so the "More" hint and its rules
   are gone. The how-to and the countdown keep the title art as a board-sized
   overlay, dimmed under the countdown as before.
+- E52: the board fills a phone's width and the title page tidied up, the
+  owner's 2026-11-13 decision replacing "crisp everywhere".
+  `game/layout.ts` `boardLayout` no longer snaps every cell of 24 or more down
+  to the art grid: it keeps the whole-pixel cell and takes the largest
+  multiple of `PIXEL` only when that is at least `PIXEL_SNAP_SHARE` (0.8) of
+  it — 1280x800 still draws 52 -> 48 (11 tiles) and 27 -> 24 (21 tiles), while
+  a 403x900 phone keeps its 34 px cell, a ~374 px board instead of a 264 px
+  square with 440 px of emptiness under it (`game/layout.test.ts` carries
+  those three cases; `blobRect` is untouched). The HUD now shows from the
+  countdown on — `app/page.tsx` leaves it out on the title — so the title page
+  no longer scrolls at 403x900 or 1280x800. The title painting's band is
+  cropped in CSS only: `styles/globals.css` gives `.title-screen .title-art`
+  an `aspect-ratio` of 500/150 with `object-fit: cover` and
+  `object-position: center top`, which keeps the whole "MANIC ENTANGLEMENT"
+  lettering and hides the picture's own painted "START", the dead second
+  button. The pause panel gained a `pause-panel` class
+  (`components/Overlay.tsx`) whose tighter title strip, body padding and
+  column of buttons in `styles/globals.css` keep "Quit to title" visible at
+  390x844, and the HUD's stats (`components/Hud.tsx`) always use the short
+  labels Atk, Def, Clock and Step — one set at every width, so nothing is cut
+  at 1280.
