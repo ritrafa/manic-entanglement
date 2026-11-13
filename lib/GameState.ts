@@ -1,8 +1,9 @@
 import { Run } from '@/game/run';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
-import { LAYER_ORDER, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
-import { boardLayout } from '@/game/layout';
+import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
+import { stageSide, viewportFor } from '@/game/layout';
+import type { BoardViewport } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
 import { CONFIG, FX, MODIFIER_RULES } from '@/game/config';
@@ -10,7 +11,7 @@ import { ENEMY_KINDS } from '@/game/enemies';
 import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
-import { defaultSave, loadSave, resetProgress, writeSave, type SaveData, type StorageLike } from '@/game/save';
+import { defaultSave, loadSave, resetProgress, seedSeenOnce, writeSave, type SaveData, type StorageLike } from '@/game/save';
 import { countGear, noGear, sanitizeGear, type GearLevels } from '@/game/gear';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { formatTenths, nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
@@ -18,7 +19,7 @@ import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules }
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { MODIFIER_INFO } from '@/game/modifiers';
 import { evaluateFeats, featById, updateTotals } from '@/game/feats';
-import { UNLOCKS, fitLook } from '@/game/wardrobe';
+import { UNLOCKS, fitLook, isUnlocked, unlockedBy } from '@/game/wardrobe';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -63,11 +64,41 @@ export interface GameSnapshot extends HudModel {
     feats: string[];
     /** The look the reptile wears now (game/sprite.ts); the wardrobe edits it. */
     look: Look;
+    /** The maze pickups the save holds (game/wardrobe.ts PICKUP_TRAITS);
+     *  the wardrobe wears a held trait besides the free and feat ones. */
+    pickedUp: { layer: string; trait: string }[];
+    /** The feat-unlocked trait cards earned since the wardrobe was last
+     *  closed, as the save's seen keys trait:<Layer>:<Trait>; the wardrobe
+     *  shows a New tag on exactly these. Free traits never appear here. */
+    newTraits: string[];
+    /** The trait picked up this run and not yet kept by an exit (E58), or
+     *  null. The HUD shows its PFP icon beside the carried gear: reaching the
+     *  exit keeps it, dying, quitting or restarting loses it (game/run.ts). */
+    heldTrait: { layer: string; trait: string; rarity: string } | null;
 }
 
 /** True when two feat lists hold the same ids in the same order. */
 function sameFeats(a: string[], b: string[]): boolean {
     return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** True when two key lists hold the same keys in the same order. */
+function sameKeys(a: string[], b: string[]): boolean {
+    return a.length === b.length && a.every((key, index) => key === b[index]);
+}
+
+/** True when two pickup lists hold the same traits in the same order. */
+function samePickups(a: { layer: string; trait: string }[], b: { layer: string; trait: string }[]): boolean {
+    return a.length === b.length && a.every((entry, index) => entry.layer === b[index].layer && entry.trait === b[index].trait);
+}
+
+/** True when two held-trait marks (E58) name the same trait of the same rarity. */
+function sameHeldTrait(
+    a: { layer: string; trait: string; rarity: string } | null,
+    b: { layer: string; trait: string; rarity: string } | null,
+): boolean {
+    if (a === null || b === null) return a === b;
+    return a.layer === b.layer && a.trait === b.trait && a.rarity === b.rarity;
 }
 
 /** True when two looks wear the same trait on every layer. */
@@ -87,6 +118,8 @@ const MUSIC_TICK_MS = 50;
 const LOW_ENERGY_PCT = 25;
 /** Milliseconds between two low-energy pulses. */
 const WARN_EVERY_MS = 1000;
+/** Milliseconds the trait toast (E58, design/components/Toast) stands over the board. */
+const TRAIT_TOAST_MS = 2500;
 
 class GameState {
     public run: Run;
@@ -107,6 +140,9 @@ class GameState {
     /** performance.now() of the last low-energy pulse, so it plays about once a second. */
     private lastWarnAt: number = 0;
     private look: Look;
+    /** The trait cards the wardrobe showed as new when it last opened; the
+     *  snapshot hands them to the panel (E46 "new" markers). */
+    private newTraitKeys: string[] = [];
     /** The one code that touches the board's DOM: patched tiles and gliding sprites. */
     private board: Board = new Board();
     /** The effects bus gate: at most three shakes and three flashes a second. */
@@ -124,6 +160,8 @@ class GameState {
     private timeouts: Set<ReturnType<typeof setTimeout>> = new Set();
     /** The wall-grid tile size in whole pixels, set by sizeBoard and handed to the board. */
     private cellSize: number = 4;
+    /** The E56 viewport sizeBoard decided: whole maze, or a camera window. */
+    private viewport: BoardViewport | null = null;
     /** The player's settings, sanitized from the save; every change re-applies them. */
     private settings: Settings = sanitizeSettings(undefined);
     /** True while the Controls screen waits for a key: the global handler stands down. */
@@ -170,6 +208,17 @@ class GameState {
         // server render all get null storage and a fresh default save instead.
         this.storage = GameState.readStorage();
         this.save = loadSave(this.storage);
+        // The wardrobe's "New" markers are initialised once, here, at load:
+        // a save that has never stored one gets its currently unlocked traits
+        // recorded as seen and the seeded save lands in storage at once, so
+        // the reading is not redone on every reload. A feat earned later then
+        // keeps its traits unseen and wears "New" until the wardrobe is next
+        // opened (game/save.ts seedSeenOnce).
+        const seeded = seedSeenOnce(this.save);
+        if (seeded !== this.save) {
+            this.save = seeded;
+            writeSave(this.storage, this.save);
+        }
         // The mode is remembered in the save; anything unknown plays Descent.
         this.modeId = GameState.readModeSetting(this.save.settings);
         // A new calendar day wipes the stored Daily best before it is read.
@@ -178,12 +227,12 @@ class GameState {
         // The bank carries what earlier runs kept by reaching exits; anything
         // wrongly stored reads as no gear (game/gear.ts), and a no-gear mode
         // never sees the bank at all (game/modes.ts).
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         this.bestBeforeRun = this.highScore;
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
-        this.look = fitLook(sanitizeLook(this.save.look), this.save.feats);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look } };
+        this.look = fitLook(sanitizeLook(this.save.look), this.save.feats, this.save.pickedUp);
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -266,7 +315,7 @@ class GameState {
      * in the save, and the sprite is redrawn at once.
      */
     setWardrobeLook(look: unknown): void {
-        this.look = fitLook(sanitizeLook(look), this.save.feats);
+        this.look = fitLook(sanitizeLook(look), this.save.feats, this.save.pickedUp);
         this.save = { ...this.save, look: { ...this.look } };
         writeSave(this.storage, this.save);
         this.preloadLook();
@@ -292,8 +341,11 @@ class GameState {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         this.board.mount(mazeElement);
+        // E65: the fixed stage is set here, on load (and on resize), never on
+        // a level start: the board area keeps one box from the first paint on.
+        this.sizeStage();
         this.sizeBoard(this.run.maze.width);
-        this.board.setLevel(this.run, this.cellSize);
+        this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
     }
 
@@ -526,8 +578,8 @@ class GameState {
         this.highScore = this.storedBest() ?? 0;
         this.bestBeforeRun = this.highScore;
         // The title shows a run of the chosen mode's rules, ready for the countdown.
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
-        this.board.setLevel(this.run, this.cellSize);
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
+        this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
         this.publishHud();
     }
@@ -650,7 +702,7 @@ class GameState {
         this.run.abandon();
         // The page shows the title again by itself: the title art belongs to
         // components/Menu.tsx, driven by the screen in the snapshot.
-        this.board.setLevel(this.run, this.cellSize);
+        this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
     }
 
@@ -770,15 +822,62 @@ class GameState {
         this.dispatch('back');
     }
 
-    /** The title menu's Wardrobe entry: opens the look picker. */
+    /** The title menu's Wardrobe entry: opens the look picker, remembering
+     *  which feat-unlocked cards the save has not seen yet so they can carry
+     *  the New tag until the panel is next closed. Free traits never do, and
+     *  an old save without markers was seeded once at load with everything
+     *  already seen (game/save.ts seedSeenOnce), so it never wakes up
+     *  covered in New tags. */
     openWardrobe(): void {
         if (this.screen !== 'title') return;
+        // Kept maze pickups (E58) carry the New marker too, until the panel
+        // is next closed (markTraitsSeen writes their seen keys down).
+        const keys = [
+            ...GameState.unlockedTraitKeys(this.save.feats),
+            ...this.save.pickedUp.map((entry) => `trait:${entry.layer}:${entry.trait}`),
+        ];
+        this.newTraitKeys = keys.filter((key, index) => !this.save.seen[key] && keys.indexOf(key) === index);
         this.dispatch('wardrobe');
     }
 
     /** The wardrobe panel's Back button: Esc and the button both close it. */
     closeWardrobe(): void {
         this.dispatch('back');
+    }
+
+    /** Every trait these feats unlock that the player may wear, as a seen key
+     *  of the form trait:<Layer>:<Trait>. Only feat grants can be new: free
+     *  traits and bare (None) ones never carry a marker, so a first visit to
+     *  the wardrobe shows no New tag on the traits that were always wearable. */
+    private static unlockedTraitKeys(feats: readonly string[]): string[] {
+        const keys: string[] = [];
+        for (const layer of LAYER_ORDER) {
+            for (const trait of TRAITS[layer]) {
+                if (trait !== 'None' && unlockedBy(layer, trait) !== null && isUnlocked(layer, trait, feats)) {
+                    keys.push(`trait:${layer}:${trait}`);
+                }
+            }
+        }
+        return keys;
+    }
+
+    /**
+     * Mark trait cards as seen (the wardrobe's "new" markers, keys of the
+     * form trait:<Layer>:<Trait>, game/save.ts `seen`) and land them in the
+     * save at once, so the cards show as new only until the wardrobe is next
+     * closed. Old saves hold no trait keys; marking simply adds them.
+     */
+    markTraitsSeen(keys: readonly string[]): void {
+        const missing = keys.filter((key) => !this.save.seen[key]);
+        if (missing.length === 0) {
+            this.newTraitKeys = [];
+            return;
+        }
+        const seen = { ...this.save.seen };
+        for (const key of missing) seen[key] = true;
+        this.save = { ...this.save, seen };
+        writeSave(this.storage, this.save);
+        this.newTraitKeys = [];
     }
 
     /** M: every sound the shell owns goes quiet together, and back. */
@@ -906,7 +1005,18 @@ class GameState {
         const countdownElement = document.createElement('p');
         countdownElement.className = 'game-countdown';
         countdownElement.textContent = '3';
-        mazeContainerElement?.appendChild(countdownElement);
+        if (mazeContainerElement) {
+            // E63: the digit is sized from the board area, never the viewport,
+            // and never larger than the board itself: half the shorter side of
+            // the container it is centred in. margin: 0 and line-height: 1 in
+            // styles/globals.css keep the box exactly the digit, so the whole
+            // number shows at 403x900, 390x844 and 1280x800 alike.
+            const boardSide = Math.min(mazeContainerElement.clientWidth, mazeContainerElement.clientHeight);
+            if (Number.isFinite(boardSide) && boardSide > 0) {
+                countdownElement.style.fontSize = `${Math.floor(boardSide / 2)}px`;
+            }
+            mazeContainerElement.appendChild(countdownElement);
+        }
         this.sfxEngine.play(beepVoices(3), 'sfx');
 
         const timers: ReturnType<typeof setTimeout>[] = [];
@@ -951,7 +1061,7 @@ class GameState {
         this.rollDailyDay();
         // The run is built fresh under the chosen mode's rules: its own seed
         // (the calendar day for Daily) and its own gear (no bank without gear).
-        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
+        this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules, feats: this.save.feats, pickedUp: this.save.pickedUp });
         // The bar and the "new high score" claim measure this run against the best it started with.
         this.bestBeforeRun = this.storedBest() ?? 0;
         this.highScore = this.bestBeforeRun;
@@ -1073,6 +1183,9 @@ class GameState {
             finished: this.lastFinished,
             feats: [...this.save.feats],
             look: { ...this.look },
+            pickedUp: [...this.save.pickedUp],
+            newTraits: [...this.newTraitKeys],
+            heldTrait: this.run.heldTrait === null ? null : { ...this.run.heldTrait },
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -1091,7 +1204,9 @@ class GameState {
             && this.hudSnapshot.modeBestText === next.modeBestText
             && this.hudSnapshot.finished === next.finished
             && sameFeats(this.hudSnapshot.feats, next.feats)
-            && sameLook(this.hudSnapshot.look, next.look)) {
+            && sameLook(this.hudSnapshot.look, next.look)
+            && samePickups(this.hudSnapshot.pickedUp, next.pickedUp)
+            && sameHeldTrait(this.hudSnapshot.heldTrait, next.heldTrait)) {
             return;
         }
         this.hudSnapshot = next;
@@ -1123,6 +1238,42 @@ class GameState {
                     this.pickupStreak += 1;
                     this.floatMessage(event);
                     break;
+                case 'traitPickup':
+                    // A trait pickup (E58) is held for this run: the Toast
+                    // pattern (design/components/Toast) names it and says the
+                    // price — reach the exit, or it is lost like gear.
+                    this.pickupStreak += 1;
+                    this.board.float(`New trait: ${event.trait}`, event.x, event.y);
+                    this.board.banner(
+                        `New trait: ${event.trait}`,
+                        'Reach the exit to keep it.',
+                        TRAIT_TOAST_MS,
+                    );
+                    this.hudSnapshot = {
+                        ...this.hudSnapshot,
+                        announcement: `New trait: ${event.trait}. Reach the exit to keep it.`,
+                    };
+                    break;
+                case 'traitKept': {
+                    // The exit kept the held trait (E58): it joins the save's
+                    // pickedUp list at once, wears the wardrobe's New marker,
+                    // and the toast says what was kept.
+                    if (!this.save.pickedUp.some(
+                        (entry) => entry.layer === event.layer && entry.trait === event.trait,
+                    )) {
+                        this.save = {
+                            ...this.save,
+                            pickedUp: [...this.save.pickedUp, { layer: event.layer, trait: event.trait }],
+                        };
+                        writeSave(this.storage, this.save);
+                    }
+                    const keptKey = `trait:${event.layer}:${event.trait}`;
+                    if (!this.newTraitKeys.includes(keptKey)) {
+                        this.newTraitKeys = [...this.newTraitKeys, keptKey];
+                    }
+                    this.board.banner(`Kept: ${event.trait}.`, `${event.layer}. Added to your reptile.`, TRAIT_TOAST_MS);
+                    break;
+                }
                 case 'fight':
                     this.floatMessage(event);
                     break;
@@ -1163,7 +1314,7 @@ class GameState {
                     this.pickupStreak = 0;
                     this.dispatch('levelStarted');
                     this.sizeBoard(event.size);
-                    this.board.setLevel(this.run, this.cellSize);
+                    this.board.setLevel(this.run, this.cellSize, this.viewport);
                     this.refreshSprite();
                     // The level the stalkers join (game/enemies.ts): the maze
                     // says so once, in its own words.
@@ -1328,21 +1479,40 @@ class GameState {
         }
     }
 
-    /** Size the maze, the HUD and the CSS grid for a maze of the given cell side. */
+    /**
+     * E65: the one fixed stage. #maze-container is a square box whose size
+     * depends only on the viewport (stageSide), written as --stage-size for
+     * styles/globals.css to give the board area its box and the HUD its width.
+     * Called on load (mountBoard) and on resize (handleResize) only — never on
+     * a level start — so nothing shifts when a new maze grows.
+     */
+    private sizeStage(): void {
+        const stage = stageSide(window.innerWidth, window.innerHeight);
+        document.documentElement.style.setProperty('--stage-size', `${stage}px`);
+    }
+
+    /** Size the maze and the CSS grid for a maze of the given cell side. The
+     *  stage around it (E65) is not touched here: it follows the viewport, not
+     *  the maze, so a level start cannot move the board area or the HUD. */
     private sizeBoard(size: number): void {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         const tiles = size * 2 + 1;
-        const { cell, board } = boardLayout(window.innerWidth, window.innerHeight, tiles);
-        this.cellSize = cell;
-        mazeElement.style.width = `${board}px`;
-        mazeElement.style.height = `${board}px`;
+        // E56: a maze whose cell would drop below the readable floor is shown
+        // through a camera window that follows the reptile, with a minimap;
+        // anything readable is still drawn whole, exactly as before. The board
+        // element is the visible window either way, so the galaxy on
+        // #maze::before stays the size of what is seen.
+        const viewport = viewportFor(window.innerWidth, window.innerHeight, tiles);
+        this.viewport = viewport;
+        this.cellSize = viewport.cell;
+        // Centred inside the fixed stage by the container's flex box; the
+        // space around a smaller maze is the void the stage paints.
+        mazeElement.style.width = `${viewport.view}px`;
+        mazeElement.style.height = `${viewport.view}px`;
 
-        const hudElement = document.getElementById('hud');
-        if (hudElement) hudElement.style.width = `${board}px`;
-
-        document.documentElement.style.setProperty('--cell-size', `${cell}px`);
-        document.documentElement.style.setProperty('--item-size', `${cell}px`);
+        document.documentElement.style.setProperty('--cell-size', `${viewport.cell}px`);
+        document.documentElement.style.setProperty('--item-size', `${viewport.cell}px`);
         document.documentElement.style.setProperty('--grid-size', `${tiles}`);
     }
 
@@ -1358,9 +1528,11 @@ class GameState {
     handleResize() {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
-        // Same sizing path as the level start, then every sprite follows the new cell size.
+        // The stage follows the viewport (E65); then the same sizing path as
+        // the level start, and every sprite follows the new cell size.
+        this.sizeStage();
         this.sizeBoard(this.run.maze.width);
-        this.board.resize(this.cellSize);
+        this.board.resize(this.cellSize, this.viewport);
     }
 }
 

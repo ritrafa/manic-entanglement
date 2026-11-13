@@ -12,9 +12,10 @@ import {
 /** A whole HUD snapshot on the playing screen, with anything overridable. */
 function snapshotAt(over: Partial<HudSnapshot> = {}): HudSnapshot {
     return {
-        energyText: "Energy: 100",
+        energyText: "100",
         energyPct: 100,
-        scoreText: "Score: 0",
+        energyLow: false,
+        scoreText: "0",
         bestPct: 0,
         level: "1.0",
         attack: "1.0",

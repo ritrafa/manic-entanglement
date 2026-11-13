@@ -1,71 +1,175 @@
+/* Flat ground and the design system's body type on every route (the tokens
+   and both fonts load from app/layout.tsx). */
+html,
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+/* Pixel art stays crisp: sprites and tiles never get smoothed. */
+img {
+  image-rendering: pixelated;
+}
+
+/* Sprite strip of the StatusPage pattern (design/components/StatusPage):
+   three 48px sprites in a row above the headline. */
+.me-statuspage-strip {
+  display: flex;
+}
+.me-statuspage-strip img {
+  width: 48px;
+  height: 48px;
+}
+
 body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  height: 100vh;
-  height: 100dvh;
+  /* E67: the column is centred vertically between the safe-area insets
+     when the stage, the HUD (and the D-pad, when shown) are shorter than
+     the viewport, on every screen — the loading skeleton included, which
+     hangs its two boxes on the body directly. `safe` keeps the E51
+     behaviour wherever the content is taller than the screen: it starts at
+     the top and the page scrolls; where a browser does not know the `safe`
+     keyword the flex-start below stays and nothing else changes. During
+     play the board area keeps touch-action: none, so swipes there never
+     scroll the page. */
+  justify-content: flex-start;
+  justify-content: safe center;
+  min-height: 100vh;
+  min-height: 100dvh;
   /* viewportFit=cover runs the page under notches and browser bars: the page
-     itself keeps its content inside the safe area. */
+     itself keeps its content inside the safe area, padded by space-16. */
   box-sizing: border-box;
   padding:
-    env(safe-area-inset-top)
+    calc(env(safe-area-inset-top) + var(--space-16))
     env(safe-area-inset-right)
-    env(safe-area-inset-bottom)
+    calc(env(safe-area-inset-bottom) + var(--space-16))
     env(safe-area-inset-left);
-  background: linear-gradient(135deg, #08412c, #40154f);
-  color: white;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  overflow: hidden;
   overscroll-behavior: none;
 }
 
+/* The touch wrapper (components/TouchLayer.tsx) is the page's column: the
+   body's one flex item, a flex column at least as tall as the viewport
+   between the safe-area insets (the body's own padding already holds the
+   content inside them), so the title block's auto margins (E55) have the
+   whole screen to centre in (E59): on the title screen the block sits in
+   the vertical middle when shorter than the viewport and still starts at
+   the top, with the page scrolling, when taller. Its width stays what it
+   always was, the widest child's, and the default stretch fills the items
+   across it exactly as the block layout did, so play, countdown and how-to
+   keep their top alignment and their board, minimap and panels to the
+   pixel; the items' own auto margins keep centring the title block, the
+   HUD and the D-pad horizontally. */
+.touch-layer {
+  display: flex;
+  flex-direction: column;
+  /* E67: the stage, the HUD and the D-pad (when shown) ride as one column
+     in the vertical middle of the screen when shorter than it, and stay
+     top-aligned and scrollable when taller (`safe`, with the flex-start
+     fallback for browsers without the keyword). Their sizes are the same
+     strings on every screen (E65), so the column sits at the same pixels
+     from the title to level 3 and nothing jumps between screens. */
+  justify-content: flex-start;
+  justify-content: safe center;
+  min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2 * var(--space-16));
+  min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2 * var(--space-16));
+}
+
+/* The container dissolves, so the shell's children — the board area, the
+   HUD, the D-pad, and on the title screen the title block — are the
+   column's flex items directly, top-aligned and centred horizontally. */
 .game-container {
   display: contents;
-  height: 100vh;
-  height: 100dvh;
-  width: 100vw;
-  overflow: hidden;
 }
-/* The drifting galaxy moves by transform only (translate + scale), so the
-   compositor slides a layer instead of repainting the board every frame. The
-   picture lives on #maze::before, a layer larger than the board, so neither
-   the drift nor the scale ever exposes an edge. */
+/* On the title screen the board area keeps its box (E65): the title block
+   shows inside the stage, over the void, and the board itself stays in the
+   DOM, mounted and ready for the first run, hidden beneath the block. */
+.game-container[data-screen='title'] #maze {
+  display: none;
+}
+/* The drifting galaxy lives on #maze::before, a layer exactly the size of
+   the board (inset: 0) sitting behind the tiles: no oversized canvas, so the
+   GPU carries one board-sized picture instead of a 13-board one. The drift
+   is the way the original game did it: background-size from 600% to 300%
+   and background-position from 0 0 to -1000px -500px over 45s ease-in-out
+   alternate, the picture tiled so the long pan never exposes an edge. On a
+   ~500 px board that is the pre-E38 zoom-out with its ~1000 x 500 px drift,
+   at board scale. will-change plus contain: paint keep the drift's
+   repainting on that one layer, under the tiles. */
 @keyframes moveBackground {
   0% {
-    transform: translate(0, 0) scale(1);
+    background-size: 600% 600%;
+    background-position: 0 0;
   }
   100% {
-    transform: translate(-80px, -50px) scale(0.92);
+    /* Half the zoom, panned 2 boards left and 1 board up. */
+    background-size: 300% 300%;
+    background-position: -1000px -500px;
   }
+}
+/* The fixed stage (E65): one square box, the same size and place on every
+   screen from the first paint on. Its side is --stage-size, the largest
+   square that fits 94% of the viewport width by 72% of its height
+   (stageSide in game/layout.ts, the same shares as the board): the shell
+   writes the exact pixels on load and on resize, never on a level start, and
+   the vw/vh default below is the stylesheet's own guess for the very first
+   paint, before the shell exists. The maze is centred inside it by the flex
+   box; the space around a smaller maze is the void colour. The HUD under it
+   follows the same width. */
+:root {
+  --stage-size: min(94vw, 72vh);
+  --stage-size: min(94vw, 72dvh);
 }
 #maze-container {
   position: relative;
+  box-sizing: border-box;
+  flex: none;
+  width: var(--stage-size);
+  height: var(--stage-size);
+  background: var(--void);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px 10px 0px 0px;
   overflow: hidden;
   /* Touches on the board belong to the game: no browser pan, zoom or double-tap. */
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
+/* The loading text (app/page.tsx, HudSkeleton's companion): centred in the
+   empty stage while the GameState does not exist yet. */
+.stage-loading {
+  margin: 0;
+  font: 400 16px/24px var(--font-display);
+  color: var(--ink);
+  text-align: center;
+}
 #maze {
   position: relative;
   /* Its own stacking context, so the galaxy layer (z-index: -1) stays behind
-     the tiles but inside the board. */
+     the tiles but inside the board; the clip is a belt for the braces, as
+     the layer itself is exactly the board. */
   isolation: isolate;
+  overflow: hidden;
 }
 #maze::before {
   content: '';
   position: absolute;
-  /* Half the board beyond every edge: the slow drift never uncovers a side. */
-  inset: -50%;
+  /* Exactly the board, behind the tiles: no layer larger than the board is
+     ever composited. */
+  inset: 0;
   z-index: -1;
-  /* One picture per board (50% of this twice-as-large layer), tiled. */
+  /* Tiled, so the pan from 0 0 to -1000px -500px never uncovers a side; the
+     keyframes carry the original 600% -> 300% zoom. */
   background: url('/images/galaxy2.jpg') repeat;
-  background-size: 50% 50%;
+  background-size: 600% 600%;
+  background-position: 0 0;
   animation: moveBackground 45s ease-in-out infinite alternate;
+  /* The drift repaints this box alone: contain: paint keeps the painting
+     inside it and will-change asks for its own layer under the tiles. */
+  will-change: background-size, background-position;
+  contain: paint;
   pointer-events: none;
 }
 
@@ -89,22 +193,60 @@ body {
   pointer-events: none;
 }
 
-/* The title menu (components/Menu.tsx): the title art as the background of the
-   board area, a dark gradient over its lower half so the painted START in the
-   picture is covered, and the menu's real-text buttons stacked on top of it.
-   The art also shows behind the how-to and, dimmed, behind the countdown. */
+/* E56 camera: when the whole maze would need tiles below the readable size,
+   the three layers draw the whole maze at a readable cell inside the board
+   (which is then only the window) and slide together to keep the reptile
+   centred (lib/board.ts applyCamera). The slide is the reptile's own glide
+   timing, so window and sprite move as one; under reduced motion the rule at
+   the bottom of this file drops it and the window jumps. */
+.camera-move {
+  transition: transform var(--step-ms, 110ms) linear;
+  will-change: transform;
+}
+
+/* The E56 minimap: a small square in a board corner, shown only in camera
+   mode (lib/board.ts drawMinimap). The maze's walls at 1-2 px a tile, the
+   reptile and the exit as single bright pixels and the camera window as an
+   outline are drawn on the canvas; the frame is the well under a line border.
+   On a Blackout level only the reptile and this frame show. */
+.minimap {
+  position: absolute;
+  right: var(--space-8);
+  bottom: var(--space-8);
+  width: 96px;
+  height: 96px;
+  background: var(--well);
+  border: var(--border-thin) solid var(--line);
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.minimap[hidden] {
+  display: none;
+}
+
+/* The title art over the board area while the how-to panel shows or the
+   countdown runs (components/Menu.tsx): the picture shown whole at its own
+   aspect ratio, centred on void, dimmed under the countdown; the panels sit
+   on their scrim above it. */
 .title-menu {
   position: absolute;
   inset: 0;
-  overflow: hidden;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--void);
 }
-.title-art {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.title-menu .title-art {
+  flex: none;
+  box-sizing: border-box;
+  /* The painting keeps its own aspect ratio: cropped by nothing. */
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-bottom: var(--border-thick) solid var(--line);
   /* The buttons are the only interactive part of the menu; the art is scenery. */
   pointer-events: none;
   user-select: none;
@@ -113,156 +255,213 @@ body {
   /* The countdown runs over the dimmed title, as the plain picture did before. */
   opacity: 0.5;
 }
-.title-gradient {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 55%;
-  background: linear-gradient(
-    to top,
-    rgba(4, 6, 12, 0.92) 0%,
-    rgba(4, 6, 12, 0.65) 45%,
-    rgba(4, 6, 12, 0) 100%
-  );
-  pointer-events: none;
-}
-.menu-buttons {
-  position: absolute;
-  left: 50%;
-  bottom: 7%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  width: min(260px, 70%);
-  text-align: center;
-}
-.menu-buttons button {
-  font: inherit;
-  font-size: 18px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.menu-buttons button:hover,
-.menu-buttons button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
-}
-.menu-best {
-  margin: 4px 0 0;
-  font-size: 14px;
-  opacity: 0.8;
-}
 
-/* The title menu's mode row (components/Menu.tsx, game/modes.ts): the mode's
-   name between two arrow buttons, its blurb and its best underneath. */
-.mode-row {
+/* The title screen (components/Menu.tsx, design/components/MenuList) lives
+   INSIDE the fixed stage (E65): the board area keeps its box and the block
+   shows in it, over the void, with the board hidden beneath. The painting
+   band at its own aspect ratio with the whole lettering, then the mode
+   picker, the buttons and the best line at their natural height, centred in
+   the stage. Nothing inside it scrolls and the page never scrolls for it:
+   where the block is taller than the stage on a small phone the art band
+   shrinks first (flex-shrink, down to its 60 px floor) and anything left
+   over is clipped by the stage's own overflow. */
+.title-screen {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-16);
+  background: var(--void);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background-color: rgba(4, 6, 12, 0.45);
-  cursor: pointer;
-}
-.mode-row:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
-}
-.mode-picker {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: center;
 }
-.mode-picker button {
-  font: inherit;
-  font-size: 14px;
-  line-height: 1;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
+.title-screen .title-art {
+  /* E67: the band never squashes. It keeps the painting's own 500/150
+     lettering ratio at every size (flex: none — the stage's room comes from
+     the tightened mode row and gaps below, not from crushing the art), and
+     object-fit: contain scales the painting into that box without ever
+     cropping its sides or its bottom, so the whole "MANIC ENTANGLEMENT"
+     lettering shows. The 90 px floor is what a very narrow viewport gets at
+     worst, with the void as the only letterboxing. */
+  flex: none;
+  min-height: 90px;
+  box-sizing: border-box;
+  /* The painting's lettering band, cropped by CSS (E52 — the file is never
+     edited): the 500 px square holds the whole "MANIC ENTANGLEMENT"
+     lettering in its top 150 px rows and its own painted "START" button far
+     below, which would read as a second, dead button beside the menu's real
+     Play. The band keeps the top 30% of the picture (aspect-ratio 500/150)
+     and contain shows all of it, so the lettering reads whole and the
+     painted START never does. */
+  width: min(100%, 420px);
+  height: auto;
+  aspect-ratio: 500 / 150;
+  /* Cover, pinned to the top: the band shows the painting's top 30% at the
+     band's full width, which is exactly the whole lettering (contain shrank
+     the whole square painting into the band instead). */
+  object-fit: cover;
+  object-position: center top;
+  border-bottom: var(--border-thick) solid var(--line);
+  /* The buttons are the only interactive part of the menu; the art is scenery. */
+  pointer-events: none;
+  user-select: none;
 }
-.mode-picker button:hover,
-.mode-picker button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+/* Two columns, so the five entries are three button rows under the mode row;
+   at their natural height they and the best line all show without any inner
+   scrolling at 390x844 and 1280x800. */
+.title-screen .me-menu {
+  box-sizing: border-box;
+  flex: none;
+  margin: var(--space-16) 0 0;
+  padding: 0;
+  width: min(440px, 100%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
 }
-.mode-name {
-  font-size: 18px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.title-screen .me-mode {
+  padding: var(--space-8);
+  gap: var(--space-8);
 }
-.mode-blurb {
-  margin: 0;
-  font-size: 13px;
-  opacity: 0.85;
+/* The mode's name with its best line under it, in the mode row's middle
+   cell (E67): one row instead of two keeps the title block inside the
+   stage on a short phone. */
+.me-mode-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
 }
-.mode-best {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.8;
+/* Phones (E67): the block must fit the stage with the art band whole at
+   90 px or more at 403x900 and 390x844, so the mode row tightens — the
+   blurb (also spoken in the row's aria-label) drops out below 480 px, the
+   best line shrinks with it, and the menu sits 4 px under the art with its
+   8 px gaps and 14 px button text. */
+@media (max-width: 480px) {
+  .title-screen {
+    padding: var(--space-8);
+  }
+  .title-screen .me-menu {
+    margin-top: var(--space-4);
+  }
+  .title-screen .me-mode {
+    padding: var(--space-4);
+  }
+  .title-screen .me-mode .me-hint {
+    display: none;
+  }
+  .title-screen .me-mode .me-best {
+    font: 400 12px/16px var(--font-display);
+  }
+  .title-screen .me-menu .me-btn {
+    font: 400 14px/24px var(--font-display);
+  }
+}
+.title-screen .me-menu .me-mode,
+.title-screen .me-menu .me-menu-wide {
+  grid-column: 1 / -1;
+}
+/* The mode row takes the inset ring while it is focused, like the buttons. */
+.title-screen .me-mode:focus-visible {
+  outline: var(--border-thin) solid var(--ink);
+  outline-offset: -6px;
 }
 
-/* The 3-2-1 the shell drops over the dimmed title while a run starts. */
+/* The 3-2-1 the shell drops over the dimmed title while a run starts (E63).
+   It sits dead centre of the board area: margin: 0 and line-height: 1 kill
+   the <p>'s default 1em vertical margins and its tall line box, which at the
+   old viewport-sized font pushed the digit out of the overflow-hidden
+   container so only its top showed. The size is set inline, in pixels, from
+   the board area by startGame() in lib/GameState.ts (never larger than the
+   board); this font-size is only the fallback for a container it cannot
+   measure. */
 .game-countdown {
   position: absolute;
-  top: 5%;
+  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: min(40vw, 40vh);
-  color: white;
+  margin: 0;
+  line-height: 1;
+  font-family: var(--font-display);
+  font-size: 160px;
+  color: var(--ink);
   text-align: center;
   z-index: 2;
 }
 
-/* The how-to-play screen (components/HowTo.tsx): the lines as a list, each
-   with its sprite to the left, over the title art. */
-.howto-panel {
+/* Every overlay (design/components/Panel): one me-panel centred on the scrim,
+   at most 480px wide, scrolling inside with the scrollbar hidden. The scrim
+   covers the board while its panel is open. */
+#maze-container .me-scrim {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  background-color: rgba(8, 10, 16, 0.92);
-  color: white;
-  text-align: center;
-  overflow-y: auto;
   z-index: 3;
 }
+#maze-container .me-scrim > .me-panel {
+  width: 100%;
+  max-width: min(480px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* Text size: the panels grow with --ui-scale, like the HUD. */
+  font-size: calc(16px * var(--ui-scale, 1));
+}
+#maze-container .me-scrim > .me-panel::-webkit-scrollbar {
+  display: none;
+}
+/* The pause panel (components/Overlay.tsx) is centred on the board, so at
+   390x844 its box is only as tall as the board: its own spacing runs tighter
+   (E52) — a shorter title strip, one space-8 of body padding and space-4
+   between the buttons — so all four entries, "Quit to title" last, show
+   without any inner scrolling. */
+#maze-container .me-panel.pause-panel .me-panel-title {
+  padding: var(--space-4) var(--space-12);
+}
+#maze-container .me-panel.pause-panel .me-panel-body {
+  padding: var(--space-8);
+}
+#maze-container .me-panel.pause-panel .me-panel-actions {
+  flex-direction: column;
+  gap: var(--space-4);
+}
+#maze-container .me-panel.pause-panel .me-panel-actions .me-btn {
+  width: 100%;
+  padding-bottom: 0;
+}
+/* Panel text follows the size setting; the design system's fixed display
+   sizes (titles and buttons) stay as they are. */
+.me-panel .me-summary dt,
+.me-panel .me-summary dd,
+.me-panel .me-hint,
+.me-panel .me-field,
+.me-panel .me-fieldset,
+.me-panel .me-value,
+.me-panel .feats-row {
+  font-size: inherit;
+}
+
+/* The how-to-play panel (components/HowTo.tsx): the lines as a list, each
+   with its 24 px sprite to the left, inside the panel. */
 .howto-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: min(520px, 88%);
+  gap: var(--space-8);
 }
 .howto-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-8);
   text-align: left;
-  font-size: 15px;
 }
 .howto-sprite {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  width: var(--tile);
+  height: var(--tile);
   image-rendering: pixelated;
   object-fit: contain;
 }
@@ -279,7 +478,9 @@ body {
 /* Blackout (game/modifiers.ts, lib/board.ts): on an entangled level the tiles
    outside the view fade to a hint of their picture and the entities standing
    on them vanish; the shell re-marks the cells on every update. The forecast
-   marks live on the fx layer and stay visible everywhere. */
+   never brightens a hidden tile: lib/board.ts gives no hidden tile the
+   .wall-outgoing breathing and draws no .mark-incoming ghost on one, so the
+   0.06 below is the last word on any tile outside the view. */
 .wall-image.unseen {
   opacity: 0.06;
 }
@@ -288,30 +489,39 @@ body {
   display: none;
 }
 
-/* The entanglement banner (lib/board.ts banner): the twist's name and its
-   line as real text over the board, shown while the shell's timer runs. */
+/* The entanglement banner (lib/board.ts banner): the Toast pattern
+   (design/components/Toast) floating over the board — the twist's name as the
+   headline and its line as the body, on surface with a hard drop, gone when
+   the shell's timer runs out. */
 .level-banner {
   position: absolute;
   left: 50%;
-  top: 12%;
-  transform: translateX(-50%);
+  top: var(--space-24);
+  translate: -50% 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
-  border-radius: 10px;
-  background: rgba(10, 12, 28, 0.82);
-  border: 1px solid rgba(255, 215, 120, 0.55);
-  color: #ffe9a8;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
+  background: var(--surface);
+  border: var(--border-thin) solid var(--gold);
+  box-shadow: var(--drop-hard);
+  color: var(--ink);
+  max-width: 360px;
   text-align: center;
   pointer-events: none;
   z-index: 5;
 }
 
 .level-banner strong {
-  font-size: 1.15em;
-  letter-spacing: 0.08em;
+  font: 400 16px/24px var(--font-display);
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.level-banner span {
+  font: 400 14px/20px var(--font-body);
+  color: var(--ink-muted);
 }
 
 /* Entities are one persistent element each, placed with a transform by
@@ -389,48 +599,136 @@ body {
   background-image: url('/images/backpack.gif');
 }
 
-/* Tool pickups (game/tools.ts): simple SVG icons in the game's teal and gold. */
+/* Tool pickups (game/tools.ts): the pixel tool icons, the same 240 px
+   one-frame art the HUD buttons show (components/ToolBar.tsx). */
 .item_anchor {
-  background-image: url('/images/tools/anchor.svg');
+  background-image: url('/images/tools/anchor.png');
 }
 
 .item_twist {
-  background-image: url('/images/tools/twist.svg');
+  background-image: url('/images/tools/twist.png');
 }
 
 .item_cut {
-  background-image: url('/images/tools/cut.svg');
+  background-image: url('/images/tools/cut.png');
+}
+
+/* Trait pickups on the board (E58, design/components/Pickup, Pixel art):
+   the trait's PFP master cropped to its bounding box, centred inside the
+   middle 16 tile pixels, drawn at whole art pixels for the current cell —
+   the crop scale is the floor of what fits the middle two thirds of the
+   tile, at least one screen pixel per art pixel (lib/board.ts measures the
+   box and sizes the crop, and hands --trait-bracket its whole-pixel value;
+   the width/height below only stand until it sizes the crop). The game adds
+   the one-pixel black outline (a hard drop-shadow ring) and the rarity
+   frame: four corner brackets, 1 tile pixel thick and 5 long, in --energy
+   (Found) or --gold (Rare). Nothing is baked into the art. */
+.trait-pickup {
+  background-image: none;
+  --trait-bracket: calc(var(--cell-size, 24px) / 24);
+}
+
+.trait-pickup .trait-crop {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  /* Before the picture is measured: the whole 16 at one tile pixel each. */
+  width: calc(var(--item-size, 24px) * 16 / 24);
+  height: calc(var(--item-size, 24px) * 16 / 24);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  /* The 1 tile pixel black outline, one hard shadow per side. */
+  filter:
+    drop-shadow(calc(var(--trait-bracket)) 0 0 #000)
+    drop-shadow(calc(-1 * var(--trait-bracket)) 0 0 #000)
+    drop-shadow(0 calc(var(--trait-bracket)) 0 #000)
+    drop-shadow(0 calc(-1 * var(--trait-bracket)) 0 #000);
+}
+
+.trait-pickup .trait-frame {
+  /* The middle 16 of the tile's 24 art pixels. */
+  position: absolute;
+  inset: calc(100% / 6);
+  pointer-events: none;
+}
+
+.trait-pickup .trait-frame i {
+  position: absolute;
+  width: calc(100% * 5 / 16);
+  height: calc(100% * 5 / 16);
+  border: 0 solid var(--trait-frame-colour, var(--energy));
+}
+
+.trait-pickup .trait-frame i:nth-child(1) {
+  top: 0;
+  left: 0;
+  border-top-width: var(--trait-bracket);
+  border-left-width: var(--trait-bracket);
+}
+
+.trait-pickup .trait-frame i:nth-child(2) {
+  top: 0;
+  right: 0;
+  border-top-width: var(--trait-bracket);
+  border-right-width: var(--trait-bracket);
+}
+
+.trait-pickup .trait-frame i:nth-child(3) {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: var(--trait-bracket);
+  border-left-width: var(--trait-bracket);
+}
+
+.trait-pickup .trait-frame i:nth-child(4) {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: var(--trait-bracket);
+  border-right-width: var(--trait-bracket);
+}
+
+.trait-pickup.trait-found {
+  --trait-frame-colour: var(--energy);
+}
+
+.trait-pickup.trait-rare {
+  --trait-frame-colour: var(--gold);
 }
 
 .enemy {
   background-image: url('/images/enemy.gif');
   background-size: cover;
+  image-rendering: pixelated;
 }
 
-/* The kinds share the one GIF and differ by shape only: the heavy ones
-   carry rings and are drawn larger. `scale` (not `transform`) grows the sprite
-   so the position transform from lib/board.ts stays untouched. */
+/* Each kind draws its own 240 px four-frame GIF at the cell size — no
+   fractional scaling, pixelated like everything else; the wisp keeps the
+   shared sprite and the heavy kinds keep their hard rings (no blur, per
+   the design). */
 .enemy-wisp {
-  /* plain */
+  /* plain: the shared enemy.gif */
 }
 
 .enemy-brute {
-  scale: 1.15;
+  background-image: url('/images/brute.gif');
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 .enemy-warden {
-  scale: 1.3;
+  background-image: url('/images/warden.gif');
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.85),
     0 0 0 5px rgba(255, 200, 60, 0.85);
 }
 
-/* The stalker (game/enemies.ts) is the same GIF with a distinct shape cue:
-   a pointed red marker above it (over the toll badge) and a faster bob, so
-   the one that follows you reads at a glance. `translate` bobs the sprite so
-   the position transform from lib/board.ts stays untouched. */
+/* The stalker (game/enemies.ts) carries a distinct shape cue over its own
+   sprite: a pointed red marker above it (over the toll badge) and a faster
+   bob, so the one that follows you reads at a glance. `translate` bobs the
+   sprite so the position transform from lib/board.ts stays untouched. */
 .enemy-stalker {
+  background-image: url('/images/stalker.gif');
   animation: stalker-bob 0.5s ease-in-out infinite;
 }
 
@@ -445,7 +743,6 @@ body {
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
   border-bottom: 7px solid #ff3b30;
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
   pointer-events: none;
 }
 
@@ -509,10 +806,9 @@ body {
   top: 0;
   pointer-events: none;
   border-radius: 50%;
-  border: 3px solid #ffd700;
+  border: 3px solid var(--gold);
   box-sizing: border-box;
-  background: radial-gradient(circle, rgba(0, 160, 160, 0.95) 0%, rgba(0, 160, 160, 0.45) 55%, rgba(0, 160, 160, 0) 75%);
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+  background: var(--energy);
   transition: transform 150ms linear;
   animation: knot-pulse 2.4s ease-in-out infinite;
 }
@@ -528,68 +824,26 @@ body {
   animation: none;
   opacity: 0.9;
   border-style: dashed;
-  box-shadow: 0 0 10px rgba(27, 191, 133, 0.7);
 }
 
-/* The tool row in the HUD (components/ToolBar.tsx): one button per tool with
-   its icon, name, key hint and charge count; disabled at 0 charges. */
-.toolbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 0;
+/* The tool row in the HUD (components/ToolBar.tsx) is the me-tools part with
+   me-btn me-tool buttons: the tool's 24 px pixel icon beside its name, key
+   and count as text, disabled at 0 charges, the armed Cut in the pressed
+   look. Nothing of the old copies survives. */
+.me-tool .me-tool-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
 }
 
-.tool-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 4px 10px;
-  border: 2px solid #1bbf85;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font: inherit;
-  cursor: pointer;
-}
-
-.tool-button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.tool-icon {
-  width: 20px;
-  height: 20px;
-}
-
-.tool-name {
-  font-size: calc(0.85em * var(--ui-scale, 1));
-}
-
-.tool-key {
-  font-size: calc(0.75em * var(--ui-scale, 1));
-  color: #ffd700;
-}
-
-.tool-count {
-  font-size: calc(0.85em * var(--ui-scale, 1));
-  color: #1bbf85;
-  font-weight: bold;
-}
-
-.tool-anchored {
-  font-size: calc(0.8em * var(--ui-scale, 1));
-  color: #1bbf85;
-}
-
-/* The forecast's wall marks, one .mark element per wall tile, replaced on
-   each update. The two kinds differ by shape and pattern, not only colour,
-   so they read in greyscale too: an opening wall gets a dashed gold outline
-   (the wall still shows through), a sealing wall a diagonal white hatch. */
+/* The forecast's ghost walls, drawn with the game's own wall art. An
+   incoming wall (a sealing edge) is one .mark-incoming image on this marks
+   layer: the real wall picture it will become, breathing faint between 10%
+   and 20%. An outgoing wall (an opening edge) gets no element here at all:
+   lib/board.ts puts .wall-outgoing on the wall's own tile in the tiles
+   layer, where it breathes just below full strength, between 80% and 90%.
+   Both share one 1.6s alternate breath; reduced motion stills them at 15%
+   and 85%, high contrast stills them at 35% and 65% so the two differ. */
 .marks {
   position: absolute;
   left: 0;
@@ -607,19 +861,33 @@ body {
   box-sizing: border-box;
 }
 
-.mark-open {
-  border: 2px dashed #ffd700;
-  border-radius: 3px;
+.mark-incoming {
+  image-rendering: pixelated;
+  animation: mark-breathe-in 1.6s ease-in-out infinite alternate;
 }
 
-.mark-close {
-  background-image: repeating-linear-gradient(
-    45deg,
-    rgba(255, 255, 255, 0.85) 0,
-    rgba(255, 255, 255, 0.85) 2px,
-    rgba(255, 255, 255, 0) 2px,
-    rgba(255, 255, 255, 0) 6px
-  );
+.wall-outgoing {
+  animation: mark-breathe-out 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes mark-breathe-in {
+  from {
+    opacity: 0.1;
+  }
+
+  to {
+    opacity: 0.2;
+  }
+}
+
+@keyframes mark-breathe-out {
+  from {
+    opacity: 0.8;
+  }
+
+  to {
+    opacity: 0.9;
+  }
 }
 
 /* The stalker's intent (game/run.ts, lib/board.ts): a small chevron on the
@@ -635,7 +903,6 @@ body {
   margin: -5px 0 0 -3px;
   border-top: 2px solid rgba(255, 59, 48, 0.95);
   border-right: 2px solid rgba(255, 59, 48, 0.95);
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
 }
 
 .mark-intent-n::after {
@@ -661,11 +928,14 @@ body {
   height: 10px;
 }
 
+/* A floating event line over a tile (lib/board.ts float): the me-float
+   pattern — display type in gold with a 2px hard shadow, no blur. */
 .message{
   position: absolute;
-  font-size: 1rem;
-  color: #ffd700;
-  animation: moveUp 2.5s ease-out;
+  font: 400 16px/24px var(--font-display);
+  color: var(--gold);
+  text-shadow: 2px 2px 0 var(--well);
+  animation: moveUp 2.5s linear;
   pointer-events: none;
 }
 
@@ -849,13 +1119,15 @@ body {
 }
 
 /* Low energy: the screen breathes a warning. One cycle takes longer than a
-   second, so it can never flicker; the vignette and the energy bar breathe
-   together (lib/board.ts setLowEnergy puts the class on the board). */
+   second, so it can never flicker; the vignette and the HUD's energy bar
+   breathe together. The board carries .low-energy for the vignette
+   (lib/board.ts setLowEnergy); the bar itself is low through the model
+   (game/hud.ts energyLow), which puts is-low on the HUD meter. */
 .low-energy .fade-overlay {
   animation: vignette-breathe 1.6s ease-in-out infinite;
 }
 
-.low-energy #energy-bar-inner {
+.me-meter.is-low > i {
   animation: energy-breathe 1.6s ease-in-out infinite;
 }
 
@@ -884,203 +1156,113 @@ body {
   #maze::before {
     animation: none;
   }
+
+  .me-meter.is-low > i {
+    animation: none;
+  }
+
+  .mark-incoming {
+    animation: none;
+    opacity: 0.15;
+  }
+
+  .wall-outgoing {
+    animation: none;
+    opacity: 0.85;
+  }
 }
 
-/* The pause and game-over panels (components/Overlay.tsx): a dark sheet over the
-   board, not the old solid red one — the run stays visible behind the panel. */
-.game-over-message {
-  position: absolute;
-  inset: 0;
+/* The HUD is the design's HudBar (design/components/HudBar), widened to fit:
+   components/Hud.tsx renders #hud as a me-hud carrying two me-hud-row rows —
+   row 1 the portrait (me-portrait), the wallet's button (me-btn), the energy
+   and score meters (me-hud-meters) and the carried marker (me-carried);
+   row 2 the four stats (me-stat) and the tool buttons (me-tools). All the
+   parts come from design/components.css; the rows only decide who shares a
+   line, so at 1280x800 the bar is two rows and never a stack.
+
+   The width follows the fixed stage (E65), not the maze: --stage-size, the
+   same square the board area keeps on every screen, never wider than the
+   viewport minus the 16px gutters on each side, centred under the stage (the
+   body centres it). The shell writes --stage-size on load and on resize
+   (lib/GameState.ts sizeStage); the stylesheet's own default sizes the empty
+   HUD box of the loading skeleton to match before the shell exists. */
+#hud.me-hud {
+  box-sizing: border-box;
+  width: min(var(--stage-size), calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  /* The bar sits under the board with one space-8 of air, centred. */
+  margin: var(--space-8) auto 0;
+}
+/* One row of the bar: a wrapping flex line of its own, full width inside
+   the bar's padding. */
+.me-hud-row {
+  box-sizing: border-box;
+  width: 100%;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 14px;
-  background-color: rgba(8, 10, 16, 0.88);
-  color: white;
-  text-align: center;
-  z-index: 3;
+  gap: var(--space-8) var(--space-24);
 }
-.game-over-message p {
-  margin: 0;
+/* Row 1: the meters take the width the portrait leaves. Row 2: the stats
+   stretch and the tools keep their own size. The stats' padding and the
+   tool buttons' side padding tighten just enough that stats and tools
+   share row 2 at the bar's narrowest desktop width (720px). */
+#hud.me-hud .me-hud-meters {
+  flex: 1 1 300px;
+  min-width: 0;
 }
-.overlay-title {
-  font-size: 28px;
-  font-weight: bold;
-  letter-spacing: 1px;
+#hud.me-hud .me-stats {
+  flex: 1 1 280px;
+  min-width: 0;
+  gap: var(--space-4);
+  /* The design's repeat(4, auto) tracks are content-sized: the widest label
+     (Step cost) then pushed the grid past the width flex leaves row 2 and
+     under the tool buttons at 1280. Quarter shares that may shrink to zero
+     keep the four stats inside their side of the row; the tools, flex: none,
+     keep their own space. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-.summary {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 220px;
-  max-width: 80%;
+#hud.me-hud .me-stat {
+  padding: var(--space-4);
 }
-.summary-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  font-size: 16px;
+#hud.me-hud .me-tools {
+  flex: none;
 }
-.summary-label {
-  opacity: 0.75;
+#hud.me-hud .me-tools .me-btn {
+  padding-left: var(--space-8);
+  padding-right: var(--space-8);
 }
-.summary-value {
-  font-weight: bold;
-}
-.overlay-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 4px;
-}
-.overlay-buttons button {
-  font: inherit;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.overlay-buttons button:hover,
-.overlay-buttons button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+#hud.me-hud .me-carried,
+#hud.me-hud .me-held-trait,
+#hud.me-hud .me-portrait {
+  flex: none;
 }
 
-#hud {
-  display: flex;
-  justify-content: space-between;
-  border-radius: 0px 0px 10px 10px;
-  background-color: rgba(0, 0, 0, 0.5);
+/* The trait held since the last exit (E58): the carried marker's story with
+   the trait's PFP icon beside its name — reach the exit to keep it. */
+#hud.me-hud .me-held-trait {
+  display: inline-flex;
+  gap: var(--space-4);
+  align-items: center;
+  padding: 0 var(--space-8);
+  border: var(--border-thin) solid var(--energy);
+  color: var(--energy);
+  font: 400 16px/24px var(--font-display);
+  text-transform: uppercase;
+}
+
+#hud.me-hud .me-held-trait .me-held-trait-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
 }
 
 .left-box {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 20px;
-  margin: 20px;
-  width: 80px;
-  height: 80px;
-  position: relative;
-}
-
-.left-box .asset-image {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-}
-
-.right-box {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  width: 100%;
-  padding: 20px 20px 0px 0px;
-}
-
-.bar-container {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
-  font-size: 0.9em;
-}
-
-.bar-container div:first-child {
-  margin-right: 10px;
-  width: 100px;
-}
-
-#energy-bar, #progress-bar {
-  flex: 1;
-  height: 25px;
-  background-color: rgba(0, 0, 0, 0.8);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-#energy-bar-inner {
-  height: 100%;
-  background-color: #1bbf85;
-  transition: width 0.3s ease;
-}
-
-#progress-bar-inner {
-  height: 100%;
-  background-color: #ffd700;
-  transition: width 0.3s ease;
-}
-
-.stats-container {
-  display: flex;
-  justify-content: space-between;
   flex-wrap: wrap;
-  margin-bottom: 20px;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 5px;
-  border-radius: 5px;
-  width: 75px;
-  background-color: rgba(0, 0, 0, 0.8);
-  font-size: 11px;
-  margin-top: 10px;
-  margin-right: 10px;
-}
-
-/* The HUD's carried-gear marker: shown only while the run carries pieces
-   (game/run.ts); the title text tells the player the exit keeps them. */
-.carried-marker {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 5px;
-  background-color: rgba(0, 0, 0, 0.8);
-  border: 1px solid #ffd700;
-  color: #ffd700;
-  font-size: 11px;
-  margin-top: 6px;
-}
-
-/* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
-   in the wallet panel on click. */
-.wallet-open,
-.wallet-actions {
-  color: white;
-  background-color: rgba(0, 0, 0, 0.8);
-  border: none;
-  padding: 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  margin-top: 5px;
-  width: 120px;
-}
-
-.wallet-open:disabled,
-.wallet-actions:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.wallet-status {
-  color: #cfd8dc;
-  background-color: rgba(0, 0, 0, 0.6);
-  font-size: 11px;
-  border-radius: 5px;
-  padding: 4px 6px;
-  margin-top: 5px;
-  max-width: 160px;
-}
-
-#stat-level, #stat-attack, #stat-defense, #stat-speed, #stat-consumption {
-  font-size: 2em;
+  gap: var(--space-8);
+  flex: none;
 }
 
 /* Custom styling for wallet adapter button */
@@ -1107,72 +1289,95 @@ body {
   height: 20px;
 }
 
-/* Phones: keep the HUD short (about 200 px) so the board stays the star. */
+/* The stat labels are always the short set — Atk, Def, Clock, Step
+   (design/components/HudBar, E52): one set at every width, so no long label
+   is ever cut off at 1280 or anywhere else. */
+
+/* Phones (design/components/HudBar, the is-phone layout): the bar takes the
+   full width inside the gutters and each row wraps as needed — portrait
+   beside the meters and the carried marker, then the four stats in a row,
+   then the tools. Nothing may overflow the 390 px viewport's gutters. */
 @media (max-width: 480px) {
-  #hud {
+  #hud.me-hud {
     flex-direction: column;
+    align-items: stretch;
+    padding: var(--space-8);
   }
 
-  .left-box {
-    flex-direction: row;
-    align-self: stretch;
-    padding: 6px;
-    margin: 4px 4px 0 4px;
-    width: auto;
-    height: 44px;
-    gap: 6px;
+  #hud.me-hud .me-hud-row {
+    gap: var(--space-8);
   }
 
-  .left-box .asset-image {
-    width: 44px;
-    height: 44px;
-    left: auto;
-    right: 0;
+  #hud.me-hud .me-hud-meters {
+    flex: 1;
+    min-width: 0;
   }
 
-  .right-box {
-    padding: 6px 8px 8px 8px;
+  #hud.me-hud .me-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-4);
   }
 
-  .bar-container {
-    font-size: 12px;
-    margin-bottom: 4px;
+  #hud.me-hud .me-stat {
+    padding: var(--space-4);
   }
 
-  .bar-container div:first-child {
-    margin-right: 6px;
-    width: 76px;
+  /* The tool row is its own full-width line (E61): with the 24 px icons
+     the buttons kept their own size and the row ran past the gutters at
+     403 and 390 px. Here it takes the whole line and the three buttons
+     share it equally, min-width 0 so they can actually shrink to it. */
+  #hud.me-hud .me-tools {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
-  #energy-bar, #progress-bar {
-    height: 14px;
+  #hud.me-hud .me-tools .me-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    gap: var(--space-4);
+    padding-left: 0;
+    padding-right: 0;
+    overflow: hidden;
   }
 
-  .stats-container {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
-    margin-bottom: 0;
+  /* The key hint is desktop only (design/components/HudBar): the phone
+     buttons keep the icon, the name and the count. */
+  #hud.me-hud .me-tool .me-tool-key {
+    display: none;
   }
 
-  .stat {
-    width: auto;
-    padding: 3px 2px;
-    margin-top: 0;
-    margin-right: 0;
+  /* E62 (the E61 review): "ANCHOR0" read as one word. The count keeps a
+     space-4 of its own after the name — on top of the button's gap, so
+     the two never touch whatever the button's width — and the display
+     face the desktop button gives it, so "Anchor 0" reads as two words
+     in the same voice. */
+  #hud.me-hud .me-tools .me-btn .me-count {
+    margin-left: var(--space-4);
+    font: 400 16px/24px var(--font-display);
   }
 
-  #stat-level, #stat-attack, #stat-defense, #stat-speed, #stat-consumption {
-    font-size: 1.3em;
+  /* E67 (the 403x900 review): at the 371 px bar "ANCHOR (" was cut off —
+     the name in the 16 px display face was wider than the third of the row
+     each button owns. The name drops to 11 px with no letter-spacing and
+     the count to 12 px, the gaps tighten to space-2, and the armed Cut's
+     "Choose a direction" line (always said in the button's aria-label)
+     leaves the narrow button — every button shows its icon, its name and
+     its count whole from 360 px to 430 px, with nothing clipped. */
+  #hud.me-hud .me-tools .me-btn {
+    gap: var(--space-2);
   }
-
-  /* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
-   in the wallet panel on click. */
-.wallet-open,
-.wallet-actions {
-    width: auto;
-    padding: 4px 8px;
-    margin-top: 0;
+  #hud.me-hud .me-tools .me-btn > span:not([class]) {
+    font: 400 11px/14px var(--font-display);
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  #hud.me-hud .me-tools .me-btn .me-count {
+    margin-left: var(--space-2);
+    font: 400 12px/14px var(--font-display);
+  }
+  #hud.me-hud .me-tools .me-btn .me-hint {
+    display: none;
   }
 }
 
@@ -1191,23 +1396,6 @@ body {
   font-size: calc(1em * var(--ui-scale, 1));
 }
 
-.game-over-message,
-.settings-panel {
-  font-size: calc(1em * var(--ui-scale, 1));
-}
-
-.overlay-title {
-  font-size: calc(28px * var(--ui-scale, 1));
-}
-
-.summary-line {
-  font-size: calc(16px * var(--ui-scale, 1));
-}
-
-.stat {
-  font-size: calc(11px * var(--ui-scale, 1));
-}
-
 /* Motion: the player's own ask, not only the operating system's. The drifting
    galaxy stands still, and nothing on the board may transition longer than
    150 ms (the shell also hands out only fades and pops when reduced). */
@@ -1219,6 +1407,26 @@ body {
 [data-motion="reduced"] #maze-container *,
 [data-motion="reduced"] #maze-container {
   transition-duration: 150ms !important;
+}
+
+/* The camera's slide is motion the reduced-motion player asked not to have:
+   the window jumps to keep the reptile centred, instantly. */
+[data-motion="reduced"] #maze .camera-move {
+  transition: none !important;
+}
+
+[data-motion="reduced"] .me-meter.is-low > i {
+  animation: none;
+}
+
+[data-motion="reduced"] .mark-incoming {
+  animation: none;
+  opacity: 0.15;
+}
+
+[data-motion="reduced"] .wall-outgoing {
+  animation: none;
+  opacity: 0.85;
 }
 
 /* Clear shapes (low vision and colour blindness): every entity the player
@@ -1233,18 +1441,14 @@ body {
   outline-offset: -1px;
 }
 
-[data-contrast="true"] .mark-open {
-  border-width: 4px;
+[data-contrast="true"] .mark-incoming {
+  animation: none;
+  opacity: 0.35;
 }
 
-[data-contrast="true"] .mark-close {
-  background-image: repeating-linear-gradient(
-    45deg,
-    #ffffff 0,
-    #ffffff 4px,
-    rgba(255, 255, 255, 0) 4px,
-    rgba(255, 255, 255, 0) 8px
-  );
+[data-contrast="true"] .wall-outgoing {
+  animation: none;
+  opacity: 0.65;
 }
 
 [data-contrast="true"] #maze::before {
@@ -1255,156 +1459,45 @@ body {
   background-blend-mode: multiply;
 }
 
-[data-contrast="true"] #hud {
+[data-contrast="true"] .me-panel {
   background-color: #000000;
   color: #ffffff;
 }
 
-[data-contrast="true"] .stat,
-[data-contrast="true"] .wallet-open,
-[data-contrast="true"] .wallet-actions,
-[data-contrast="true"] .game-over-message,
-[data-contrast="true"] .settings-panel,
-[data-contrast="true"] .feats-panel,
-[data-contrast="true"] .wardrobe-panel {
-  background-color: #000000;
+[data-contrast="true"] .me-summary dt {
   color: #ffffff;
 }
 
-[data-contrast="true"] .summary-label {
-  opacity: 1;
+/* The settings panel (components/Settings.tsx, design/components/Settings):
+   the rows are the me-field / me-range / me-check / me-radio / me-fieldset
+   parts on the scrim; only the slider label's column width lives here. */
+.settings-label {
+  flex: none;
+  width: 120px;
 }
 
-/* The settings screen (components/Settings.tsx): a panel in the same family
-   as the pause sheet, with one row per SETTING_ROWS entry. */
-.settings-panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 14px;
-  background-color: rgba(8, 10, 16, 0.94);
-  color: white;
-  text-align: center;
-  z-index: 3;
-  overflow-y: auto;
-  padding: 16px;
-}
-.settings-panel p {
-  margin: 0;
-}
-.settings-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: min(320px, 84%);
-  max-width: 84%;
-  text-align: left;
-}
-.settings-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: calc(15px * var(--ui-scale, 1));
-}
-.settings-row label,
-.settings-radio {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-.settings-row label:first-child {
-  min-width: 8em;
-}
-.settings-choice {
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  padding: 6px 10px;
-  margin: 0;
-}
-.settings-choice legend {
-  padding: 0 4px;
-}
-.settings-row input[type="range"] {
-  flex: 1;
-  accent-color: #ffd700;
-}
-.settings-row input[type="checkbox"],
-.settings-row input[type="radio"] {
-  width: 18px;
-  height: 18px;
-  accent-color: #ffd700;
-}
-.settings-value {
-  min-width: 3.5em;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.settings-panel .overlay-buttons button {
-  font: inherit;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.settings-panel .overlay-buttons button:hover,
-.settings-panel .overlay-buttons button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
-}
-
-/* The feats screen (components/Feats.tsx): a panel in the same family as the
-   settings sheet, one row per feat with its name, its line and the word
-   "Earned" or "Locked" — the state reads by word, the gold only repeats it. */
-.feats-panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 14px;
-  background-color: rgba(8, 10, 16, 0.94);
-  color: white;
-  text-align: center;
-  z-index: 3;
-  overflow-y: auto;
-  padding: 16px;
-  font-size: calc(1em * var(--ui-scale, 1));
-}
-.feats-panel p {
-  margin: 0;
-}
+/* The feats panel (components/Feats.tsx): one row per feat with its name, its
+   line and the word "Earned" or "Locked" — the state reads by word, the gold
+   only repeats it. */
 .feats-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: min(320px, 84%);
-  max-width: 84%;
-  text-align: left;
+  gap: var(--space-8);
 }
 .feats-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: calc(15px * var(--ui-scale, 1));
+  gap: var(--space-8);
+  border: var(--border-thin) solid var(--line);
+  background: var(--surface-raised);
+  padding: var(--space-8) var(--space-12);
+  text-align: left;
 }
 .feats-row.earned {
-  border-color: rgba(255, 215, 0, 0.7);
+  border-color: var(--gold);
 }
 .feats-name {
   min-width: 8em;
@@ -1412,31 +1505,18 @@ body {
 }
 .feats-text {
   flex: 1;
-  opacity: 0.85;
+  color: var(--ink-muted);
 }
 .feats-state {
   min-width: 4.5em;
   text-align: right;
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: calc(12px * var(--ui-scale, 1));
+  color: var(--ink-dim);
 }
 .feats-row.earned .feats-state {
-  color: #ffd700;
-}
-.feats-panel .overlay-buttons button {
-  font: inherit;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.feats-panel .overlay-buttons button:hover,
-.feats-panel .overlay-buttons button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+  color: var(--gold);
 }
 
 /* Screen-reader-only text: the HUD's polite announcements live here, on the
@@ -1454,109 +1534,44 @@ body {
   border: 0;
 }
 
-/* The Controls screen (components/Controls.tsx): the settings-panel family,
-   with one row per action — its label and the two key buttons beside it. */
-.controls-rows {
-  gap: 8px;
+/* The Controls panel (components/Controls.tsx): me-field rows with the
+   action's label and the two me-btn me-btn-sm key buttons beside it; only the
+   column widths live here. */
+.controls-row {
+  gap: var(--space-8);
 }
-.controls-row .controls-label {
+.controls-label {
   flex: 1;
   min-width: 120px;
 }
 .controls-key {
   min-width: 96px;
-  padding: 6px 10px;
-  background-color: rgba(255, 255, 255, 0.08);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 8px;
-  font: inherit;
-  cursor: pointer;
-}
-.controls-key:hover,
-.controls-key:focus-visible {
-  background-color: rgba(255, 255, 255, 0.22);
-  outline: 2px solid #ffd34d;
 }
 
 /* --- Touch controls: the optional D-pad and the pause button ----------------------- */
 
-/* Four 56 px buttons in a cross, below the board (settings.touch === "dpad"). */
-.dpad {
-  display: grid;
-  grid-template-columns: repeat(3, 56px);
-  grid-template-rows: repeat(3, 56px);
-  gap: 6px;
-  margin: 8px auto 0;
-  justify-content: center;
+/* The cross (design/components/DPad) is the column's last item, below the
+   HUD and centred; the keys belong to the game: no pan, zoom, text selection
+   or long-press menu. */
+.me-dpad {
+  margin: var(--space-8) auto 0;
 }
-
-.dpad-btn {
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
-  min-height: 56px;
-  font-size: 1.25rem;
-  line-height: 1;
-  color: white;
-  background: rgba(8, 65, 44, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 10px;
-  /* A held button belongs to the game: no pan, zoom, text selection or long-press menu. */
-  touch-action: none;
+.me-dpad .me-btn {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
 
-.dpad-btn:active {
-  background: rgba(64, 21, 79, 0.85);
-}
-
-.dpad-up    { grid-column: 2; grid-row: 1; }
-.dpad-left  { grid-column: 1; grid-row: 2; }
-.dpad-right { grid-column: 3; grid-row: 2; }
-.dpad-down  { grid-column: 2; grid-row: 3; }
-
-/* The touch pause button: top right of the board, clear of the notch. */
+/* The touch pause button: a 48 px me-btn me-btn-icon with the CSS pause mark,
+   top right of the board, clear of the notch; the shell hides it while any
+   panel is open. */
 .pause-button {
   position: absolute;
   /* The body already pads with the safe-area insets; this rides inside them. */
-  top: 8px;
-  right: 8px;
-  min-width: 44px;
-  min-height: 44px;
-  width: 44px;
-  height: 44px;
-  font-size: 1.1rem;
-  color: white;
-  background: rgba(8, 65, 44, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 10px;
+  top: var(--space-8);
+  right: var(--space-8);
   z-index: 20;
   touch-action: manipulation;
-}
-
-/* The armed Cut: the toolbar button glows gold and carries its hint while
-   the shell waits for the direction (lib/GameState.ts, components/ToolBar.tsx). */
-.tool-button.tool-armed {
-  border-color: #ffd700;
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.75);
-  animation: tool-armed-pulse 900ms ease-in-out infinite;
-}
-
-.tool-armed-hint {
-  font-size: calc(0.7em * var(--ui-scale, 1));
-  color: #ffd700;
-}
-
-@keyframes tool-armed-pulse {
-  0%, 100% {
-    box-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 14px rgba(255, 215, 0, 0.9);
-  }
 }
 
 /* The wall a Cut opened: a brief gold flash on that tile of the wall grid
@@ -1583,153 +1598,255 @@ body {
   }
 }
 
-/* The wardrobe (components/Wardrobe.tsx): a panel in the same family as the
-   feats sheet. The preview stacks the trait layers of spriteLayers on top of
-   each other, blown up from the 48 px art and kept pixel-crisp; one row per
-   layer shows the layer's name, a previous button, the current trait's name
-   and a next button. Rows take focus so the arrow keys can cycle them. */
-.wardrobe-panel {
-  position: absolute;
+/* The wardrobe (components/Wardrobe.tsx, design/components/Wardrobe): the
+   panel is a me-panel on the scrim and the parts are the design's me-tabs,
+   me-grid, me-trait, me-sprite, me-tag and me-pips from design/components.css.
+   Only what the sheet cannot say lives here: the scrim that covers the whole
+   viewport so the panel can reach the design's 720 px beside the board (the
+   board is only ~500 px, and a panel as wide as the board showed one card per
+   row), the two-column layout with its full-panel-height grid column and
+   sticky preview (E62), the stage sizes with their phone drops, the
+   three-card phone grid and the locked hint's ink-dim.
+   E64: the panel never runs past the screen and nothing in it scrolls. The
+   scrim pads the viewport by the safe-area insets plus the 16 px gutters and
+   clips; the panel caps at that box; the grid shows one page of whole cards
+   (the paging lives in components/Wardrobe.tsx and game/pages.ts) above the
+   Prev / "Page 2 of 4" / Next row, and the old inner scroll and its fade cue
+   are gone. */
+#maze-container .me-scrim.wardrobe-scrim {
+  /* Fixed to the viewport, not the board: the panel gets the whole screen to
+     be 720 px wide on, and it rides above the touch controls. */
+  position: fixed;
   inset: 0;
+  z-index: 30;
+  /* E64: the panel lives between the safe-area insets, inside the 16 px
+     gutters, and nothing scrolls — the base scrim centres it, the padding
+     holds it in, and the overflow clips whatever a mis-measured page would
+     otherwise push out. */
+  box-sizing: border-box;
+  padding:
+    calc(env(safe-area-inset-top) + var(--space-16))
+    calc(env(safe-area-inset-right) + var(--space-16))
+    calc(env(safe-area-inset-bottom) + var(--space-16))
+    calc(env(safe-area-inset-left) + var(--space-16));
+  overflow: hidden;
+}
+#maze-container .me-scrim > .me-panel.wardrobe-panel {
+  max-width: min(720px, 100%);
+  /* E64: the panel is the scrim's content box at most — the screen between
+     the safe-area insets inside the gutters — so the title, preview, tabs,
+     cards, page controls and Back all fit with nothing cut off. */
+  max-height: 100%;
+  /* The panel fills the scrim's height, so the grid's flex row has real room
+     to measure: with a content height the grid got its minimum and paged one
+     row at a time. */
+  height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex-direction: column;
-  gap: 10px;
-  background-color: rgba(8, 10, 16, 0.94);
-  color: white;
-  text-align: center;
-  z-index: 3;
-  overflow-y: auto;
-  padding: 16px;
-  font-size: calc(1em * var(--ui-scale, 1));
 }
-.wardrobe-panel p {
-  margin: 0;
+.wardrobe-panel .me-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
 }
-.wardrobe-preview {
-  position: relative;
+.wardrobe-layout {
+  display: grid;
+  grid-template-columns: 284px minmax(0, 1fr);
+  /* E62: three rows, and the grid column's row is exactly the height the
+     panel has left (an auto row would size itself to the cards and the
+     column would overflow the panel). Rows two and three are the hint and
+     the Back button, under the preview. */
+  grid-template-rows: minmax(min-content, 1fr) auto auto;
+  gap: var(--space-16);
+  /* The body's flex column (E61): the layout takes the body's height and
+     can shrink to it. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.wardrobe-layout > .me-col {
+  min-width: 0;
+  min-height: 0;
+}
+/* The grid column is a flex column (E64): the tabs and the page row keep
+   their height and the grid's wrapper takes all that is left, so the grid's
+   box is exactly the space the page of cards must fill. */
+.wardrobe-grid-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.wardrobe-stage {
+  align-items: stretch;
+}
+/* The gold progress meter keeps its natural 16 px height: in this column a
+   growing flex item would stretch it down the whole stage. */
+.wardrobe-stage .me-meter {
   flex: none;
 }
-.wardrobe-preview img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+.wardrobe-pfp {
+  --s: 144px;
+}
+.wardrobe-runner {
+  --s: 144px;
+}
+/* The locked card's hint is disabled text, not a tip: ink-dim (design/README,
+   Colour: "ink-dim for disabled and locked"). */
+.me-trait.is-locked .me-hint {
+  color: var(--ink-dim);
+}
+/* The grid shows one page of whole cards (E64): the wrapper takes the height
+   the column has left, the grid fills it and clips (nothing scrolls — the
+   E61 inner scroll and its fade cue are gone), and the cards that do not fit
+   wait on the next page. */
+.wardrobe-grid-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.wardrobe-grid {
   height: 100%;
-  image-rendering: pixelated;
+  overflow: hidden;
+  /* E67: the cards shrink so a page holds more of them — 104 px wide with
+     the 80 px art (five times the 16 px masters). The desktop tracks match
+     the card exactly so the grid's own columns and the measured page agree;
+     the phone grid below keeps its three equal tracks. */
+  grid-template-columns: repeat(auto-fill, 104px);
+  justify-items: center;
+}
+.wardrobe-grid .me-trait {
+  width: 104px;
+}
+.wardrobe-grid .me-trait .me-sprite {
+  /* The card art: 80 px whole-number scale, whatever the inline --s says. */
+  width: 80px;
+  height: 80px;
+}
+.wardrobe-grid .me-trait-name {
+  /* The longest trait name (COSMONAUT) reads on one line inside 84 px. */
+  font: 400 11px/16px var(--font-display);
+}
+/* The trait count and its bar share one line (E67), so the preview column
+   costs the grid page one line instead of two. */
+.wardrobe-count-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+.wardrobe-count-row .me-display-sm {
+  flex: none;
+  white-space: nowrap;
+}
+.wardrobe-stage .wardrobe-count-row .me-meter {
+  flex: 1 1 auto;
+}
+/* The hidden copy of the layer's whole list (components/Wardrobe.tsx): the
+   same grid at the same width with every card laid out, so the ResizeObserver
+   measurement can read the card's box — the tallest card's, locked hints
+   included — and divide the grid's box by it. */
+.wardrobe-grid-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
   pointer-events: none;
 }
-.wardrobe-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: min(320px, 84%);
-  max-width: 84%;
-}
-.wardrobe-row {
+/* The page controls under the grid (E64): Prev and Next are design me-btns
+   (48 px touch targets) that disable at the ends, and the page of the whole
+   reads out between them. */
+.wardrobe-pager {
   display: flex;
   align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: calc(15px * var(--ui-scale, 1));
+  justify-content: space-between;
+  gap: var(--space-8);
+  flex: none;
 }
-.wardrobe-row:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+@media (min-width: 641px) {
+  /* Desktop (E62, the E61 review): the grid column spans the panel's whole
+     height — the hint and the Back button sit under the preview, in the
+     left column that used to stay empty below it — and the preview rides
+     sticky at the top of that column. */
+  .wardrobe-panel {
+    /* E67: the panel takes its full 720 px on the desktop, so the grid
+       column beside the preview is wide enough for four 104 px cards. */
+    width: min(720px, 100%);
+  }
+  .wardrobe-layout {
+    /* The preview column tightens to 220 px (its duo at 80 px sprites
+       fits inside) and the grid column takes the rest. */
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .wardrobe-stage {
+    grid-column: 1;
+    grid-row: 1;
+    position: sticky;
+    top: 0;
+    align-self: start;
+  }
+  .wardrobe-stage .me-sprite {
+    /* Both renditions of the look at 80 px beside each other. */
+    width: 80px;
+    height: 80px;
+  }
+  .wardrobe-grid-col {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+  .wardrobe-hint {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .wardrobe-actions {
+    grid-column: 1;
+    grid-row: 3;
+  }
 }
-.wardrobe-layer {
-  min-width: 5em;
-  text-align: left;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: calc(12px * var(--ui-scale, 1));
-}
-.wardrobe-trait {
-  flex: 1;
-  text-align: center;
-}
-.wardrobe-row button {
-  font: inherit;
-  padding: 4px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.wardrobe-row button:hover,
-.wardrobe-row button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
-}
-.wardrobe-count {
-  font-weight: 700;
-}
-.wardrobe-hint {
-  opacity: 0.85;
-  font-size: calc(13px * var(--ui-scale, 1));
-}
-.wardrobe-panel .overlay-buttons button {
-  font: inherit;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.wardrobe-panel .overlay-buttons button:hover,
-.wardrobe-panel .overlay-buttons button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
-}
-
-/* --- Status pages (app/error.tsx, app/not-found.tsx) ------------------------
-   The crash and 404 routes render inside the same body, so they inherit the
-   game's gradient and centring; this only shapes the panel and its button. */
-.status-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin: 1rem;
-  max-width: 420px;
-  text-align: center;
-}
-.status-title {
-  margin: 0;
-  color: #ffd700;
-  font-size: 26px;
-}
-.status-line {
-  margin: 0;
-  opacity: 0.85;
-}
-.status-digest {
-  margin: 0;
-  font-size: 13px;
-  opacity: 0.7;
-}
-.status-digest code {
-  color: #1bbf85;
-  word-break: break-all;
-}
-.status-button,
-.status-button:visited {
-  font: inherit;
-  font-size: 18px;
-  padding: 10px 24px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  text-decoration: none;
-  cursor: pointer;
-}
-.status-button:hover,
-.status-button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+@media (max-width: 640px) {
+  /* Phones: the stage goes above the tabs and the grid is three cards wide
+     (E67: both preview sprites at 64 px, cards 104 px with 80 px art — six
+     a page). On desktop the grid (auto-fill of 104 px cards) fills the
+     720 px panel's grid column with four per row. */
+  .wardrobe-layout {
+    grid-template-columns: minmax(0, 1fr);
+    /* E64: one column, items in document order — stage, then the grid
+       column taking what is left, then the hint and Back — and the panel
+       still never passes the screen: the grid page turns instead of the
+       panel scrolling. */
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+  .wardrobe-stage {
+    order: -1;
+  }
+  /* E67 (the 403x900 review): the preview goes compact — the two sprites
+     side by side at 64 px, less padding in the stagebox, the trait count
+     and its bar on one line — and the layout gaps tighten to space-8, so
+     the grid keeps enough height for two rows of 80 px cards: six a page
+     at 403x900 and 390x844. The panel's title and body padding ride in
+     with it; the tabs shrink to one line. */
+  .wardrobe-stage .me-sprite {
+    width: 64px;
+    height: 64px;
+  }
+  .wardrobe-stage .me-stagebox {
+    padding: var(--space-8);
+  }
+  .wardrobe-panel .me-panel-title {
+    font: 700 24px/32px var(--font-display);
+  }
+  .wardrobe-panel .me-panel-body {
+    padding: var(--space-8);
+  }
+  .wardrobe-layout {
+    gap: var(--space-8);
+  }
+  .wardrobe-panel .me-tab {
+    padding: 0 var(--space-4);
+    font: 400 14px/24px var(--font-display);
+  }
+  .wardrobe-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-items: center;
+  }
 }

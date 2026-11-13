@@ -1,0 +1,87 @@
+<!-- @dsCard group="Wallet" height=900 subtitle="Review the changes, then: approve, verifying, saving, saved, failed" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SaveToNft</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .save { width: 400px; max-width: 100%; }
+  .looks { display: flex; align-items: center; justify-content: center; gap: var(--space-16); }
+  .mini { width: 296px; }
+</style>
+</head>
+<body>
+<div class="me-stage">
+  <section class="me-panel save" role="dialog" aria-label="Save progress to my NFT">
+    <h2 class="me-panel-title is-sm">Save progress to my NFT</h2>
+    <div class="me-panel-body">
+      <div class="looks">
+        <div class="me-col" style="align-items:center">
+          <div class="me-stagebox"><div class="me-sprite" role="img" aria-label="On chain now: Green body, Regular eye">
+            <img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/05fac2229711e6dce87ceb4a58ca46c8" alt="">
+          </div></div>
+          <span class="me-label">On chain now</span>
+        </div>
+        <i class="me-arrow me-gold" aria-hidden="true"></i>
+        <div class="me-col" style="align-items:center">
+          <div class="me-stagebox" style="border-color:var(--gold)"><div class="me-sprite" role="img" aria-label="After saving: Green body, Regular eye, Crown, Wings">
+            <img src="/_blob/377c3eb8051089f297465a4ab200b861" alt=""><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/05fac2229711e6dce87ceb4a58ca46c8" alt=""><img src="/_blob/e06fcbe170a28861a2d7b364b31d7c14" alt="">
+          </div></div>
+          <span class="me-label me-gold">After saving</span>
+        </div>
+      </div>
+      <dl class="me-changes">
+        <dt>Head</dt><dd class="is-old">None</dd><i class="me-arrow me-gold"></i><dd class="is-new">Crown</dd>
+        <dt>Back</dt><dd class="is-old">None</dd><i class="me-arrow me-gold"></i><dd class="is-new">Wings</dd>
+        <dt>High score</dt><dd class="is-old">980</dd><i class="me-arrow me-gold"></i><dd class="is-new">1,240</dd>
+        <dt>Best depth</dt><dd class="is-old">7</dd><i class="me-arrow me-gold"></i><dd class="is-new">9</dd>
+        <dt>Feats</dt><dd class="is-old">5/12</dd><i class="me-arrow me-gold"></i><dd class="is-new">7/12</dd>
+        <dt>Traits unlocked</dt><dd class="is-old">11</dd><i class="me-arrow me-gold"></i><dd class="is-new">14</dd>
+        <dt>Attack</dt><dd class="is-same">1.2</dd><span></span><dd class="is-same">No change</dd>
+      </dl>
+      <p class="me-hint">Writes your loadout and stats together. Your wallet pays the network fee.</p>
+      <div class="me-panel-actions">
+        <button class="me-btn">Not now</button>
+        <button class="me-btn me-btn-gold">Save to my NFT</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="me-col">
+    <p class="me-caption">After the button: one state at a time</p>
+
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-now">Approve</li><li>Verify</li><li>Save</li></ol>
+      <p class="me-status is-busy" role="status">Approve in your wallet</p>
+      <button class="me-btn me-btn-block" disabled>Waiting for wallet</button>
+    </div>
+
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-done">Approve</li><li class="is-now">Verify</li><li>Save</li></ol>
+      <p class="me-status is-busy" role="status">Verifying your run</p>
+      <button class="me-btn me-btn-block" disabled>Verifying</button>
+    </div>
+
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-done">Approve</li><li class="is-done">Verify</li><li class="is-now">Save</li></ol>
+      <p class="me-status is-busy" role="status">Saving to your NFT</p>
+      <button class="me-btn me-btn-block" disabled>Saving</button>
+    </div>
+
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-done">Approve</li><li class="is-done">Verify</li><li class="is-done">Save</li></ol>
+      <p class="me-status is-ok" role="status">Saved. Your reptile carries this progress.</p>
+      <button class="me-btn me-btn-primary me-btn-block">Done</button>
+    </div>
+
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-done">Approve</li><li class="is-bad">Verify</li><li>Save</li></ol>
+      <p class="me-status is-bad" role="alert">Save failed. Nothing changed.</p>
+      <p class="me-hint">The run could not be verified.</p>
+      <div class="me-row"><button class="me-btn me-btn-sm">Close</button><button class="me-btn me-btn-gold me-btn-sm">Try again</button></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

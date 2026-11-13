@@ -437,3 +437,591 @@
   in the held direction (no operations returned), so after a 300 px slide a 30 px perpendicular
   flick turns instead of having to beat the whole horizontal run from the original anchor; the
   class doc comment says so and `game/swipe.test.ts` pins the long-slide-then-turn sequence.
+- E42: Put the design system's foundations on every route: `app/layout.tsx` now imports, in order,
+  the fontsource CSS for Silkscreen (400, 700) and Atkinson Hyperlegible (400, 700),
+  `design/tokens.css`, `design/components.css` and `styles/globals.css`, so the 404 and error routes
+  are styled too (the globals import left `app/page.tsx`); the fonts come from the
+  `@fontsource/silkscreen` and `@fontsource/atkinson-hyperlegible` packages, never from Google
+  Fonts. `styles/globals.css` drops the green-to-purple gradient: `html, body` now sit on the flat
+  `var(--void)` ground with `var(--ink)` text in `var(--font-body)`, and every `img` renders with
+  `image-rendering: pixelated` so sprites and tiles stay crisp; all other selectors wait for their
+  screen-by-screen cards. `app/not-found.tsx` and `app/error.tsx` are rebuilt on the StatusPage
+  pattern (`me-statuspage`, `me-btn me-btn-primary`, a `.me-statuspage-strip` of three 48px
+  sprites): "404 / No corridor here / That page is not in this maze." with the two wall tiles and
+  the exit, and "The maze tangled itself" with an enemy between walls, keeping the digest line and
+  the "Try again" button that calls `reset()`. The theme colour stays `#08412c`.
+
+- E43: moved the controls and overlays outside the board onto the design system's
+  parts and deleted the old copies from `styles/globals.css`. Every button in
+  `components/Menu.tsx`, `Overlay.tsx`, `Settings.tsx`, `HowTo.tsx`, `Feats.tsx`,
+  `ToolBar.tsx` and `Controls.tsx` is a `me-btn` (Play, Resume, Retry and the
+  panels' Back are the one primary per screen, Reset progress is
+  `me-btn-danger`, the tool buttons carry name, key and count as text with no
+  SVG icons until pixel tool sprites exist); the pause, game-over, settings,
+  controls, how-to and feats sheets are one `me-panel` (with `me-panel-title`,
+  `me-panel-body`, `me-panel-actions`, `me-summary` and `me-divider`) centred on
+  `me-scrim`, at most 480px wide, scrolling inside with the scrollbar hidden;
+  the title menu is a `me-menu` with the `me-mode` picker below the painting's
+  own band, never over its lettering; the D-pad is `me-dpad` with `me-btn` keys
+  and CSS `me-arrow`s; the touch pause button is a `me-btn me-btn-icon` with
+  `me-pause-bars` and the shell hides it, and the D-pad, whenever a panel
+  (pause, game over, settings, controls, how-to, feats, wardrobe) is open; the
+  entanglement banner and the floating event line follow the Toast pattern
+  (`surface` on a `line`/gold border, `drop-hard`, display type, no blur).
+  Removed selectors: `.title-gradient`, `.menu-buttons` (+ its `button` and its
+  `:hover`/`:focus-visible`), `.menu-best`, `.mode-row` (+ `:focus-visible`),
+  `.mode-picker` (+ its `button` and its `:hover`/`:focus-visible`), `.mode-name`,
+  `.mode-blurb`, `.mode-best`, `.howto-panel`, `.game-over-message` (+ its `p`),
+  `.summary`, `.summary-line`, `.summary-label`, `.summary-value`,
+  `.overlay-buttons button` (+ its `:hover`/`:focus-visible`), `.settings-panel`
+  (+ its `p`), `.settings-rows`, `.settings-row` (+ its `label`, its
+  `label:first-child`, its `input[type="range"]` and its
+  `input[type="checkbox"]`/`[type="radio"]`), `.settings-radio`,
+  `.settings-toggle`, `.settings-choice` (+ its `legend`), `.settings-value`,
+  `.settings-panel .overlay-buttons button` (+ its `:hover`/`:focus-visible`),
+  `.feats-panel` (+ its `p`), `.feats-panel .overlay-buttons button` (+ its
+  `:hover`/`:focus-visible`), `.toolbar`, `.tool-button` (+ `:disabled`),
+  `.tool-icon`, `.tool-name`, `.tool-key`, `.tool-count`, `.tool-anchored`,
+  `.tool-button.tool-armed`, `.tool-armed-hint`, `@keyframes tool-armed-pulse`,
+  `.dpad`, `.dpad-btn` (+ `:active`) and `.dpad-up`/`.dpad-left`/`.dpad-right`/
+  `.dpad-down`. Kept for the wardrobe, the later card that still draws its own
+  sheet: `.overlay-title`, `.overlay-buttons` and the `.wardrobe-*` family; the
+  HUD, the board, the wallet box and the countdown keep their own selectors, and
+  `.settings-label`, `.controls-row`, `.controls-label`, `.controls-key`,
+  `.howto-list`, `.howto-line`, `.howto-sprite`, `.howto-text`, `.feats-list`,
+  `.feats-row`, `.feats-name`, `.feats-text`, `.feats-state`, `.me-dpad`
+  (placement), `.pause-button` (placement), `.title-menu`, `.title-art`,
+  `.level-banner` and `.message` stay as token-based layout or pattern rules.
+
+- E44: made the HUD the design's `HudBar` (design/components/HudBar).
+  `game/sprite.ts` gained the pure `pfpLayers(look)` — the 16-grid portrait
+  masters `/images/nft/<Layer>/<Trait>pfp.png` in draw order, `None` skipped
+  and unknown traits falling back exactly as the runner does — tested in
+  `game/sprite.test.ts` (all five layers, a skipped `None`, the fallback, and
+  every pfp file on disk). `game/hud.ts` gives the model an `energyLow` flag
+  (game/fx.ts lowEnergy over the bar percentage, compared by sameHudModel) and
+  `energyText`/`scoreText` are now plain number texts the HUD pairs with its
+  own labels. `components/Hud.tsx` renders `#hud` as one wrapping `me-hud` row
+  at the board's width: a `me-portrait` stacking the current look's
+  `pfpLayers` as pixelated `<img>` layers at 48px (the PFP, never the runner,
+  built locally so it always matches the loadout), the energy and score meters
+  as `me-meter`s (`--energy` teal, score `is-gold`, numbers in the display
+  face), the four stats as `me-stat`s with the 24px gear sprites — gloves
+  attack, shield defense, speed clock, boots step cost — and no emoji, the
+  `me-carried` marker and the tool row. Low energy now reaches the bar itself:
+  the meter takes `is-low`, the label and number turn to danger and the label
+  reads "Energy low", and the breathe pulse moved from the unreachable
+  `.low-energy #energy-bar-inner` to `.me-meter.is-low > i` (stilled under
+  reduced motion). `components/WalletBox.tsx` no longer shows the remote NFT
+  image in the HUD; a loaded reptile's look feeds the same portrait through
+  the shell. `styles/globals.css` deleted the unused old HUD selectors (`#hud`
+  box, `.asset-image`, `.right-box`, `.bar-container`, `#energy-bar`/
+  `#progress-bar` and their inners, `.stats-container`, `.stat`,
+  `.carried-marker`, `#stat-*`), restyled `.left-box` as the wallet box inside
+  the row, and stacks the HUD below 480px on the `is-phone` pattern.
+
+- E45: put the board on the design's pixel grid. `game/layout.ts` now raises
+  `HEIGHT_SHARE` to 0.72 (the HUD has been one row since E44) and exports the
+  art-grid size `PIXEL = 24`: `boardLayout` still floors the cell to whole
+  pixels, then snaps it down to the largest multiple of 24 that fits whenever
+  it can afford one, so a 1280x800 screen draws the first level's tiles at
+  exactly 24 px; below 24 the plain whole-pixel cell stands, keeping small
+  phones and the deep levels playable, and `blobRect` is untouched.
+  `game/layout.test.ts` covers the new rule (24 px at 1280x800 with 21 tiles,
+  the kept 17 px cell at 390x844 with 21 tiles, multiples of 24 whenever the
+  cell reaches it). `styles/globals.css` dropped the Brute's 1.15 and the
+  Warden's 1.3 `scale` — every enemy now draws at the cell size, the heavier
+  kinds still told apart by their hard rings until their own sprites exist —
+  and cleared the last blur from the board: the Knot keeps its gold ring, teal
+  centre (both tokens now) and pulse without its radial gradient or `0 0 10px`
+  glow, the frozen Knot keeps its dashed ring, and the stalker's marker and
+  intent chevron lost their 1 px drop shadows. Tiles, entities and sprites all
+  already render with `image-rendering: pixelated`; the galaxy drift and the
+  reduced-motion and contrast rules are unchanged.
+
+- E46: rebuilt the wardrobe as the design's trait grid and the wallet box on
+  the WalletBox states. `components/Wardrobe.tsx` is now a `me-panel` on the
+  scrim with `me-tabs` per layer and a `me-grid` of TraitCards: each card
+  stacks the trait's PFP layer (from `pfpLayers`) over a ghost of the body,
+  names it, and shows its state — `On` when equipped, the layer label when
+  available, `New` for a trait unlocked since the panel was last closed, and
+  `Locked` with the unlocking feat's name under a silhouette; feat-granted
+  traits carry the three `is-feat` pips, free ones the `is-found` pip. The
+  equipped card is `is-equipped`, choosing any other available card equips it
+  through `setWardrobeLook`, and locked cards stay out of the button order but
+  answer Tab so their hint can be read. Above the grid the current look shows
+  twice at 144 px: the stacked PFP as "Your NFT" and the framed runner as "In
+  the maze", with the "n of 22 traits" count and a gold meter over them. The
+  New markers live in the save's existing `seen` record as
+  `trait:<Layer>:<Trait>` keys: `GameState.openWardrobe` snapshots the
+  wearable cards the save has not seen into the new `newTraits` snapshot
+  field and `GameState.markTraitsSeen` marks them when the panel closes,
+  `game/save.ts` now sanitizes `seen` to true flags, and
+  `game/save.test.ts` proves old saves without any marker still load.
+  `components/WalletBox.tsx` follows design/components/WalletBox: one
+  `me-wallet` box with the connect button, a disabled "Check assets" and a
+  busy `me-status` while looking up, the found reptile as a 48 px PFP with
+  "Reptile #<n>" (the number read from the asset's name) and the shortened
+  address, "No Entangled Reptile in this wallet" when the list holds none,
+  and "Could not reach the network" with a Try again button on failure. In
+  `lib/reptile.ts` a reply carrying a JSON-RPC `error`, or no `result` at
+  all, is now that network failure instead of an empty wallet, covered by two
+  new cases in `lib/reptile.test.ts`. `styles/globals.css` lost the old
+  `.wardrobe-*` rows, `.wallet-actions`, `.wallet-status` and the unused
+  `.overlay-title`/`.overlay-buttons`, and gained only the wardrobe sheet the
+  design parts cannot say: the 720 px panel, the two-column layout, the
+  stage sizes with their phone drops and the three-card phone grid. No chain
+  feature was added: saving and minting come later.
+
+- E47: fixed what the pre-merge review of E42-E46 saw at 1280x800 and 390x844.
+  `styles/globals.css`: the wardrobe scrim (`wardrobe-scrim` in
+  `components/Wardrobe.tsx`) is now `position: fixed; inset: 0` above the
+  board, so the panel reaches the design's 720 px beside it and the design's
+  `me-grid` fills several TraitCards per row instead of one card per row over
+  a 1650 px scroll; a taller-than-the-phone panel scrolls inside the scrim on
+  auto margins, and the stage's gold meter is `flex: none`, keeping its 16 px
+  height instead of stretching down the column. `components/Hud.tsx` dropped
+  the `me-row hud-top-row` wrapper: portrait, wallet button, meters, stats,
+  carried marker and tools are direct children of the one wrapping `me-hud`
+  row at every viewport width, and each stat label now carries both words
+  (`hud-label-full` / `hud-label-short`) with the phone media query showing
+  the HudBar's short Atk, Def, Clock and Step, so nothing runs off the edge
+  at 390 px. `components/Menu.tsx` focuses the first menu button with
+  `focus({ preventScroll: true })`, so the page stays at the top, the title
+  painting keeps its whole band and the menu sits below it; the touch pause
+  button (`app/page.tsx`) now stands down on the title and the countdown as it
+  already did on every panel. The leftovers went too: `#maze-container`'s top
+  corners are square, the closed wallet button in `components/WalletGate.tsx`
+  is a `me-btn` (its `.wallet-open` sheet and the unused `.status-*` rules
+  left `styles/globals.css`), and the New tag tells the truth:
+  `lib/GameState.ts` only marks feat-unlocked traits as new (free traits never
+  are), and `loadSave` in `game/save.ts` seeds the seen markers for every
+  trait a marker-less old save's feats already unlocked, so such a save loads
+  as already seen, all covered by the wardrobe cases in `game/save.test.ts`.
+
+- E48: brought the galaxy's zoom drift back behind the board. `#maze::before`
+  is now a 13-board layer (inset: -600%) tiled with one picture every 6 boards
+  (background-size: 46.154%), and `@keyframes moveBackground` halves that to 3
+  boards while panning 2 boards left and 1 board up over the same 45s
+  ease-in-out alternate — the pre-E38 600% -> 300% zoom with its ~1000 x 500 px
+  drift, scaled to the board, by transform only; `transform-origin` sits on the
+  board's top-left corner where the old background-position anchored the zoom,
+  and `#maze` gained `overflow: hidden` so the oversized layer never shows
+  outside the board. Reduced motion and high contrast still stop and dim it.
+
+- E49: finished the pre-merge design review at 1280x800 and 390x844. The HUD
+  no longer sizes to the board alone: `styles/globals.css` gives `#hud` the
+  larger of the board's width and 720px, never past the viewport minus the
+  16px gutters, centred under the board (the rule wins over sizeBoard's
+  inline width with `!important`), and `components/Hud.tsx` now renders two
+  `me-hud-row` rows — row 1 portrait, wallet, meters and the carried marker,
+  row 2 the four stats and the tools — so desktop is at most two rows and a
+  390px phone takes the full width inside the gutters, wrapping without
+  overflow. The galaxy shed its 13-board layer: `#maze::before` is `inset: 0`
+  behind the tiles with `will-change` and `contain: paint`, and
+  `@keyframes moveBackground` animates the original way again —
+  `background-size` 600% -> 300% and `background-position` 0 0 ->
+  -1000px -500px, 45s ease-in-out infinite alternate; reduced motion and
+  high contrast still stop and dim it. The title menu fits below the painting
+  at 1280x800: a shorter art band, tighter margins and a two-column button
+  grid (Play spans both), and where it still must scroll `components/Menu.tsx`
+  fades in a "More" hint at the bottom edge until the last entry is in view.
+  And the wardrobe's "New" tag tells the truth for feats earned before its
+  first opening: `game/save.ts` no longer re-seeds the seen markers on every
+  read — `seedSeenOnce` records the then-unlocked traits plus the `SEEN_INIT`
+  key once, `lib/GameState.ts` applies it at load and writes it at once, so a
+  feat earned later stays unseen until the wardrobe opens, all covered by the
+  marker cases in `game/save.test.ts`.
+- E50: polished the three layout faults the post-E49 screenshots showed at
+  1280x800 and 390x844. The HUD's second row no longer lets the Step cost
+  stat run under the Anchor button: `styles/globals.css` gives
+  `#hud.me-hud .me-stats` quarter tracks that may shrink to zero
+  (`repeat(4, minmax(0, 1fr))`) instead of the design's content-sized
+  `repeat(4, auto)`, so the four stats stay inside the width flex leaves
+  them and the `flex: none` tools keep their own space. The title painting
+  is whole again: `.title-art` keeps the picture's own square aspect ratio
+  (`aspect-ratio: 1 / 1` with `object-fit: contain`) instead of a full-width
+  `cover` band cropped from the top, so the lettering shows in full at both
+  sizes and the menu trims its own spacing for the painting, never the
+  reverse. And the "More" hint tells the truth: `.title-menu .me-menu`
+  trims its margins and gaps to `space-4` so the menu fits at 1280x800
+  without scrolling and the hint stays hidden there, `components/Menu.tsx`
+  measures the overflow from the `.me-menu` box itself (the band above it
+  excluded, the hint's own height unable to conjure an overflow), and the
+  hint renders as the menu's own last row inside its bottom edge — in the
+  flow, not pinned over the scroll box — so on a phone it sits under the
+  last button row instead of covering the mode row's best line.
+- E51: the page is a top-aligned column and the title screen left the board's
+  box. `styles/globals.css` puts `body` at `justify-content: flex-start` with
+  `padding-block` of `space-16` plus the safe-area insets and a `min-height`
+  of `100dvh` (no fixed height, no `overflow: hidden`), so content starts at
+  the top on phones and desktop and the page itself scrolls when it is taller
+  than the screen; during play the board keeps `touch-action: none`, so
+  swipes never scroll it. `components/Menu.tsx` draws the title screen as a
+  `.title-screen` block that `app/page.tsx` places in the column where the
+  board was (the board area hides via
+  `.game-container[data-screen='title'] #maze-container`, the board staying
+  mounted); at up to 720 px inside the gutters the painting shows whole at
+  its own aspect ratio (capped at 420 px so the buttons stay on screen at
+  1280x800), then the mode picker, the buttons and the best line at their
+  natural height — nothing scrolls inside, so the "More" hint and its rules
+  are gone. The how-to and the countdown keep the title art as a board-sized
+  overlay, dimmed under the countdown as before.
+- E52: the board fills a phone's width and the title page tidied up, the
+  owner's 2026-11-13 decision replacing "crisp everywhere".
+  `game/layout.ts` `boardLayout` no longer snaps every cell of 24 or more down
+  to the art grid: it keeps the whole-pixel cell and takes the largest
+  multiple of `PIXEL` only when that is at least `PIXEL_SNAP_SHARE` (0.8) of
+  it — 1280x800 still draws 52 -> 48 (11 tiles) and 27 -> 24 (21 tiles), while
+  a 403x900 phone keeps its 34 px cell, a ~374 px board instead of a 264 px
+  square with 440 px of emptiness under it (`game/layout.test.ts` carries
+  those three cases; `blobRect` is untouched). The HUD now shows from the
+  countdown on — `app/page.tsx` leaves it out on the title — so the title page
+  no longer scrolls at 403x900 or 1280x800. The title painting's band is
+  cropped in CSS only: `styles/globals.css` gives `.title-screen .title-art`
+  an `aspect-ratio` of 500/150 with `object-fit: cover` and
+  `object-position: center top`, which keeps the whole "MANIC ENTANGLEMENT"
+  lettering and hides the picture's own painted "START", the dead second
+  button. The pause panel gained a `pause-panel` class
+  (`components/Overlay.tsx`) whose tighter title strip, body padding and
+  column of buttons in `styles/globals.css` keep "Quit to title" visible at
+  390x844, and the HUD's stats (`components/Hud.tsx`) always use the short
+  labels Atk, Def, Clock and Step — one set at every width, so nothing is cut
+  at 1280.
+
+- E53: Turned the Knot's forecast into ghost walls drawn with the game's own
+  wall art. `game/view.ts` now exports `gridAfterForecast` (a copy of the wall
+  grid with the sealing edges filled and the opening edges emptied),
+  `tileCodeAt` (the sixteen-picture neighbour numbering maze.ts uses) and
+  `markTiles(forecast, grid)`, whose marks carry the code each tile will have
+  after the change; `lib/board.ts` `syncMarks` draws an incoming wall as an
+  `img.mark-incoming` of that picture on the marks layer and puts
+  `wall-outgoing` on the outgoing wall's own tile in the tiles layer, clearing
+  the class from every tile on each update so none keeps it after the change.
+  `styles/globals.css` breathes the two with one 1.6s alternate opacity cycle
+  (0.1 to 0.2 in, 0.8 to 0.9 out), stills them at 0.15 and 0.85 under
+  `prefers-reduced-motion` and `[data-motion="reduced"]`, and at 0.35 and 0.65
+  under `[data-contrast="true"]`; the old dashed-outline and hatch
+  `.mark-open` / `.mark-close` rules and their contrast variants are gone, the
+  stalker chevrons untouched. `game/view.test.ts` checks the incoming code
+  comes from the forecast-applied grid and matches the real wallGrid after a
+  walked shift.
+
+- E54: lifted the maze-size ceiling so the board keeps growing with depth in
+  every mode, the way the original did. `game/config.ts` drops `maxSize` and
+  `game/plan.ts` `levelPlan` now takes `size = startSize + sizeStep * step`
+  with no clamp, so depth 13 builds 17x17, depth 21 builds 25x25 and depth 41
+  builds 45x45; the shifts, enemy and item caps are untouched and no mode
+  overrides the size. `game/plan.test.ts` pins the new sizes, keeps asserting
+  the size is odd and follows the curve to depth 200, and checks no entry in
+  `MODES` carries a size field. The board still fits any viewport:
+  `game/layout.ts` `boardLayout` shrinks the cell as the maze grows and
+  `MIN_CELL` stays the floor.
+
+- E55: the forecast no longer reveals Blackout's hidden walls, and the title
+  centres on tall screens. `game/view.ts` `markTiles` takes an optional
+  `tileShown(tx, ty)` view and drops every mark on a tile it answers false
+  for; `lib/board.ts` `syncMarks` hands it the same `tileShown` the tiles use,
+  so on a Blackout level a hidden wall never gets the `wall-outgoing`
+  breathing — whose 0.8-to-0.9 opacity used to override the hidden tile's
+  0.06 and show the wall at 85% — and no `mark-incoming` ghost picture is
+  drawn on a hidden tile either: outside the view the 0.06 fade is the last
+  word, and the forecast only ever marks walls the player can already see.
+  `game/view.test.ts` pins the rule for both mark kinds and for an
+  everything-hidden / everything-shown view. `styles/globals.css` gives
+  `.title-screen` `margin: auto` instead of `margin: 0 auto`: the flex auto
+  margins centre the title block vertically between the safe-area insets when
+  it is shorter than the viewport (~460 px of emptiness gone at 403x900) and
+  resolve to zero when it is taller, so a tall block still starts at the top
+  and the page scrolls as before; countdown, how-to and play keep their top
+  alignment.
+
+- E56: deep mazes now get a camera and a minimap instead of unreadable tiles.
+  Since E54 the maze grows without limit, and past ~depth 44 on a phone the
+  whole-maze cell fell below 12 px (at depth 41 the tile is 4 px and the
+  reptile a dot). `game/layout.ts` adds `MIN_READABLE_CELL` (12),
+  `CAMERA_CELL_STEP` (12), `MIN_VIEW_TILES` (13) and the pure `viewportFor`,
+  which returns `whole` exactly where `boardLayout` stays readable (early
+  levels look pixel-identical) and `camera` otherwise: the largest multiple of
+  12 whose window still fits 13 tiles (never below 12), the window as wide as
+  that cell affords, capped at the maze. The new pure `game/camera.ts`
+  `cameraOffset(player, tiles, viewTiles)` keeps the reptile centred and
+  clamps at the maze's edges; both are tested beside the old layout cases.
+  `lib/board.ts` takes the viewport from `lib/GameState.ts` `sizeBoard`: in
+  camera mode the three layers draw the whole maze at the camera cell inside
+  the now window-sized `#maze` (so the galaxy on `#maze::before` stays the
+  size of what is seen), slide by a transform with the reptile's glide timing
+  (`.camera-move`, instant under reduced motion), and a ~96 px canvas in the
+  board's corner — `well` under a `line` border — redraws on maze or reptile
+  changes only: walls at 1-2 px a tile, reptile and exit as bright pixels, the
+  window as an outline, and on Blackout levels nothing but the reptile and the
+  frame.
+
+- E57: art batch 1 is wired in. Brute, Warden and Stalker each draw their own
+  240 px four-frame GIF (`brute.gif`, `warden.gif`, `stalker.gif` in
+  `styles/globals.css`) at the cell size, pixelated like the rest; the wisp
+  keeps the shared `enemy.gif` and the heavy rings and the stalker's red
+  marker stay. The HUD tool buttons (`components/ToolBar.tsx`) show the new
+  24 px pixel icons (`public/images/tools/<name>.png`, pixelated) beside name,
+  key and count; the three `tools/*.svg` are gone and the maze's tool pickups
+  and the how-to line read the PNGs. `game/sprite.ts` TRAITS gained the ten
+  approved traits (Back Oxygen/Panel, Body Chrome/Ember, Clothes Scarf/Plate,
+  Eye Visor/Eclipse, Head Miner/Halo), and `game/wardrobe.ts` a pure
+  `PICKUP_TRAITS` table giving each a rarity (Found: Oxygen, Chrome, Scarf,
+  Visor, Miner; Rare: Panel, Ember, Plate, Eclipse, Halo). A trait is now
+  wearable when it is free, unlocked by an earned feat, or held in the save's
+  new `pickedUp` list (`game/save.ts`; old saves load with an empty one), and
+  the invariant test reads: every non-free, non-None trait sits in exactly one
+  of UNLOCKS or PICKUP_TRAITS. The wardrobe shows pickup traits with Found 1 /
+  Rare 2 pips and "Found in the maze" while unheld. Trait pickups in the maze
+  come with E58.
+
+- E58: traits drop in the maze. `game/spawn.ts` rolls at most one trait
+  pickup per level from the traits the player does not hold yet (not free,
+  not feat-unlocked, not in the save's `pickedUp`, none kept or held by the
+  run): Rare first at 6% from depth 5, then Found at 20% from depth 2, so a
+  level never carries both and the first level never carries one (the table
+  is the exported `TRAIT_DROPS`). The roll rides its own rng branch
+  (`Rng.clone`), so a level without candidates reads exactly as before; if
+  the roll wins but no unheld trait of that rarity is left, nothing drops.
+  `game/run.ts` holds the picked trait (`heldTrait`, counted as a pickup)
+  and emits `traitPickup` / `traitKept`: reaching the exit keeps it — the
+  shell adds it to the save's `pickedUp` and saves — while dying, quitting
+  or restarting loses it, like gear. The HUD shows the held trait's PFP
+  icon beside the carried marker; the board draws the floor sprite per
+  Pixel art: the PFP master cropped to its bounding box (measured on a
+  canvas), two tile pixels per art pixel at crops of at most 8 by 8 else
+  one, centred in the middle 16, with the 1px black outline and the four
+  1x5 corner brackets in `--energy` (Found) or `--gold` (Rare). Picking up
+  toasts "New trait: <Name>. Reach the exit to keep it." over the board and
+  the exit answers "Kept: <Name>."; the kept trait wears the wardrobe's
+  existing New marker until the panel is next closed. Feat-only traits
+  never drop, and old saves load unchanged.
+
+- E59: the title block really centres, and the minimap draws crisp. The
+  centring E55 asked for never happened because the title block's parent,
+  the `.touch-layer` div of `components/TouchLayer.tsx`, was unstyled: only
+  as tall as its content, it left the block 16 px from the top with ~773 px
+  of empty below at 403x900 (~658 px at 1280x800) for the auto margins to
+  work on. `styles/globals.css` now makes `.touch-layer` the page's column:
+  `display: flex; flex-direction: column` with a `min-height` of the
+  viewport between the safe-area insets (what the body's own padding
+  leaves), so the title block sits in the vertical middle when shorter than
+  the screen and still starts at the top, page scrolling, when taller. The
+  wrapper's shrink-to-fit width and the default item stretch keep every
+  play item exactly where the block layout put it — same width, the board's
+  top position at 403x900 and 1280x800 unchanged, minimap and panels
+  unmoved — and the items' own auto margins still centre the title block,
+  the HUD and the D-pad; touch handling on the board is untouched. The E56
+  minimap was blurry: its buffer was ~91 px stretched to the 96 px CSS box.
+  `lib/board.ts`
+  `drawMinimap` now sizes the canvas to exactly its displayed CSS size times
+  `devicePixelRatio`, rounded to whole pixels, draws each wall-grid tile at
+  a whole number of buffer pixels (at most 2 CSS pixels' worth), turns
+  `imageSmoothingEnabled` off beside the CSS `image-rendering: pixelated`,
+  and folds the buffer side into the redraw key so a zoom or ratio change
+  repaints it.
+
+- E60: the second trait batch is in the maze. `game/sprite.ts` `TRAITS` grew
+  by the 72 names the owner picked (Back 14, Body 14, Clothes 15, Eye 14,
+  Head 15, each appended after its layer's existing names with `None` kept
+  where it was) and `game/wardrobe.ts` `PICKUP_TRAITS` registers every one
+  with its rarity — 49 Found and 23 Rare beside the shipped 5 and 5 — so
+  E58's drop roll hands them out and the wardrobe wears them once kept. The
+  two names that repeat across layers (Circuit in Body and Clothes, Crystal
+  in Back and Clothes) were checked everywhere traits are keyed: the save's
+  `pickedUp` entries, the wardrobe's New-marker seen keys, the kept/dedup
+  checks in `lib/GameState.ts` and the HUD's held-trait icon all carry the
+  layer beside the name already, and `game/wardrobe.test.ts` now pins that
+  holding Body/Circuit never frees Clothes/Circuit (same for Crystal) while
+  `game/sprite.test.ts` reads the six files of every registered trait
+  (`<Trait>1..4.png`, `<Trait>pfp.png`, `<Trait>.png`) off
+  `public/images/nft/<Layer>/` with `node:fs`. With about twenty traits per
+  layer the wardrobe grid gained a `max-height` and scrolls inside its panel
+  in `styles/globals.css`, leaving the layer tabs and the stage in place.
+- E61: the pre-merge review of E57-E60 is answered. The tool row no longer
+  overflows a phone (E57): in the `max-width: 480px` block of
+  `styles/globals.css` `#hud.me-hud .me-tools` takes the whole line
+  (`flex: 1 1 100%`, `min-width: 0`, wrapping) and the three buttons share it
+  in equal shrinkable shares, while `components/ToolBar.tsx` gives the key
+  hint its own `me-tool-key` class so phones can drop it — icon, name and
+  count stay, and nothing scrolls sideways at 390 or 403 px. The wardrobe
+  grid (E60) uses the panel's height now: the panel is a height-capped flex
+  column, the grid fills the right column below the tabs (well past 60% of
+  the desktop viewport), and `components/Wardrobe.tsx` wraps it in a
+  `.wardrobe-grid-wrap` that shows a fade over its bottom edge exactly while
+  cards below are out of sight; phones keep the whole-panel scroll. And the
+  trait pickup (E58) draws at whole art pixels: `lib/board.ts` sizes the
+  crop at the floor of what fits the middle two thirds of the tile (never
+  under one screen pixel per art pixel) and gives `--trait-bracket` a whole
+  pixel value, so no fractional scale touches the sprite or its outline at
+  any cell size.
+
+- E62: the two layout faults the review of E61 left behind are fixed. On the
+  desktop the wardrobe's trait grid now takes the panel's whole height: the
+  panel is capped at the viewport between the scrim's gutters
+  (`max-height: calc(100dvh - var(--space-24) * 2)`), `.wardrobe-layout` got
+  explicit rows (`minmax(min-content, 1fr) auto auto`, an auto row had sized
+  itself to the cards), the grid column spans all three beside the hint and
+  the Back button, and `components/Wardrobe.tsx` moved that hint and that
+  button into the layout as `.wardrobe-hint` and `.wardrobe-actions` so they
+  sit under the preview, in the left column that used to stay empty below it
+  — at 1280x800 four rows of cards show at once, the tabs and the preview
+  stay put while the grid scrolls, and the preview column rides `position:
+  sticky` at its top. Phones are unchanged: below 641 px the layout is the
+  plain one-column stack again (`grid-template-rows: none`, the stage first)
+  and the scrim still scrolls the whole panel. And the phone tool buttons
+  (E57's row) read "Anchor 0" now, not "ANCHOR0": in the `max-width: 480px`
+  block `#hud.me-hud .me-tools .me-btn .me-count` keeps a `--space-4` of its
+  own after the name and the display face the desktop button gives it.
+
+- E63: the two phone reports about the board's overlays are fixed. The 3-2-1
+  now shows whole and dead centre over the board area: `.game-countdown`
+  (styles/globals.css) kills the `<p>`'s default `margin: 1em 0` and its tall
+  line box (`margin: 0`, `line-height: 1`), which at the old viewport-sized
+  font pushed the digit past the bottom of the overflow-hidden
+  `#maze-container` so only its top edge showed, and `startGame()` in
+  `lib/GameState.ts` sizes the digit inline, in pixels, from the board area
+  itself (half the container's shorter side, never larger than the board)
+  instead of `min(40vw, 40vh)` — checked at 403x900, 390x844 and 1280x800.
+  And two floating texts in one tick (an enemy kill and the boost it drops)
+  no longer print on top of each other: `game/fx.ts` gained the pure
+  `floatLineOffset(active, cellX, cellY, now)` — given the texts still rising
+  (their cells and start times) it replays the stack in start order and
+  answers the new text's offset, one 24 px line under the lowest earlier text
+  whose cell is the same or a neighbour, 0 when nothing nearby is on screen —
+  with a describe block in `game/fx.test.ts`; `float()` in `lib/board.ts`
+  only keeps the list of live texts, prunes the finished ones and adds the
+  returned offset to the element's `top`.
+
+- E64: the wardrobe fits the screen and the cards turn in pages. The phone
+  report — with 104 traits the panel ran past the bottom of the screen — is
+  answered by paging instead of scrolling: `#maze-container .me-scrim.wardrobe-scrim`
+  (styles/globals.css) pads the viewport by the safe-area insets plus the
+  16 px gutters and clips, the panel caps at that box (`max-height: 100%`),
+  and neither the page nor the grid scrolls any more — the grid's inner
+  `overflow-y: auto`, its scrollbar and the E61 fade cue
+  (`.wardrobe-grid-wrap.is-scrollable::after`, `gridHasMore`,
+  `checkGridScroll`) are gone, on phones too, where the panel is now the
+  same capped flex column (`grid-template-rows: auto minmax(0, 1fr) auto
+  auto`) instead of a scrim-scrolled block. The grid shows one page of whole
+  cards: `components/Wardrobe.tsx` keeps a hidden copy of the layer's whole
+  list (`.wardrobe-grid-measure`) to read the card's box, divides the grid's
+  own box (measured with a `ResizeObserver`) by it into columns x rows, at
+  least one card, and hands the rest to further pages under a Prev /
+  "Page 2 of 4" / Next row (design `me-btn`s, 48 px targets, disabled at the
+  ends); PageUp / PageDown and `[` / `]` turn pages, and so does a horizontal
+  swipe on the grid (`classifyTouch` of `game/swipe.ts`). The arithmetic —
+  page count, the cards of a page, the page that holds an index, clamping
+  when the grid is resized, always one card per page — is the pure
+  `game/pages.ts` with a describe block each in `game/pages.test.ts`. The
+  layer's list is sorted once when the panel opens or the tab changes (an
+  equip cannot shuffle cards between pages while it is open), switching tabs
+  opens the page that holds the equipped trait, and equipping keeps the
+  current page. The New tags, the rarity pips, the unlocked-percentage line
+  and the close/seen behaviour are untouched.
+
+- E65: one steady stage from the first paint on. The screen no longer
+  bounces between loading, title, countdown and level starts.
+  `game/layout.ts` gains the pure `stageSide(viewW, viewH)`: the side of the
+  largest square that fits `viewW * WIDTH_SHARE` by `viewH * HEIGHT_SHARE`,
+  viewport-only and never a function of the maze size (MIN_STAGE for a broken
+  viewport), with a describe block in `game/layout.test.ts` (phone and
+  desktop sizes, never past either share, the same answer for every maze
+  size, and the level's `viewportFor` view always fitting inside).
+  `lib/GameState.ts` (sizing only) writes it as `--stage-size` on the root in
+  a new `sizeStage()`, called on load (`mountBoard`) and on `handleResize`
+  only — never on a level start — and `sizeBoard` now sizes just `#maze`
+  (centred inside the stage by the container's flex box; the space around a
+  smaller maze is the void the stage paints) and no longer stamps a width on
+  the HUD. `styles/globals.css` gives `#maze-container` that box
+  (`width/height: var(--stage-size)`, `background: var(--void)`, a vw/dvh
+  default for the very first paint) and `#hud.me-hud` the same width
+  (`min(var(--stage-size), 100vw - 32px)`, the old maze-derived `!important`
+  rule gone). The title screen keeps the stage: `[data-screen='title']` now
+  hides only `#maze`, and `.title-screen` (components/Menu.tsx, rendered
+  inside `#maze-container` on every screen by app/page.tsx) fills the stage
+  over the void — art band, mode row, buttons and best line centred in it,
+  the art band shrinking first (min-height 60px) so nothing scrolls at
+  403x900, 390x844 or 1280x800. The HUD renders on every screen, the title
+  included, in the same place; before a run its meters show the fresh run's
+  starting values and `components/Hud.tsx` keeps the tool buttons disabled
+  whenever the shell is not playing. While the GameState does not exist yet
+  the page renders the same skeleton — the empty stage box with the loading
+  text inside it and a `HudSkeleton` box of the same rows and height under
+  it — instead of the bare "Loading..." div. The countdown and the how-to
+  keep their overlays over the stage (the E63 digit still centres whole:
+  `startGame` measures the container, now the stage). Measurements: no
+  browser is available in this sandbox, so the boxes were measured from the
+  sizing functions and the stylesheet's box model rather than
+  `getBoundingClientRect`: at 403x900 `#maze-container` is 378x378,
+  horizontally centred (left 12.5) below the 16 px body padding, and `#hud`
+  is 371 wide directly under it (top 402); at 1280x800 they are 576x576
+  (left 352, top 16) and 576 wide (top 600) — and since `--stage-size` is written
+  only on load and on resize, those boxes are the same strings on the title,
+  during the countdown, at level 1 and at level 3, equal to the pixel.
+
+- E66: new generated music in the spirit of the old drum loops, replacing the
+  pentatonic arpeggio. `game/audio/voice.ts` adds the `noise` wave (white noise
+  from one shared buffer, `freq` ignored), an optional `filter`
+  (`highpass`/`bandpass`/`lowpass` + freq) and a `decay` flag to `Voice`.
+  `lib/audioEngine.ts` plays a noise voice through an `AudioBufferSourceNode`
+  reading a one-second white-noise `AudioBuffer` made once per context, routes
+  any voice through a `BiquadFilterNode` when it asks for one, and gives a
+  decay voice an exponential fall from its peak to near zero instead of the
+  flat hold; the fake context in `lib/audioEngine.test.ts` grew the matching
+  sources, buffers and filters and new tests cover all three. `game/audio/
+  music.ts` is rewritten over a 128-step form — eight bars of sixteen
+  sixteenths in A minor, one chord to a bar (Am F C G Am F Dm E): kick (sine
+  150 Hz gliding to 45) on steps 0 and 8 plus step 10 in even bars, bandpassed
+  noise snare with a triangle body on 4 and 12, highpassed hats on every
+  second step and an open hat on step 14 of odd bars, a sawtooth bass driving
+  eighths under a lowpass with every second eighth an octave up, a quiet
+  triangle pad holding each chord, and a composed square tune (a note table:
+  chord tones on strong beats, a rising phrase in bars 1-4 answered by a
+  falling one in bars 5-8). Depth layers it in — 1 kick/hats/bass, 2 snare,
+  3 pad, 4 tune, 7 the tune doubled an octave up plus the sixteenth-note snare
+  fill every four bars — and under 25% energy the tune and pad leave while a
+  short high pulse marks every fourth step; `tempoFor`, the `Sequencer` and
+  the exported names are untouched, so `lib/GameState.ts` drives it unchanged.
+  `game/audio/music.test.ts` tests determinism, the bounds at every depth 1-12
+  and energy, the kick on step 0 of every bar, the snare from depth 2 only,
+  the tune from depth 4 only, no tune below 25% energy and the 128-step loop.
+
+- E67: phone polish after the E63-E66 review at 403x900, four fixes. The
+  title art band is never squashed again: `.title-screen .title-art` is
+  `flex: none` with `object-fit: contain` (styles/globals.css), so the
+  painting's 500/150 lettering box scales whole — no `cover` crop, no
+  shrinking menu over it — with a 90 px floor; the room comes from the
+  tightened block instead: the mode row's name and best line share one cell
+  (`div.me-mode-text` in components/Menu.tsx), the blurb (still in the row's
+  aria-label) drops below 480 px, the best line goes 12 px there, the menu
+  sits 4 px under the art with its 8 px gaps and 14 px button text, and the
+  block pads 8 px inside the stage — at 403x900 the band is ~106 px and at
+  390x844 ~105 px, and the whole block stays inside the stage. The HUD's
+  tool buttons fit the 371 px bar: below 480 px the name is 11 px with no
+  letter-spacing, the count 12 px, the gaps space-2 and the armed Cut's
+  "Choose a direction" line (always in the aria-label) leaves the narrow
+  button, so icon, name and count show whole from 360 px to 430 px with
+  nothing clipped. The wardrobe shows six cards a page on a phone and
+  twelve on the desktop: cards are 104 px wide with 80 px art (the grid's
+  desktop tracks match the card at `repeat(auto-fill, 104px)`, the phone
+  keeps three equal tracks), the trait name reads at 11 px, and the phone
+  preview goes compact — both sprites side by side at 64 px, the stagebox at
+  8 px padding, the trait count and its bar on one line
+  (`div.wardrobe-count-row` in components/Wardrobe.tsx), a 24 px panel
+  title, 8 px body padding and layout gaps, and one-line tabs — while the
+  desktop panel takes its full 720 px with a 220 px preview column and 80 px
+  preview sprites. And the column centres: `body` and `.touch-layer` answer
+  `justify-content: safe center` (flex-start kept as the fallback), so the
+  stage, HUD and D-pad (when shown) ride in the vertical middle between the
+  safe-area insets on every screen — title, countdown, play, panels and the
+  loading skeleton — and stay top-aligned and scrollable when taller; the
+  boxes' sizes are still the same strings on every screen (E65), so
+  `#maze-container` and `#hud` keep their rects across screens. No browser
+  is available in this sandbox: the widths were computed from the shipped
+  Silkscreen and Atkinson metrics (the display face averages 0.75em an
+  em), so "ANCHOR 0" at 11/12 px fits the 96 px button a 360 px viewport
+  leaves, the longest trait name fits the 84 px card, and the measured page
+  (game/pages.ts arithmetic) holds 3x2 cards on the phone and 4x3 on the
+  desktop.

@@ -8,6 +8,7 @@ import type { ItemType } from "./events";
 import { toolsFor, type ToolId } from "./tools";
 import { ENEMY_KINDS, enemyFor, type EnemyKind } from "./enemies";
 import { CONFIG } from "./config";
+import type { PickupRarity } from "./wardrobe";
 
 /** The six pickup kinds. */
 export const ITEM_TYPES: readonly ItemType[] = ["energy", "boots", "gloves", "shield", "speed", "backpack"];
@@ -38,9 +39,36 @@ export interface SpawnedEnemy {
     kind: EnemyKind;
 }
 
+/** A trait the maze hands out (game/wardrobe.ts PICKUP_TRAITS), as one candidate for a drop. */
+export interface TraitCandidate {
+    layer: string;
+    trait: string;
+    rarity: PickupRarity;
+}
+
+/** The trait pickup lying on a cell of the level, ready to be held by the run. */
+export interface SpawnedTrait extends TraitCandidate {
+    x: number;
+    y: number;
+}
+
+/**
+ * The trait drop chances (E58): at most one trait pickup per level. The Rare
+ * roll comes first (6% from depth 5); a level that did not roll it then rolls
+ * Found (20% from depth 2), so a level never carries both. The first level
+ * never drops one. When the roll wins but no unheld trait of that rarity is
+ * left, no trait drops.
+ */
+export const TRAIT_DROPS: readonly { rarity: PickupRarity; fromDepth: number; chance: number }[] = [
+    { rarity: "rare", fromDepth: 5, chance: 0.06 },
+    { rarity: "found", fromDepth: 2, chance: 0.2 },
+];
+
 export interface SpawnedLevel {
     items: SpawnedItem[];
     enemies: SpawnedEnemy[];
+    /** The trait pickup of the level, or null when none dropped (E58). */
+    trait: SpawnedTrait | null;
 }
 
 export interface SpawnOptions {
@@ -52,6 +80,13 @@ export interface SpawnOptions {
      * route exists, such an enemy becomes a wisp instead.
      */
     route?: readonly { x: number; y: number }[];
+    /**
+     * The traits this level may drop (E58): the PICKUP_TRAITS the player does
+     * not hold yet. At most one of them lies on the board; an empty or missing
+     * list drops nothing and draws no rng at all, so the rest of the level is
+     * untouched.
+     */
+    traits?: readonly TraitCandidate[];
 }
 
 /** The cell the player starts on for a level of the given size. */
@@ -88,6 +123,35 @@ function pickType(rng: Rng, energyShare: number): ItemType {
     const share = Math.min(1, Math.max(0, energyShare));
     if (rng.next() < share) return "energy";
     return rng.pick(GEAR_TYPES);
+}
+
+/**
+ * Roll the level's trait drop (E58): the Rare chance is rolled first from
+ * depth 5, then — only when Rare did not win — the Found chance from depth 2.
+ * A level therefore never carries both, and the first level never drops one.
+ * The winner is drawn uniformly from the candidates of that rarity; when the
+ * roll wins but no candidate of that rarity is left, nothing drops. An empty
+ * candidate list draws no rng at all.
+ */
+export function rollTraitDrop(
+    rng: Rng,
+    depth: number,
+    candidates: readonly TraitCandidate[],
+): TraitCandidate | null {
+    if (!Array.isArray(candidates) || candidates.length === 0) return null;
+    const [rare, found] = TRAIT_DROPS;
+    if (depth < found.fromDepth) return null;
+    if (depth >= rare.fromDepth && rng.next() < rare.chance) {
+        const pool = candidates.filter((candidate) => candidate.rarity === "rare");
+        if (pool.length === 0) return null;
+        return rng.pick(pool);
+    }
+    if (rng.next() < found.chance) {
+        const pool = candidates.filter((candidate) => candidate.rarity === "found");
+        if (pool.length === 0) return null;
+        return rng.pick(pool);
+    }
+    return null;
 }
 
 /**
@@ -199,6 +263,7 @@ export function spawnLevel(
     for (let i = 0; i < itemCount && i < left.length; i++) {
         items.push({ x: left[i].x, y: left[i].y, type: pickType(rng, energyShare) });
     }
+    const itemsPlaced = items.length;
 
     // Tool pickups come after the gear: the cells the items did not take, with each
     // type drawn from the tools that spawn at this depth (toolsFor, game/tools.ts:
@@ -206,10 +271,24 @@ export function spawnLevel(
     // out of the call changes neither the enemies' nor the items' placement.
     const toolCount = rollCount(rng, counts.tools ?? 0);
     const firstFreeCell = Math.min(itemCount, left.length);
+    let toolsPlaced = 0;
     for (let i = 0; i < toolCount && firstFreeCell + i < left.length; i++) {
         const cell = left[firstFreeCell + i];
         items.push({ x: cell.x, y: cell.y, type: rng.pick(toolsFor(depth)) });
+        toolsPlaced += 1;
     }
 
-    return { items, enemies };
+    // The trait pickup (E58) comes last and rolls on its own branch of the
+    // rng (Rng.clone): the drop never disturbs the enemies' or the items'
+    // placement, and a level without candidates reads exactly like a level
+    // before the trait card. It takes the first free cell the gear and tools
+    // did not use; when no cell is free, the roll still happens but nothing drops.
+    const roll = rollTraitDrop(rng.clone(), depth, options.traits ?? []);
+    let trait: SpawnedTrait | null = null;
+    if (roll !== null) {
+        const cell = left[itemsPlaced + toolsPlaced];
+        if (cell !== undefined) trait = { x: cell.x, y: cell.y, ...roll };
+    }
+
+    return { items, enemies, trait };
 }

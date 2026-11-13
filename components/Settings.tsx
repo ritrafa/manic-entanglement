@@ -9,14 +9,15 @@ interface SettingsProps {
 }
 
 /**
- * The settings screen: one row per SETTING_ROWS entry, built by a loop and
- * nothing else — sliders for the volumes (a native range input with the value
- * printed next to it), checkboxes for the switches and radio groups for the
- * choices, every control inside a real <label>. Opened from the title menu or
- * the pause panel; the Back button (and Esc, which the shell maps to "back")
- * returns where the visit started. The first control takes focus when the
- * panel appears, and typing in these fields never reaches the game (see the
- * targetTag rule in game/keys.ts).
+ * The settings panel (design/components/Panel and Settings): one row per
+ * SETTING_ROWS entry, built by a loop and nothing else — me-range sliders for
+ * the volumes (a native range input with the value printed next to it),
+ * me-check checkboxes for the switches and me-radio groups for the choices
+ * inside a me-fieldset, every control inside a real <label>. Opened from the
+ * title menu or the pause panel; the Back button (and Esc, which the shell
+ * maps to "back") returns where the visit started. The first control takes
+ * focus when the panel appears, and typing in these fields never reaches the
+ * game (see the targetTag rule in game/keys.ts).
  */
 const SettingsPanel: React.FC<SettingsProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -51,83 +52,86 @@ const SettingsPanel: React.FC<SettingsProps> = ({ gameState }) => {
     };
 
     return (
-        <div className="settings-panel" role="dialog" aria-modal="true" aria-label="Settings" onKeyDown={handleKeyDown}>
-            <p className="overlay-title">Settings</p>
-            <div className="settings-rows">
-                {SETTING_ROWS.map((row: SettingRow, index: number) => {
-                    const controlId = `setting-${row.id}`;
-                    if (row.kind === 'slider') {
-                        const value = model.settings[row.id] as number;
-                        return (
-                            <div className="settings-row" key={row.id}>
-                                <label htmlFor={controlId}>{row.label}</label>
-                                <input
-                                    id={controlId}
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.05}
-                                    value={value}
-                                    ref={index === 0 ? firstControlRef : undefined}
-                                    onChange={(event) => gameState.setSetting(row.id, Number(event.target.value))}
-                                />
-                                <span className="settings-value">{Math.round(value * 100)}%</span>
-                            </div>
-                        );
-                    }
-                    if (row.kind === 'toggle') {
-                        const checked = model.settings[row.id] as boolean;
-                        return (
-                            <div className="settings-row" key={row.id}>
-                                <label className="settings-toggle">
+        <div className="me-scrim" onKeyDown={handleKeyDown}>
+            <section className="me-panel" role="dialog" aria-modal="true" aria-label="Settings">
+                <h2 className="me-panel-title">Settings</h2>
+                <div className="me-panel-body">
+                    {SETTING_ROWS.map((row: SettingRow, index: number) => {
+                        const controlId = `setting-${row.id}`;
+                        if (row.kind === 'slider') {
+                            const value = model.settings[row.id] as number;
+                            return (
+                                <label className="me-field" key={row.id} htmlFor={controlId}>
+                                    <span className="settings-label">{row.label}</span>
                                     <input
+                                        id={controlId}
+                                        className="me-range"
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        value={value}
+                                        ref={index === 0 ? firstControlRef : undefined}
+                                        onChange={(event) => gameState.setSetting(row.id, Number(event.target.value))}
+                                    />
+                                    <span className="me-value">{Math.round(value * 100)}%</span>
+                                </label>
+                            );
+                        }
+                        if (row.kind === 'toggle') {
+                            const checked = model.settings[row.id] as boolean;
+                            return (
+                                <label className="me-field" key={row.id}>
+                                    <input
+                                        className="me-check"
                                         type="checkbox"
                                         checked={checked}
                                         onChange={(event) => gameState.setSetting(row.id, event.target.checked)}
                                     />
                                     {row.label}
                                 </label>
-                            </div>
-                        );
-                    }
-                    const current = String(model.settings[row.id]);
-                    return (
-                        <fieldset className="settings-row settings-choice" key={row.id}>
-                            <legend>{row.label}</legend>
-                            {(row.choices ?? []).map((choice) => (
-                                <label className="settings-radio" key={choice.value} htmlFor={`${controlId}-${choice.value}`}>
-                                    <input
-                                        id={`${controlId}-${choice.value}`}
-                                        type="radio"
-                                        name={row.id}
-                                        value={choice.value}
-                                        checked={current === choice.value}
-                                        onChange={() => gameState.setSetting(row.id, choice.value)}
-                                    />
-                                    {choice.label}
-                                </label>
-                            ))}
-                        </fieldset>
-                    );
-                })}
-            </div>
-            <div className="overlay-buttons">
-                <button onClick={() => gameState.openControls()}>Controls</button>
-                <button
-                    className="settings-reset"
-                    onClick={() => {
-                        if (confirmReset) {
-                            setConfirmReset(false);
-                            gameState.resetProgress();
-                        } else {
-                            setConfirmReset(true);
+                            );
                         }
-                    }}
-                >
-                    {confirmReset ? 'Really reset everything?' : 'Reset progress'}
-                </button>
-                <button onClick={() => gameState.closeSettings()}>Back</button>
-            </div>
+                        const current = String(model.settings[row.id]);
+                        return (
+                            <fieldset className="me-fieldset" key={row.id}>
+                                <legend className="me-label">{row.label}</legend>
+                                {(row.choices ?? []).map((choice) => (
+                                    <label className="me-field" key={choice.value} htmlFor={`${controlId}-${choice.value}`}>
+                                        <input
+                                            id={`${controlId}-${choice.value}`}
+                                            className="me-radio"
+                                            type="radio"
+                                            name={row.id}
+                                            value={choice.value}
+                                            checked={current === choice.value}
+                                            onChange={() => gameState.setSetting(row.id, choice.value)}
+                                        />
+                                        {choice.label}
+                                    </label>
+                                ))}
+                            </fieldset>
+                        );
+                    })}
+                    <div className="me-panel-actions">
+                        <button className="me-btn" onClick={() => gameState.openControls()}>Controls</button>
+                        <button
+                            className="me-btn me-btn-danger"
+                            onClick={() => {
+                                if (confirmReset) {
+                                    setConfirmReset(false);
+                                    gameState.resetProgress();
+                                } else {
+                                    setConfirmReset(true);
+                                }
+                            }}
+                        >
+                            {confirmReset ? 'Really reset everything?' : 'Reset progress'}
+                        </button>
+                        <button className="me-btn me-btn-primary" onClick={() => gameState.closeSettings()}>Back</button>
+                    </div>
+                </div>
+            </section>
         </div>
     );
 };

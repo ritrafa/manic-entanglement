@@ -1,6 +1,6 @@
 // The two tools (game/tools.ts): the ids and info the UI reads, the plan's
-// tool count, the spawner's tool pickups, the config numbers and the two SVG
-// icons on disk. No DOM, no clocks, no global randomness.
+// tool count, the spawner's tool pickups, the config numbers and the three pixel
+// PNG icons on disk. No DOM, no clocks, no global randomness.
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -135,17 +135,21 @@ describe("Run tool pickups", () => {
 });
 
 describe("tool icons", () => {
-  it("both SVGs exist, are svg and carry no script", () => {
+  it("each tool's pixel PNG exists and carries the PNG signature", () => {
+    for (const id of TOOL_IDS as readonly ToolId[]) {
+      const path = join(process.cwd(), "public", "images", "tools", `${id}.png`);
+      expect(existsSync(path), `${id}.png on disk`).toBe(true);
+      const bytes = readFileSync(path);
+      // PNG magic: an 8-byte signature, so the file is an image, not a script.
+      expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      expect(bytes.includes(Buffer.from("<script"))).toBe(false);
+    }
+  });
+
+  it("no SVG tool icon survives on disk", () => {
     for (const id of TOOL_IDS as readonly ToolId[]) {
       const path = join(process.cwd(), "public", "images", "tools", `${id}.svg`);
-      expect(existsSync(path), `${id}.svg on disk`).toBe(true);
-      const svg = readFileSync(path, "utf8");
-      expect(svg).toContain("<svg");
-      expect(svg).toContain("viewBox=\"0 0 24 24\"");
-      expect(svg).not.toContain("<script");
-      // No external references: nothing fetched, nothing embedded from outside.
-      expect(svg).not.toMatch(/href=/);
-      expect(svg).not.toMatch(/xlink/);
+      expect(existsSync(path), `${id}.svg removed`).toBe(false);
     }
   });
 });

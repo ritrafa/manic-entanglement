@@ -2,15 +2,21 @@
 // computed in one place from the run and the best score before the run.
 // Pure data only — nothing under game/ may reach for the DOM.
 
+import { lowEnergy } from "./fx";
 import type { RunStats } from "./run";
 
 /** Everything the HUD renders, already formatted, so React only has to print it. */
 export interface HudModel {
-    /** e.g. "Energy: 87" — a whole number that never goes below 0. */
+    /** The energy as plain number text, e.g. "87" — a whole number that never
+     *  goes below 0; the HUD pairs it with its own "Energy" label. */
     energyText: string;
     /** The energy bar's width, always between 0 and 100. */
     energyPct: number;
-    /** e.g. "Score: 12". */
+    /** True when the energy sits under the warning line (game/fx.ts lowEnergy):
+     *  the HUD shows the bar's low state and the words "Energy low". */
+    energyLow: boolean;
+    /** The score as plain number text, e.g. "12"; the HUD pairs it with its
+     *  own "Score" label. */
     scoreText: string;
     /** The progress bar's width toward the best, 0 to 100; 0 while the best is 0. */
     bestPct: number;
@@ -60,10 +66,12 @@ export function hudModel(run: HudRun, best: number): HudModel {
     const storage = finiteOr(run.stats.storage, 0);
     const score = Math.max(0, Math.round(finiteOr(run.score, 0)));
     const safeBest = Math.max(0, finiteOr(best, 0));
+    const energyPct = storage > 0 ? clamp((energy / storage) * 100, 0, 100) : 0;
     return {
-        energyText: `Energy: ${Math.max(0, Math.round(energy))}`,
-        energyPct: storage > 0 ? clamp((energy / storage) * 100, 0, 100) : 0,
-        scoreText: `Score: ${score}`,
+        energyText: `${Math.max(0, Math.round(energy))}`,
+        energyPct,
+        energyLow: lowEnergy(energyPct / 100),
+        scoreText: `${score}`,
         bestPct: safeBest > 0 ? clamp((score / safeBest) * 100, 0, 100) : 0,
         level: oneDecimal(run.level),
         attack: oneDecimal(run.stats.attack),
@@ -82,6 +90,7 @@ export function isNewBest(score: number, bestBefore: number): boolean {
 export function sameHudModel(a: HudModel, b: HudModel): boolean {
     return a.energyText === b.energyText
         && a.energyPct === b.energyPct
+        && a.energyLow === b.energyLow
         && a.scoreText === b.scoreText
         && a.bestPct === b.bestPct
         && a.level === b.level

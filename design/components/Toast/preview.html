@@ -1,0 +1,70 @@
+<!-- @dsCard group="Feedback" height=420 subtitle="Level banner, new trait, progress restored, warnings" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Toast</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .board { background: var(--outline) url(/_blob/0e7b6ca6e6a7a247163584904adc654a) center / 640px auto; padding: var(--space-24); display: flex; flex-wrap: wrap; gap: var(--space-24); align-items: flex-start; }
+</style>
+</head>
+<body>
+<div class="board">
+  <div class="me-toast is-reward" role="status">
+    <div>
+      <p class="me-toast-head me-gold">Level 4</p>
+      <p class="me-toast-body">Blackout: the maze is dimmed.</p>
+    </div>
+  </div>
+
+  <div class="me-toast is-reward" role="status">
+    <div class="me-sprite" style="--s:48px">
+      <img class="is-ghost" src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt="">
+      <img src="/_blob/e06fcbe170a28861a2d7b364b31d7c14" alt="">
+    </div>
+    <div>
+      <p class="me-toast-head"><span class="me-tag is-new">New trait</span></p>
+      <p class="me-toast-head">Crown <span class="me-pips is-rare" aria-label="Rare"><i></i><i></i><i></i></span></p>
+      <p class="me-toast-body">Head. Reach the exit to keep it.</p>
+    </div>
+  </div>
+
+  <div class="me-toast is-feat" role="status">
+    <div class="me-sprite" style="--s:48px">
+      <img class="is-ghost" src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt="">
+      <img src="/_blob/c956480acc1e89f1ec797ef8fee84bdb" alt="">
+    </div>
+    <div>
+      <p class="me-toast-head me-feat">Feat: Sprinter</p>
+      <p class="me-toast-head">Jetpack <span class="me-pips is-feat" aria-label="Feat only"><i></i><i></i><i></i></span></p>
+      <p class="me-toast-body">Back. Unlocked for good.</p>
+    </div>
+  </div>
+
+  <div class="me-toast is-energy" role="status">
+    <div class="me-sprite" style="--s:48px">
+      <img src="/_blob/6c82115b961c42bb2640d5a92bd5dbf3" alt="">
+      <img src="/_blob/446e2e5f733635dc38c8abcf985945bc" alt="">
+      <img src="/_blob/94e8d5672b5a701159a890e5b4039d1c" alt="">
+    </div>
+    <div>
+      <p class="me-toast-head me-energy">Progress restored</p>
+      <p class="me-toast-body">From your reptile: best 1,240, depth 9, 7 feats, 14 traits.</p>
+    </div>
+  </div>
+
+  <div class="me-toast is-danger" role="alert">
+    <div>
+      <p class="me-toast-head me-danger">Energy low</p>
+      <p class="me-toast-body">Find energy or reach the exit.</p>
+    </div>
+  </div>
+
+  <div class="me-col">
+    <span class="me-float">+25</span>
+    <span class="me-hint" style="color:var(--ink)">Floating score: display-sm, gold, 2px hard shadow</span>
+  </div>
+</div>
+</body>
+</html>

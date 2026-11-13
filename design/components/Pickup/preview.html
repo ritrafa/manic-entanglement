@@ -1,0 +1,46 @@
+<!-- @dsCard group="Game" height=400 subtitle="Trait pickups on the board, with the rarity frame" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pickup</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .me-board { grid-auto-flow: row; grid-template-columns: repeat(8, 48px); background-image: url(/_blob/0e7b6ca6e6a7a247163584904adc654a); }
+  .legend { display: grid; grid-template-columns: 72px auto; gap: var(--space-8) var(--space-12); align-items: center; }
+  .legend .me-cell { --c: 72px; background: var(--outline); }
+</style>
+</head>
+<body>
+<div class="me-stage">
+  <div class="me-col">
+    <p class="me-caption">On the board, tile at 2x (48px)</p>
+    <div class="me-board" role="img" aria-label="A corridor with a reptile, an energy pickup, a common trait pickup, a rare trait pickup, an enemy with its toll and the exit">
+      <div class="me-cell"><img src="/_blob/e9afb183965d3d17d65c05d10ceb79fe" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/0c62e0bf32ab7848b62f3d00902ae0b9" alt=""></div>
+      <div class="me-cell"><img src="/_blob/fa233c2625d7fa66250c3884d7fe1dd8" alt=""></div>
+      <div class="me-cell"><img src="/_blob/aabc7f9dae919867e190ec783162a134" alt=""><img src="/_blob/9ce74e4eb077be5e892f346d6f07ff8c" alt=""><img src="/_blob/75c2bdfeed7473f285850f7881bb9a87" alt=""></div>
+      <div class="me-cell"><img src="/_blob/7bdfeec8a36ee1ffd8fe10e26b74f68f" alt=""></div>
+      <div class="me-cell"><div class="me-pickup is-found"><div class="me-crop" style="width:32px;height:32px;background-image:url(/_blob/94e8d5672b5a701159a890e5b4039d1c);background-size:64px 64px;background-position:-4px -4px"></div></div></div>
+      <div class="me-cell"></div>
+      <div class="me-cell"><div class="me-pickup is-rare"><div class="me-crop" style="width:24px;height:24px;background-image:url(/_blob/e06fcbe170a28861a2d7b364b31d7c14);background-size:64px 64px;background-position:-4px -4px"></div></div></div>
+      <div class="me-cell"><img src="/_blob/b3f55a8fa8ab22e979736f3ca68cca30" alt=""><span class="me-toll">15</span></div>
+      <div class="me-cell"><img src="/_blob/e95d0754002732ad5a52c59d916b5b7f" alt=""></div>
+      <div class="me-cell"><img src="/_blob/7cd1a2b9022e0984ffdb793e39f7bd60" alt=""></div><div class="me-cell"></div><div class="me-cell"><img src="/_blob/0eef2ef28fdabe26b2435ed630adbcc0" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div><div class="me-cell"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div>
+    </div>
+    <p class="me-hint" style="max-width:384px">The runner sprite walks the maze. Gear stays teal with no frame. A trait pickup is the trait's PFP layer, cropped and outlined, inside four corner brackets in its rarity colour.</p>
+  </div>
+
+  <div class="me-col">
+    <p class="me-caption">Rarity: colour and pips together</p>
+    <div class="legend">
+      <div class="me-cell"><div class="me-pickup is-found"><div class="me-crop" style="width:48px;height:48px;background-image:url(/_blob/94e8d5672b5a701159a890e5b4039d1c);background-size:96px 96px;background-position:-6px -6px"></div></div></div>
+      <div><p class="me-display-sm me-energy">Found <span class="me-pips is-found"><i></i><i></i><i></i></span></p><p class="me-hint">Drops in the maze. <code>energy</code> brackets.</p></div>
+      <div class="me-cell"><div class="me-pickup is-rare"><div class="me-crop" style="width:36px;height:36px;background-image:url(/_blob/e06fcbe170a28861a2d7b364b31d7c14);background-size:96px 96px;background-position:-6px -6px"></div></div></div>
+      <div><p class="me-display-sm me-gold">Rare <span class="me-pips is-rare"><i></i><i></i><i></i></span></p><p class="me-hint">Drops deep or seldom. <code>gold</code> brackets.</p></div>
+      <div class="me-cell"><div class="me-pickup is-feat"><div class="me-crop" style="width:24px;height:24px;background-image:url(/_blob/446e2e5f733635dc38c8abcf985945bc);background-size:96px 96px;background-position:-30px -30px"></div></div></div>
+      <div><p class="me-display-sm me-feat">Feat only <span class="me-pips is-feat"><i></i><i></i><i></i></span></p><p class="me-hint">Never drops: awarded by a feat. <code>feat</code> brackets in toasts and cards.</p></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

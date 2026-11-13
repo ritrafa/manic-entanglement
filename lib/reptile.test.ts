@@ -166,9 +166,32 @@ describe('loadReptile', () => {
         useEndpoint();
         expect(await loadReptile(OWNER, fakeFetch({ result: { items: [] } })))
             .toEqual({ status: 'none' });
-        // A reply without the expected shape is "none", not a crash.
-        expect(await loadReptile(OWNER, fakeFetch({}))).toEqual({ status: 'none' });
-        expect(await loadReptile(OWNER, fakeFetch(null))).toEqual({ status: 'none' });
+        // A result without the expected shape is "none", not a crash.
+        expect(await loadReptile(OWNER, fakeFetch({ result: {} }))).toEqual({ status: 'none' });
+    });
+
+    it('error: JSON-RPC error reply', async () => {
+        useEndpoint();
+        // An error reply from the RPC endpoint is a network failure, never
+        // "no reptile in this wallet" (E15 review note).
+        expect(await loadReptile(OWNER, fakeFetch({
+            jsonrpc: '2.0',
+            id: 'reptile-look',
+            error: { code: -32603, message: 'Internal error' },
+        }))).toEqual({ status: 'error' });
+        // An error rides even beside a result: still a failure.
+        expect(await loadReptile(OWNER, fakeFetch({
+            error: { code: -32000, message: 'Node is busy' },
+            result: { items: [reptileItem()] },
+        }))).toEqual({ status: 'error' });
+    });
+
+    it('error: reply without a result', async () => {
+        useEndpoint();
+        expect(await loadReptile(OWNER, fakeFetch({}))).toEqual({ status: 'error' });
+        expect(await loadReptile(OWNER, fakeFetch(null))).toEqual({ status: 'error' });
+        expect(await loadReptile(OWNER, fakeFetch({ jsonrpc: '2.0', id: 'reptile-look' })))
+            .toEqual({ status: 'error' });
     });
 
     it('error: status 500', async () => {

@@ -15,14 +15,14 @@ interface Capture {
 }
 
 /**
- * The Controls screen (game/keys.ts): one row per action with its label and
- * two buttons showing the bound keys as players read them (keyLabel), or "-"
- * for an empty slot. Activating a button puts the panel in capture mode: the
- * button reads "Press a key", the shell's global handler ignores every key
- * while the capture runs (gameState.beginKeyCapture), and the next keydown
- * binds its code to that slot — conflicts swap, Escape is refused, all decided
- * by the pure rebind. Escape itself cancels the capture. Reset to defaults
- * restores DEFAULT_KEYS, Back returns to the settings panel.
+ * The Controls panel (game/keys.ts, one me-field row per action): its label
+ * and two me-btn key buttons beside it, showing the bound keys as players read
+ * them (keyLabel), or "-" for an empty slot. Activating a button puts the
+ * panel in capture mode: the button reads "Press a key", the shell's global
+ * handler ignores every key while the capture runs (gameState.beginKeyCapture),
+ * and the next keydown binds its code to that slot — conflicts swap, Escape is
+ * refused, all decided by the pure rebind. Escape itself cancels the capture.
+ * Reset to defaults restores DEFAULT_KEYS, Back returns to the settings panel.
  */
 const ControlsPanel: React.FC<ControlsProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -85,33 +85,36 @@ const ControlsPanel: React.FC<ControlsProps> = ({ gameState }) => {
 
     const keys = model.settings.keys;
     return (
-        <div className="settings-panel controls-panel" role="dialog" aria-modal="true" aria-label="Controls">
-            <p className="overlay-title">Controls</p>
-            <div className="settings-rows controls-rows">
-                {ACTIONS.map((action: Action) => (
-                    <div className="settings-row controls-row" key={action}>
-                        <span className="controls-label">{ACTION_LABELS[action]}</span>
-                        {([0, 1] as const).map((slot) => {
-                            const code = keys[action][slot];
-                            const capturing = capture !== null && capture.action === action && capture.slot === slot;
-                            return (
-                                <button
-                                    key={slot}
-                                    className="controls-key"
-                                    aria-label={`${ACTION_LABELS[action]} slot ${slot + 1}`}
-                                    onClick={() => (capturing ? stopCapture() : startCapture(action, slot))}
-                                >
-                                    {capturing ? 'Press a key' : code === undefined ? '-' : keyLabel(code)}
-                                </button>
-                            );
-                        })}
+        <div className="me-scrim">
+            <section className="me-panel" role="dialog" aria-modal="true" aria-label="Controls">
+                <h2 className="me-panel-title">Controls</h2>
+                <div className="me-panel-body">
+                    {ACTIONS.map((action: Action) => (
+                        <div className="me-field controls-row" key={action}>
+                            <span className="controls-label">{ACTION_LABELS[action]}</span>
+                            {([0, 1] as const).map((slot) => {
+                                const code = keys[action][slot];
+                                const capturing = capture !== null && capture.action === action && capture.slot === slot;
+                                return (
+                                    <button
+                                        key={slot}
+                                        type="button"
+                                        className="me-btn me-btn-sm controls-key"
+                                        aria-label={`${ACTION_LABELS[action]} slot ${slot + 1}`}
+                                        onClick={() => (capturing ? stopCapture() : startCapture(action, slot))}
+                                    >
+                                        {capturing ? 'Press a key' : code === undefined ? '-' : keyLabel(code)}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ))}
+                    <div className="me-panel-actions">
+                        <button className="me-btn" onClick={() => gameState.resetKeys()}>Reset to defaults</button>
+                        <button className="me-btn me-btn-primary" onClick={() => gameState.closeControls()}>Back</button>
                     </div>
-                ))}
-            </div>
-            <div className="overlay-buttons">
-                <button onClick={() => gameState.resetKeys()}>Reset to defaults</button>
-                <button onClick={() => gameState.closeControls()}>Back</button>
-            </div>
+                </div>
+            </section>
         </div>
     );
 };

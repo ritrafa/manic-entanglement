@@ -11,6 +11,7 @@ import { createRng } from "@/game/rng";
 import { applyModifier, modifierFor, MODIFIER_IDS, type ModifierId } from "@/game/modifiers";
 import { playBot, routeCells } from "@/game/bot";
 import { MODES, dailySeed, type ModeRules } from "@/game/modes";
+import { PICKUP_TRAITS } from "@/game/wardrobe";
 import {
     addGear,
     gearCap,
@@ -1547,3 +1548,247 @@ describe("Feats tally fields", () => {
     expect(plain.tally.mode).toBe("descent");
   });
 });
+
+// --- E58: trait pickups in the maze ---------------------------------------
+
+const ALL_PICKUPS = PICKUP_TRAITS.map(({ layer, trait, rarity }) => ({ layer, trait, rarity }));
+const HELD_ALL = PICKUP_TRAITS.map(({ layer, trait }) => ({ layer, trait }));
+const HELD_FOUND = PICKUP_TRAITS.filter((entry) => entry.rarity === "found").map(
+  ({ layer, trait }) => ({ layer, trait }),
+);
+
+/** A trait drop standing on the given cell, ready to be walked onto. */
+function traitAt(x: number, y: number, rarity: "found" | "rare" = "found") {
+  const entry = ALL_PICKUPS.find((candidate) => candidate.rarity === rarity)!;
+  return { x, y, layer: entry.layer, trait: entry.trait, rarity };
+}
+
+/** Stand the player next to an open step, put the trait on its far cell and take it. */
+function pickUpTrait(run: Run) {
+  const step = openStep(run);
+  const x = run.player.x + step.dx;
+  const y = run.player.y + step.dy;
+  run.items = [];
+  run.enemies = [];
+  run.trait = traitAt(x, y);
+  const before = { score: run.score, pickups: run.tally.pickups };
+  expect(run.move(step.dx, step.dy)).toBe(true);
+  return { before, drop: run.trait === null ? null : undefined };
+}
+
+describe("Run trait pickups: dropping", () => {
+  it("the first level never carries one", () => {
+    for (let seed = 0; seed < 100; seed++) {
+      const run = new Run({ seed: seed * 31 + 5 });
+      run.start();
+      expect(run.trait).toBeNull();
+    }
+  });
+
+  it("a level carries at most one trait, off the start and the exit", () => {
+    for (let seed = 0; seed < 60; seed++) {
+      const run = new Run({ seed: seed * 131 + 9, modifiers: false });
+      run.start();
+      for (let level = 1; level <= 8; level++) {
+        if (run.trait !== null) {
+          const start = { x: Math.floor(run.maze.width / 2), y: run.maze.height - 1 };
+          expect(run.trait).not.toMatchObject({ x: run.exit.x, y: run.exit.y });
+          expect(run.trait).not.toMatchObject({ x: start.x, y: start.y });
+          expect(ALL_PICKUPS.some((e) => e.layer === run.trait!.layer && e.trait === run.trait!.trait)).toBe(true);
+          expect(
+            run.items.every((item) => item.x !== run.trait!.x || item.y !== run.trait!.y),
+          ).toBe(true);
+          expect(
+            run.enemies.every((enemy) => enemy.x !== run.trait!.x || enemy.y !== run.trait!.y),
+          ).toBe(true);
+        }
+        run.energy = 500;
+        reachClear(run);
+        run.nextLevel();
+        run.takeEvents();
+      }
+    }
+  });
+
+  it("traits drop from the second level on: over 60 seeds both rarities are seen", () => {
+    const seen = new Set<string>();
+    let drops = 0;
+    for (let seed = 0; seed < 60; seed++) {
+      const run = new Run({ seed: seed * 977 + 3, modifiers: false });
+      run.start();
+      for (let level = 1; level <= 10; level++) {
+        if (run.trait !== null) {
+          drops += 1;
+          seen.add(run.trait.rarity);
+        }
+        run.energy = 500;
+        reachClear(run);
+        run.nextLevel();
+        run.takeEvents();
+      }
+    }
+    expect(drops).toBeGreaterThan(0);
+    expect(seen).toEqual(new Set(["found", "rare"]));
+  });
+
+  it("held traits never drop: with every pickup held, no level carries one", () => {
+    for (let seed = 0; seed < 40; seed++) {
+      const run = new Run({ seed: seed * 71 + 11, pickedUp: HELD_ALL, modifiers: false });
+      run.start();
+      for (let level = 1; level <= 10; level++) {
+        expect(run.trait).toBeNull();
+        run.energy = 500;
+        reachClear(run);
+        run.nextLevel();
+        run.takeEvents();
+      }
+    }
+  });
+
+  it("with the Found traits held only Rare ones drop", () => {
+    let sawRare = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const run = new Run({ seed: seed * 89 + 17, pickedUp: HELD_FOUND, modifiers: false });
+      run.start();
+      for (let level = 1; level <= 10; level++) {
+        if (run.trait !== null) {
+          expect(run.trait.rarity).toBe("rare");
+          sawRare += 1;
+        }
+        run.energy = 500;
+        reachClear(run);
+        run.nextLevel();
+        run.takeEvents();
+      }
+    }
+    expect(sawRare).toBeGreaterThan(0);
+  });
+
+  it("daily mode stays deterministic: the same seed deals the same traits level by level", () => {
+    const deal = (seed: number) => {
+      const run = new Run({ seed, mode: MODES.daily, modifiers: false });
+      run.start();
+      const seen: (string | null)[] = [];
+      for (let level = 1; level <= 8; level++) {
+        seen.push(run.trait === null ? null : `${run.trait.layer}:${run.trait.trait}`);
+        run.energy = 500;
+        reachClear(run);
+        run.nextLevel();
+        run.takeEvents();
+      }
+      return seen;
+    };
+    expect(deal(424242)).toEqual(deal(424242));
+  });
+});
+
+describe("Run trait pickups: holding, keeping and losing", () => {
+  it("walking onto the trait holds it and raises a traitPickup event", () => {
+    const run = startedRun(31);
+    const { before } = pickUpTrait(run);
+    expect(run.trait).toBeNull();
+    expect(run.heldTrait).not.toBeNull();
+    expect(ALL_PICKUPS.some((e) => e.layer === run.heldTrait!.layer && e.trait === run.heldTrait!.trait)).toBe(true);
+    expect(run.score).toBe(before.score + PICKUP_SCORE);
+    expect(run.tally.pickups).toBe(before.pickups + 1);
+    const events = run.takeEvents().filter((event) => event.type === "traitPickup");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      layer: run.heldTrait!.layer,
+      trait: run.heldTrait!.trait,
+      rarity: run.heldTrait!.rarity,
+    });
+  });
+
+  it("reaching the exit keeps the held trait with a traitKept event", () => {
+    const run = startedRun(32);
+    pickUpTrait(run);
+    const held = run.heldTrait!;
+    run.energy = 500;
+    reachClear(run);
+    const events = run.takeEvents().filter((event) => event.type === "traitKept");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "traitKept", layer: held.layer, trait: held.trait, rarity: held.rarity });
+    expect(run.heldTrait).toBeNull();
+  });
+
+  it("the last level of a limited mode keeps it too", () => {
+    const run = new Run({ seed: 33, mode: MODES.sprint });
+    run.start();
+    run.takeEvents();
+    pickUpTrait(run);
+    const held = run.heldTrait!;
+    run.energy = 500;
+    reachClear(run);
+    const events = run.takeEvents().filter((event) => event.type === "traitKept");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ layer: held.layer, trait: held.trait });
+  });
+
+  it("dying before the exit loses the held trait", () => {
+    const run = startedRun(34);
+    pickUpTrait(run);
+    run.takeEvents();
+    run.energy = 1;
+    run.tick(CONFIG.drainMs * 1000);
+    expect(run.phase).toBe("dead");
+    expect(run.heldTrait).toBeNull();
+    expect(run.takeEvents().some((event) => event.type === "traitKept")).toBe(false);
+  });
+
+  it("quitting or restarting loses it, and it is never kept twice", () => {
+    const quit = startedRun(35);
+    pickUpTrait(quit);
+    quit.abandon();
+    expect(quit.heldTrait).toBeNull();
+
+    const restart = startedRun(36);
+    pickUpTrait(restart);
+    restart.phase = "dead"; // start() only answers from ready, dead or done
+    restart.start();
+    expect(restart.heldTrait).toBeNull();
+
+    const twice = startedRun(37);
+    pickUpTrait(twice);
+    const held = { ...twice.heldTrait! };
+    twice.energy = 500;
+    reachClear(twice);
+    twice.nextLevel();
+    const kept = twice.takeEvents().filter((event) => event.type === "traitKept");
+    expect(kept).toHaveLength(1);
+    // The kept trait is out of the candidates for the rest of the run.
+    for (let level = twice.level; level <= 12; level++) {
+      expect(
+        runTraitMatches(twice.trait, held) === false,
+        "the kept trait never lies on the board again",
+      );
+      twice.energy = 500;
+      reachClear(twice);
+      twice.nextLevel();
+      twice.takeEvents();
+    }
+  });
+
+  it("the held trait is not a candidate for a drop either", () => {
+    const run = startedRun(38);
+    pickUpTrait(run);
+    const held = { ...run.heldTrait! };
+    // The same trait cannot drop again while it is held: clear the level (the
+    // trait is kept, so it is out of the pool either way) and check the deal.
+    run.energy = 500;
+    reachClear(run);
+    run.nextLevel();
+    run.takeEvents();
+    for (let level = run.level; level <= 12; level++) {
+      expect(runTraitMatches(run.trait, held)).toBe(false);
+      run.energy = 500;
+      reachClear(run);
+      run.nextLevel();
+      run.takeEvents();
+    }
+  });
+});
+
+function runTraitMatches(trait: { layer: string; trait: string } | null, entry: { layer: string; trait: string }): boolean {
+  return trait !== null && trait.layer === entry.layer && trait.trait === entry.trait;
+}

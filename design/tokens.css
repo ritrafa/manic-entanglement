@@ -1,0 +1,64 @@
+/* Manic Entanglement design tokens: generated from design/tokens.json, do not edit by hand. */
+:root {
+  /* color */
+  --void: #06120d;
+  --surface: #0a1f17;
+  --surface-raised: #0c261c;
+  --well: #020806;
+  --scrim: rgba(6, 18, 13, 0.88);
+  --maze-800: #08412c;
+  --maze-700: #035b3c;
+  --maze-600: #056744;
+  --maze-500: #0b9363;
+  --maze-400: #11ab74;
+  --teal-700: #125d57;
+  --teal-500: #1c9289;
+  --teal-400: #22b0a4;
+  --teal-300: #2ad6c8;
+  --energy: var(--teal-300);
+  --gold: #ffd700;
+  --gold-shade: #bea917;
+  --danger: #e45c63;
+  --danger-fill: #d80d17;
+  --feat: #b26de2;
+  --feat-shade: #6c14a9;
+  --ink: #ffffff;
+  --ink-muted: #c9c9c9;
+  --ink-dim: #929292;
+  --on-maze: var(--void);
+  --on-gold: var(--void);
+  --on-danger: var(--ink);
+  --line: var(--maze-500);
+  --line-quiet: var(--maze-700);
+  --outline: #000000;
+  --font-display: "Silkscreen", "Courier New", monospace;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  /* spacing */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  /* radius */
+  --radius-none: 0px;
+  /* shadow */
+  --lip-maze: inset 0 -4px 0 0 #035b3c;
+  --lip-well: inset 0 -4px 0 0 #020806;
+  --lip-gold: inset 0 -4px 0 0 #bea917;
+  --drop-hard: 4px 4px 0 0 #020806;
+  /* border */
+  --border-thin: 2px;
+  --border-thick: 4px;
+  /* size */
+  --tile: 24px;
+  --tile-2x: 48px;
+  --tile-3x: 72px;
+  --tile-4x: 96px;
+  --tile-6x: 144px;
+  --dpad-key: 64px;
+  --notch-sm: 2px;
+  --notch-md: 4px;
+}

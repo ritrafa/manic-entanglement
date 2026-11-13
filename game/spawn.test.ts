@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "@/game/rng";
-import { ITEM_TYPES, GEAR_TYPES, spawnLevel, startCell, exitCell } from "@/game/spawn";
+import { ITEM_TYPES, GEAR_TYPES, spawnLevel, startCell, exitCell, rollTraitDrop, TRAIT_DROPS, type TraitCandidate } from "@/game/spawn";
+import { PICKUP_TRAITS } from "@/game/wardrobe";
 import { Maze } from "@/game/maze";
 import { routeCells } from "@/game/bot";
 import { ENEMY_KINDS, isHeavy } from "@/game/enemies";
@@ -260,5 +261,146 @@ describe("spawnLevel enemy kinds", () => {
     expect([...GEAR_TYPES].sort()).toEqual(
       ITEM_TYPES.filter((type) => type !== "energy").sort(),
     );
+  });
+});
+
+describe("spawnLevel trait pickups (E58)", () => {
+  const ALL_TRAITS = PICKUP_TRAITS.map(({ layer, trait, rarity }) => ({ layer, trait, rarity }));
+  const FOUND = ALL_TRAITS.filter((entry) => entry.rarity === "found");
+  const RARE = ALL_TRAITS.filter((entry) => entry.rarity === "rare");
+
+  function roll(seed: number, depth: number, candidates: readonly TraitCandidate[]) {
+    return rollTraitDrop(createRng(seed), depth, candidates);
+  }
+
+  it("the first level never drops one, and the roll draws no rng at depth 1", () => {
+    for (const seed of SEEDS.slice(0, 100)) {
+      expect(roll(seed, 1, ALL_TRAITS)).toBeNull();
+      const rng = createRng(seed);
+      rollTraitDrop(rng, 1, ALL_TRAITS);
+      expect(rng.next()).toBe(createRng(seed).next());
+    }
+  });
+
+  it("Found only from depth 2, at about 20% per level", () => {
+    let drops = 0;
+    for (const seed of SEEDS) {
+      const drop = roll(seed, 2, ALL_TRAITS);
+      if (drop === null) continue;
+      drops += 1;
+      expect(drop.rarity).toBe("found");
+    }
+    const share = drops / SEEDS.length;
+    expect(share).toBeGreaterThan(0.12);
+    expect(share).toBeLessThan(0.28);
+  });
+
+  it("Rare is rolled first from depth 5, at about 6%, and never joins a Found", () => {
+    let rare = 0;
+    let found = 0;
+    for (const seed of SEEDS) {
+      const drop = roll(seed, 5, ALL_TRAITS);
+      if (drop === null) continue;
+      if (drop.rarity === "rare") rare += 1;
+      else found += 1;
+    }
+    expect(rare / SEEDS.length).toBeGreaterThan(0.02);
+    expect(rare / SEEDS.length).toBeLessThan(0.11);
+    // The Found share of the levels Rare did not win: about 0.94 * 0.2.
+    expect(found / SEEDS.length).toBeGreaterThan(0.11);
+    expect(found / SEEDS.length).toBeLessThan(0.27);
+  });
+
+  it("only candidates drop, and a won roll with no candidate of that rarity drops nothing", () => {
+    for (const seed of SEEDS.slice(0, 100)) {
+      const onlyFound = roll(seed, 8, FOUND);
+      expect(onlyFound === null || onlyFound.rarity === "found").toBe(true);
+      const onlyRare = roll(seed, 8, RARE);
+      expect(onlyRare === null || onlyRare.rarity === "rare").toBe(true);
+    }
+    // A depth where the Rare roll wins but no Rare candidate is left: no drop,
+    // even though Found could still have won.
+    let blocked = 0;
+    for (const seed of SEEDS) {
+      if (roll(seed, 5, ALL_TRAITS)?.rarity === "rare") {
+        expect(roll(seed, 5, FOUND)).toBeNull();
+        blocked += 1;
+      }
+    }
+    expect(blocked).toBeGreaterThan(0);
+  });
+
+  it("an empty candidate list drops nothing and draws no rng at all", () => {
+    for (const seed of SEEDS.slice(0, 50)) {
+      const rng = createRng(seed);
+      expect(rollTraitDrop(rng, 8, [])).toBeNull();
+      expect(rng.next()).toBe(createRng(seed).next());
+
+      const withTraits = spawnLevel(createRng(seed), 9, { items: 4, enemies: 2 }, 0.4, {
+        depth: 8,
+        traits: [],
+      });
+      const withoutTraits = spawnLevel(createRng(seed), 9, { items: 4, enemies: 2 }, 0.4, { depth: 8 });
+      expect(withTraits).toEqual(withoutTraits);
+      expect(withTraits.trait).toBeNull();
+    }
+  });
+
+  it("spawnLevel places at most one trait, off the start, the exit and everything else", () => {
+    for (const seed of SEEDS.slice(0, 100)) {
+      const size = 9;
+      const spawned = spawnLevel(createRng(seed), size, { items: 6, enemies: 4 }, 0.4, {
+        depth: 6,
+        traits: ALL_TRAITS,
+      });
+      if (spawned.trait === null) continue;
+      const trait = spawned.trait;
+      expect(sameCell(trait, startCell(size))).toBe(false);
+      expect(sameCell(trait, exitCell(size))).toBe(false);
+      const placed: Cell[] = [...spawned.items, ...spawned.enemies, trait];
+      const keys = new Set(placed.map((cell) => `${cell.x},${cell.y}`));
+      expect(keys.size).toBe(placed.length);
+      expect(ALL_TRAITS.some((entry) => entry.layer === trait.layer && entry.trait === trait.trait)).toBe(true);
+    }
+  });
+
+  it("a crowded level still terminates and drops at most what the cells afford", () => {
+    for (const seed of SEEDS.slice(0, 50)) {
+      const spawned = spawnLevel(createRng(seed), 3, { items: 20, enemies: 20 }, 0.4, {
+        depth: 6,
+        traits: ALL_TRAITS,
+      });
+      const count = spawned.items.length + spawned.enemies.length + (spawned.trait === null ? 0 : 1);
+      expect(count).toBeLessThanOrEqual(7);
+    }
+  });
+
+  it("the trait drop is deterministic: the same seed and arguments give the same trait", () => {
+    for (const seed of SEEDS.slice(0, 30)) {
+      for (const depth of [2, 5, 7]) {
+        const a = spawnLevel(createRng(seed), 9, { items: 4, enemies: 2 }, 0.4, { depth, traits: ALL_TRAITS });
+        const b = spawnLevel(createRng(seed), 9, { items: 4, enemies: 2 }, 0.4, { depth, traits: ALL_TRAITS });
+        expect(a).toEqual(b);
+      }
+    }
+  });
+
+  it("the drop rolls on its own rng branch: the level layout matches a traitless level", () => {
+    for (const seed of SEEDS.slice(0, 50)) {
+      const plain = spawnLevel(createRng(seed), 9, { items: 4, enemies: 2, tools: 1 }, 0.4, { depth: 6 });
+      const withTraits = spawnLevel(createRng(seed), 9, { items: 4, enemies: 2, tools: 1 }, 0.4, {
+        depth: 6,
+        traits: ALL_TRAITS,
+      });
+      expect(withTraits.items).toEqual(plain.items);
+      expect(withTraits.enemies).toEqual(plain.enemies);
+    }
+  });
+
+  it("the chance table reads Found 20% from depth 2 and Rare 6% from depth 5", () => {
+    expect(TRAIT_DROPS).toEqual([
+      { rarity: "rare", fromDepth: 5, chance: 0.06 },
+      { rarity: "found", fromDepth: 2, chance: 0.2 },
+    ]);
   });
 });

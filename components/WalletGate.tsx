@@ -19,7 +19,7 @@ const WalletPanel = dynamic(
         ssr: false,
         loading: () => (
             <div className="left-box">
-                <button type="button" className="wallet-open" disabled>
+                <button type="button" className="me-btn" disabled>
                     Loading...
                 </button>
             </div>
@@ -38,7 +38,7 @@ const WalletGate: React.FC<WalletGateProps> = ({ gameState }) => {
     }
     return (
         <div className="left-box">
-            <button type="button" className="wallet-open" onClick={() => setOpen(true)}>
+            <button type="button" className="me-btn" onClick={() => setOpen(true)}>
                 Wallet
             </button>
         </div>

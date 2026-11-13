@@ -1,10 +1,14 @@
 // The one place that turns Voices into sound: an injected factory hands over an
-// AudioContext-like object, and every voice becomes exactly one oscillator and
-// one gain node on a named bus, with a short attack and release so nothing
-// clicks. This file never names a browser global itself — no AudioContext
-// constructor, no window — so its tests run in plain node with a fake, and a
-// browser without WebAudio (or a context refused before the first gesture)
-// simply never hears anything: every method is a silent no-op then.
+// AudioContext-like object, and every voice becomes exactly one source (an
+// oscillator, or an AudioBufferSourceNode reading the shared white-noise
+// buffer for a `noise` voice) plus one gain node on a named bus, optionally
+// shaped by one biquad filter. Plain voices get a short attack and release so
+// nothing clicks; a `decay` voice instead falls exponentially from its peak
+// to near zero, which is how plucks and drums sound. This file never names a
+// browser global itself — no AudioContext constructor, no window — so its
+// tests run in plain node with a fake, and a browser without WebAudio (or a
+// context refused before the first gesture) simply never hears anything:
+// every method is a silent no-op then.
 
 import type { Voice } from "@/game/audio/voice";
 
@@ -28,6 +32,26 @@ export interface OscillatorLike {
     stop(when: number): void;
 }
 
+/** The part of an AudioBufferSourceNode this engine uses. */
+export interface AudioBufferSourceLike {
+    buffer: AudioBufferLike | null;
+    connect(destination: unknown): void;
+    start(when: number): void;
+    stop(when: number): void;
+}
+
+/** The part of an AudioBuffer this engine uses, to fill the noise once. */
+export interface AudioBufferLike {
+    getChannelData(channel: number): Float32Array;
+}
+
+/** The part of a BiquadFilterNode this engine uses. */
+export interface BiquadFilterLike {
+    type: string;
+    frequency: AudioParamLike;
+    connect(destination: unknown): void;
+}
+
 /** The part of a GainNode this engine uses. */
 export interface GainNodeLike {
     gain: AudioParamLike;
@@ -37,10 +61,14 @@ export interface GainNodeLike {
 /** The part of an AudioContext this engine uses; a real one satisfies it. */
 export interface AudioContextLike {
     readonly currentTime: number;
+    readonly sampleRate: number;
     readonly destination: unknown;
     resume(): Promise<void> | void;
     createOscillator(): OscillatorLike;
     createGain(): GainNodeLike;
+    createBufferSource(): AudioBufferSourceLike;
+    createBuffer(channels: number, length: number, sampleRate: number): AudioBufferLike;
+    createBiquadFilter(): BiquadFilterLike;
 }
 
 /** Builds the context on unlock; the shell passes its own AudioContext maker. */
@@ -49,8 +77,17 @@ export type ContextFactory = () => AudioContextLike;
 /** Seconds of fade in and out on every voice, so starts and stops never click. */
 const ENVELOPE_EDGE = 0.008;
 
-/** Seconds the oscillator keeps sounding past the envelope, so the release lands. */
+/** Seconds the source keeps sounding past the envelope, so the release lands. */
 const STOP_TAIL = 0.005;
+
+/** "Near zero" for an exponential fall, which may never reach true zero. */
+const NEAR_ZERO = 0.0001;
+
+/** The sample rate assumed for a context that reports a broken one. */
+const FALLBACK_SAMPLE_RATE = 44100;
+
+/** The filter kinds the engine accepts; anything else is skipped. */
+const FILTER_TYPES = ["highpass", "bandpass", "lowpass"] as const;
 
 /** Pin a volume into [0, 1]; a broken number lands on 0. */
 function clampVolume(value: number): number {
@@ -60,7 +97,7 @@ function clampVolume(value: number): number {
 
 /**
  * The game's synthesizer. Constructing it creates nothing: the factory is only
- * called on unlock(), and from then on play() schedules one oscillator and one
+ * called on unlock(), and from then on play() schedules one source and one
  * gain node per voice through the bus the caller names. Before unlock(), and
  * forever after a factory that throws, every method does nothing at all.
  */
@@ -75,6 +112,8 @@ export class AudioEngine {
     private readonly volumes: Record<Bus, number> = { sfx: 0.7, music: 1 };
     /** The bus gain nodes, made once with the context. */
     private readonly buses: Partial<Record<Bus, GainNodeLike>> = {};
+    /** One second of white noise, made once per context and shared by every noise voice. */
+    private noiseBuffer: AudioBufferLike | null = null;
 
     constructor(factory: ContextFactory) {
         this.factory = factory;
@@ -103,6 +142,7 @@ export class AudioEngine {
                 // A context that refuses its nodes is as good as no WebAudio.
                 this.broken = true;
                 this.ctx = null;
+                this.noiseBuffer = null;
                 this.buses.sfx = undefined;
                 this.buses.music = undefined;
                 return;
@@ -125,7 +165,7 @@ export class AudioEngine {
     }
 
     /**
-     * Schedule one sound: one oscillator and one gain node per voice, on the
+     * Schedule one sound: one source and one gain node per voice, on the
      * named bus. Silent before unlock(), while muted, and without WebAudio.
      * A voice that the context refuses is skipped, never raised. With an
      * absolute `time` (audio-clock seconds) the voices start there, which is
@@ -147,7 +187,8 @@ export class AudioEngine {
             }
         }
         for (const voice of voices) {
-            if (!Number.isFinite(voice.freq) || voice.freq <= 0) continue;
+            // A noise voice never reads its frequency, so it is not judged on it.
+            if (voice.wave !== "noise" && (!Number.isFinite(voice.freq) || voice.freq <= 0)) continue;
             if (!Number.isFinite(voice.at) || voice.at < 0) continue;
             if (!Number.isFinite(voice.dur) || voice.dur <= 0) continue;
             if (!Number.isFinite(voice.gain) || voice.gain <= 0) continue;
@@ -191,31 +232,86 @@ export class AudioEngine {
         return this.isMuted;
     }
 
-    /** One oscillator and one gain node, with a short attack and release. */
+    /** One source and one gain node: an oscillator, or the noise buffer. */
     private voice(ctx: AudioContextLike, bus: GainNodeLike, voice: Voice, start: number): void {
         const end = start + voice.dur;
-        const attack = Math.min(ENVELOPE_EDGE, voice.dur / 3);
-        const release = Math.min(ENVELOPE_EDGE, voice.dur / 3);
+        const envelope = this.envelope(ctx, bus, voice, start);
+        if (voice.wave === "noise") {
+            const source = ctx.createBufferSource();
+            source.buffer = this.noise(ctx);
+            this.shape(ctx, source, voice, start, envelope);
+            source.start(start);
+            source.stop(end + STOP_TAIL);
+            return;
+        }
 
         const oscillator = ctx.createOscillator();
-        const { wave } = voice;
-        oscillator.type = wave;
+        oscillator.type = voice.wave;
         oscillator.frequency.setValueAtTime(voice.freq, start);
         const glideTo = voice.freqEnd;
         if (glideTo !== undefined && Number.isFinite(glideTo) && glideTo > 0 && glideTo !== voice.freq) {
             oscillator.frequency.exponentialRampToValueAtTime(glideTo, end);
         }
+        this.shape(ctx, oscillator, voice, start, envelope);
+        oscillator.start(start);
+        oscillator.stop(end + STOP_TAIL);
+    }
+
+    /**
+     * The gain envelope: a short attack and release around a flat hold, or —
+     * for a decay voice — an exponential fall from the peak to near zero.
+     */
+    private envelope(ctx: AudioContextLike, bus: GainNodeLike, voice: Voice, start: number): GainNodeLike {
+        const end = start + voice.dur;
+        const attack = Math.min(ENVELOPE_EDGE, voice.dur / 3);
+        const release = Math.min(ENVELOPE_EDGE, voice.dur / 3);
 
         const envelope = ctx.createGain();
         envelope.gain.setValueAtTime(0, start);
         envelope.gain.linearRampToValueAtTime(voice.gain, start + attack);
-        envelope.gain.setValueAtTime(voice.gain, Math.max(start + attack, end - release));
-        envelope.gain.linearRampToValueAtTime(0, end);
-
-        oscillator.connect(envelope);
+        if (voice.decay) {
+            envelope.gain.exponentialRampToValueAtTime(NEAR_ZERO, end);
+        } else {
+            envelope.gain.setValueAtTime(voice.gain, Math.max(start + attack, end - release));
+            envelope.gain.linearRampToValueAtTime(0, end);
+        }
         envelope.connect(bus);
-        oscillator.start(start);
-        oscillator.stop(end + STOP_TAIL);
+        return envelope;
+    }
+
+    /** Source to envelope, through the voice's biquad filter when it has one. */
+    private shape(
+        ctx: AudioContextLike,
+        source: OscillatorLike | AudioBufferSourceLike,
+        voice: Voice,
+        start: number,
+        envelope: GainNodeLike,
+    ): void {
+        const wanted = voice.filter;
+        if (wanted === undefined || !Number.isFinite(wanted.freq) || wanted.freq <= 0
+            || !FILTER_TYPES.includes(wanted.type)) {
+            source.connect(envelope);
+            return;
+        }
+        const filter = ctx.createBiquadFilter();
+        filter.type = wanted.type;
+        filter.frequency.setValueAtTime(wanted.freq, start);
+        source.connect(filter);
+        filter.connect(envelope);
+    }
+
+    /** The shared second of white noise, filled once and kept for this context. */
+    private noise(ctx: AudioContextLike): AudioBufferLike {
+        if (this.noiseBuffer === null) {
+            const rate = Number.isFinite(ctx.sampleRate) && ctx.sampleRate > 0
+                ? ctx.sampleRate
+                : FALLBACK_SAMPLE_RATE;
+            const buffer = ctx.createBuffer(1, Math.max(1, Math.floor(rate)), rate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+            this.noiseBuffer = buffer;
+        }
+        return this.noiseBuffer;
     }
 
     /** Resume a suspended context, swallowing a rejection or a throw. */

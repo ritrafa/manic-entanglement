@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Maze } from "@/game/maze";
 import { createRng } from "@/game/rng";
-import { entityPx, markTiles, tileDiff } from "@/game/view";
+import { forecastOf, rollWalk } from "@/game/forecast";
+import { entityPx, gridAfterForecast, markTiles, tileCodeAt, tileDiff } from "@/game/view";
 
 function copyGrid(grid: string[][]): string[][] {
     return grid.map((row) => row.slice());
@@ -94,14 +95,18 @@ describe("entityPx", () => {
 });
 
 describe("markTiles", () => {
+  function emptyGrid(rows = 12, cols = 12): string[][] {
+    return Array.from({ length: rows }, () => Array.from({ length: cols }, () => "0000"));
+  }
+
   it("maps an r edge at (1, 2) to tile (4, 5) and a d edge at (1, 2) to tile (3, 6)", () => {
     const forecast = {
       opens: [{ x: 1, y: 2, dir: "r" as const }],
       closes: [{ x: 1, y: 2, dir: "d" as const }],
     };
-    expect(markTiles(forecast)).toEqual([
-      { tx: 4, ty: 5, kind: "open" },
-      { tx: 3, ty: 6, kind: "close" },
+    expect(markTiles(forecast, emptyGrid())).toEqual([
+      { tx: 4, ty: 5, kind: "open", code: "0000" },
+      { tx: 3, ty: 6, kind: "close", code: "0000" },
     ]);
   });
 
@@ -113,14 +118,103 @@ describe("markTiles", () => {
       ],
       closes: [{ x: 1, y: 1, dir: "r" as const }],
     };
-    expect(markTiles(forecast)).toEqual([
-      { tx: 2, ty: 1, kind: "open" },
-      { tx: 5, ty: 8, kind: "open" },
-      { tx: 4, ty: 3, kind: "close" },
+    expect(markTiles(forecast, emptyGrid())).toEqual([
+      { tx: 2, ty: 1, kind: "open", code: "0000" },
+      { tx: 5, ty: 8, kind: "open", code: "0000" },
+      { tx: 4, ty: 3, kind: "close", code: "0000" },
     ]);
   });
 
   it("is empty for an empty forecast", () => {
-    expect(markTiles({ opens: [], closes: [] })).toEqual([]);
+    expect(markTiles({ opens: [], closes: [] }, emptyGrid())).toEqual([]);
+  });
+
+  it("computes the incoming tile's code from the grid after the forecast", () => {
+    const grid = emptyGrid();
+    // A wall above the tile the closing d edge at (1, 2) will fill (tile 3, 6),
+    // and a wall standing on the sealing tile itself that must not leak into
+    // its code, and a wall left of the opening r edge's tile (4, 5).
+    grid[5][3] = "0101";
+    grid[6][3] = "1111";
+    grid[5][4] = "1010";
+    const forecast = {
+      opens: [{ x: 1, y: 2, dir: "r" as const }],
+      closes: [{ x: 1, y: 2, dir: "d" as const }],
+    };
+    const marks = markTiles(forecast, grid);
+    expect(marks).toEqual([
+      // Tile (4, 5): only its left neighbour (3, 5) holds a wall.
+      { tx: 4, ty: 5, kind: "open", code: "0001" },
+      // Tile (3, 6): only its top neighbour (3, 5) holds a wall; the wall
+      // standing on the tile itself is not part of its code.
+      { tx: 3, ty: 6, kind: "close", code: "1000" },
+    ]);
+    // The sealing tile itself is emptied in the applied grid only by an open;
+    // here it stays a wall placeholder, ready for its picture.
+    expect(gridAfterForecast(grid, forecast)[6][3]).not.toBe("0000");
+    expect(gridAfterForecast(grid, forecast)[5][4]).toBe("0000");
+    // The corner between the two changed edges sees the opening wall while it
+    // stands and not after the forecast: the marks read the applied grid.
+    expect(tileCodeAt(grid, 3, 5)).toBe("0110");
+    expect(tileCodeAt(gridAfterForecast(grid, forecast), 3, 5)).toBe("0010");
+  });
+
+  it("skips the mark on hidden tiles and keeps it on shown ones (Blackout)", () => {
+    const forecast = {
+      opens: [{ x: 1, y: 2, dir: "r" as const }],
+      closes: [{ x: 1, y: 2, dir: "d" as const }],
+    };
+    // The opening wall's tile (4, 5) is hidden and the incoming tile (3, 6)
+    // shows: the hidden wall must get no outgoing breathing and the change it
+    // previews must not be marked.
+    const marks = markTiles(forecast, emptyGrid(), (tx, ty) => !(tx === 4 && ty === 5));
+    expect(marks).toEqual([{ tx: 3, ty: 6, kind: "close", code: "0000" }]);
+    // The other way round: no incoming ghost is drawn on a hidden tile.
+    expect(markTiles(forecast, emptyGrid(), (tx, ty) => !(tx === 3 && ty === 6))).toEqual([
+      { tx: 4, ty: 5, kind: "open", code: "0000" },
+    ]);
+    // Nothing shown, nothing marked; everything shown, everything marked.
+    expect(markTiles(forecast, emptyGrid(), () => false)).toEqual([]);
+    expect(markTiles(forecast, emptyGrid(), () => true)).toHaveLength(2);
+  });
+
+  it("marks only the tiles inside a Blackout-style view", () => {
+    const rng = createRng(7);
+    const maze = new Maze(7, 7, rng);
+    const walk = rollWalk(maze, rng, 3);
+    const forecast = forecastOf(maze, walk);
+    expect(forecast.opens.length + forecast.closes.length).toBeGreaterThan(0);
+    // A view like game/modifiers.ts visibleCells draws: only tiles touching
+    // wall-grid cell (1, 1) show.
+    const nearOriginLight = (tx: number, ty: number): boolean =>
+      tx >= 1 && tx <= 3 && ty >= 1 && ty <= 3;
+    const marks = markTiles(forecast, maze.wallGrid, nearOriginLight);
+    for (const mark of marks) expect(nearOriginLight(mark.tx, mark.ty)).toBe(true);
+    // Without the view the same forecast marks every one of its tiles.
+    expect(markTiles(forecast, maze.wallGrid).length).toBeGreaterThanOrEqual(marks.length);
+  });
+
+  it("gives the incoming tiles the codes the walls carry after the walk", () => {
+    let found = false;
+    for (let seed = 1; seed < 200 && !found; seed++) {
+      const rng = createRng(seed);
+      const maze = new Maze(7, 7, rng);
+      const walk = rollWalk(maze, rng, 3);
+      const forecast = forecastOf(maze, walk);
+      if (forecast.opens.length === 0 || forecast.closes.length === 0) continue;
+      found = true;
+      const marks = markTiles(forecast, maze.wallGrid);
+      for (const dir of walk) maze.step(dir);
+      const closing = marks.filter((mark) => mark.kind === "close");
+      expect(closing.length).toBeGreaterThan(0);
+      for (const mark of closing) {
+        // The ghost picture equals the picture the tiles layer will show.
+        expect(mark.code).toBe(maze.wallGrid[mark.ty][mark.tx]);
+      }
+      for (const mark of marks.filter((m) => m.kind === "open")) {
+        expect(maze.wallGrid[mark.ty][mark.tx]).toBe("0000");
+      }
+    }
+    expect(found).toBe(true);
   });
 });

@@ -1,3 +1,10 @@
+import '@fontsource/silkscreen/400.css';
+import '@fontsource/silkscreen/700.css';
+import '@fontsource/atkinson-hyperlegible/400.css';
+import '@fontsource/atkinson-hyperlegible/700.css';
+import '../design/tokens.css';
+import '../design/components.css';
+import '../styles/globals.css';
 import { siteUrl } from "./meta";
 
 const DESCRIPTION =

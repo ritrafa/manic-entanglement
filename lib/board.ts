@@ -7,8 +7,11 @@ import type { Run } from '@/game/run';
 import { CONFIG, FX } from '@/game/config';
 import { visibleCells } from '@/game/modifiers';
 import { blobRect } from '@/game/layout';
+import type { BoardViewport } from '@/game/layout';
+import { cameraOffset } from '@/game/camera';
+import type { CameraWindow } from '@/game/camera';
 import { entityPx, markTiles, tileDiff } from '@/game/view';
-import type { Fx, FxTone } from '@/game/fx';
+import { FLOAT_RISE_MS, floatLineOffset, type Fx, type FloatText, type FxTone } from '@/game/fx';
 
 /** Tile pictures live at images/<code>.png. */
 const WALL_IMAGE_BASE = '/images/';
@@ -33,6 +36,88 @@ function preloadWallImages(): void {
 const EFFECT_GRACE_MS = 250;
 /** Milliseconds the gold flash on a Cut-opened wall tile lasts. */
 const TILE_FLASH_MS = 450;
+/** The E56 minimap's side in pixels: a small square in a board corner. */
+const MINIMAP_PX = 96;
+/** The minimap draws each wall-grid tile at 1 or 2 CSS pixels, never more
+    (times the device pixel ratio in the drawing buffer). */
+const MINIMAP_MAX_TILE_PX = 2;
+/** The side of a PFP master in art pixels (public/images/nft/<Layer>/<Trait>pfp.png). */
+const PFP_ART_PX = 16;
+/** The design's art grid (design/pixel-art.md): art pixels per tile side. */
+const TILE_ART_PX = 24;
+
+/**
+ * The whole-pixel scale for a sprite `span` art pixels across (E61): the
+ * largest whole number of screen pixels per art pixel that keeps it inside
+ * the middle two thirds of the tile (the middle 16 of its 24 art pixels),
+ * never below one screen pixel per art pixel. Whole numbers only — a
+ * fractional scale draws the art pixels uneven.
+ */
+function wholePixelScale(span: number, cell: number): number {
+    const room = Math.floor((cell * 2) / 3);
+    const fit = Math.floor(room / Math.max(1, span));
+    return Math.max(1, fit);
+}
+
+/** The opaque bounding box of a PFP master, in art pixels, or null when the
+    sprite is empty or its pixels cannot be read. */
+function traitBoundingBox(image: HTMLImageElement): { x: number; y: number; w: number; h: number } | null {
+    const canvas = document.createElement('canvas');
+    canvas.width = PFP_ART_PX;
+    canvas.height = PFP_ART_PX;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, PFP_ART_PX, PFP_ART_PX);
+    ctx.drawImage(image, 0, 0, PFP_ART_PX, PFP_ART_PX);
+    let data: Uint8ClampedArray;
+    try {
+        data = ctx.getImageData(0, 0, PFP_ART_PX, PFP_ART_PX).data;
+    } catch {
+        return null;
+    }
+    let minX = PFP_ART_PX;
+    let minY = PFP_ART_PX;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < PFP_ART_PX; y++) {
+        for (let x = 0; x < PFP_ART_PX; x++) {
+            if (data[(y * PFP_ART_PX + x) * 4 + 3] === 0) continue;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+/**
+ * Crop a trait pickup's floor sprite to its PFP's bounding box
+ * (design/pixel-art.md, "Trait pickups on the board"), drawn at whole art
+ * pixels for the current cell (E61): the crop scale is the floor of what
+ * fits in the middle two thirds of the tile, at least one screen pixel per
+ * art pixel, so the sprite and its outline never ride a fractional scale.
+ * The crop is centred by CSS; until the picture has loaded (or when its
+ * pixels cannot be read) the whole 16 stands at its own whole-pixel scale,
+ * sized by the caller the same way.
+ */
+function applyTraitCrop(crop: HTMLElement, url: string, cell: number): void {
+    const image = new Image();
+    image.onload = () => {
+        const box = traitBoundingBox(image);
+        if (box === null) return;
+        // The board may have been resized while the picture loaded: only the
+        // cell the crop still shows gets sized.
+        if (crop.dataset.cell !== String(cell)) return;
+        const scale = wholePixelScale(Math.max(box.w, box.h), cell);
+        crop.style.width = `${box.w * scale}px`;
+        crop.style.height = `${box.h * scale}px`;
+        crop.style.backgroundSize = `${PFP_ART_PX * scale}px ${PFP_ART_PX * scale}px`;
+        crop.style.backgroundPosition = `${-box.x * scale}px ${-box.y * scale}px`;
+    };
+    image.src = url;
+}
 
 function copyGrid(grid: string[][]): string[][] {
     return grid.map((row) => row.slice());
@@ -42,6 +127,8 @@ export class Board {
     private tilesLayer: HTMLElement | null = null;
     private entitiesLayer: HTMLElement | null = null;
     private fxLayer: HTMLElement | null = null;
+    /** The floating texts still on the board (float() stacks new ones near them). */
+    private floatTexts: FloatText[] = [];
     /** The layer inside .fx holding the forecast's wall marks, replaced on each update. */
     private marksLayer: HTMLElement | null = null;
 
@@ -63,6 +150,8 @@ export class Board {
     private knotElement: HTMLElement | null = null;
     /** Entity elements keyed by the stable ids run.items / run.enemies carry. */
     private itemElements: Map<number, HTMLElement> = new Map();
+    /** The one trait pickup element of the level (E58), null when none dropped. */
+    private traitElement: HTMLElement | null = null;
     private enemyElements: Map<number, HTMLElement> = new Map();
     /** The element mount() received (#maze): shake and zoom animate this, not the page. */
     private boardElement: HTMLElement | null = null;
@@ -75,6 +164,21 @@ export class Board {
      */
     private visible: boolean[][] | null = null;
 
+    /**
+     * The E56 viewport the layers were last sized for: whole-maze, or a
+     * camera window that slides over the full-maze layers to follow the
+     * reptile. Null before the first setLevel.
+     */
+    private viewport: BoardViewport | null = null;
+    /** Where the camera window last sat in the wall grid (game/camera.ts). */
+    private camera: CameraWindow | null = null;
+    /** The minimap canvas mount() creates; only shown in camera mode. */
+    private minimapCanvas: HTMLCanvasElement | null = null;
+    /** Raised whenever the wall grid changes, part of the minimap's redraw key. */
+    private gridRevision = 0;
+    /** The last thing the minimap drew, so a move that changed nothing skips it. */
+    private minimapSignature: string | null = null;
+
     /** Create the three layers inside #maze: the grid, the gliding entities and the effects. */
     mount(el: HTMLElement): void {
         this.tilesLayer = document.createElement('div');
@@ -86,7 +190,14 @@ export class Board {
         this.marksLayer = document.createElement('div');
         this.marksLayer.className = 'marks';
         this.fxLayer.appendChild(this.marksLayer);
-        el.replaceChildren(this.tilesLayer, this.entitiesLayer, this.fxLayer);
+        // The E56 minimap: a small canvas in a board corner, shown only when
+        // the maze is too big to draw whole. The CSS (well, line border) draws
+        // the frame; the canvas draws the maze, the reptile, the exit and the
+        // window.
+        this.minimapCanvas = document.createElement('canvas');
+        this.minimapCanvas.className = 'minimap';
+        this.minimapCanvas.hidden = true;
+        el.replaceChildren(this.tilesLayer, this.entitiesLayer, this.fxLayer, this.minimapCanvas);
 
         this.boardElement = el;
         this.sparks = [];
@@ -106,13 +217,21 @@ export class Board {
         this.knotElement = null;
         this.itemElements.clear();
         this.enemyElements.clear();
+        this.traitElement = null;
         this.visible = null;
+        this.viewport = null;
+        this.camera = null;
+        this.gridRevision = 0;
+        this.minimapSignature = null;
     }
 
     /** Rebuild the tile grid for the level's size and create the entity elements. */
-    setLevel(run: Run, cell: number): void {
+    setLevel(run: Run, cell: number, viewport: BoardViewport | null = null): void {
         this.cell = cell;
         this.lastRun = run;
+        this.viewport = viewport;
+        this.gridRevision += 1;
+        this.applyViewport();
         this.buildTiles(run);
         this.buildEntities(run);
     }
@@ -125,30 +244,45 @@ export class Board {
     update(run: Run): void {
         this.lastRun = run;
         const grid = run.maze.wallGrid;
-        for (const change of tileDiff(this.lastGrid, grid)) {
+        const changes = tileDiff(this.lastGrid, grid);
+        for (const change of changes) {
             const image = this.tileImages[change.y]?.[change.x];
             if (image) image.src = `${WALL_IMAGE_BASE}${change.code}.png`;
         }
+        if (changes.length > 0) this.gridRevision += 1;
         this.lastGrid = copyGrid(grid);
         this.placeAll(run);
     }
 
     /** Re-apply every position for a new tile size (the window was resized). */
-    resize(cell: number): void {
+    resize(cell: number, viewport: BoardViewport | null = null): void {
         this.cell = cell;
+        this.viewport = viewport;
+        this.applyViewport();
         if (this.lastRun && this.playerElement) this.placeAll(this.lastRun);
     }
 
-    /** Float a text over the given cell of the maze; it goes when its animation ends. */
+    /**
+     * Float a text over the given cell of the maze; it goes when its animation
+     * ends. Texts that are still rising near the cell (game/fx.ts
+     * floatLineOffset) push the new one down whole lines, so two events in one
+     * tick read as a column instead of printing over each other.
+     */
     float(text: string, cellX: number, cellY: number): void {
         if (!this.fxLayer) return;
+        const now = Date.now();
+        // Forget the texts whose rise is over: they leave the board with their
+        // animation and share no line with anything that starts now.
+        this.floatTexts = this.floatTexts.filter((t) => now - t.startedAt < FLOAT_RISE_MS);
+        const stackOffset = floatLineOffset(this.floatTexts, cellX, cellY, now);
+        this.floatTexts.push({ x: cellX, y: cellY, startedAt: now });
         const message = document.createElement('div');
         message.className = 'message';
         message.textContent = text;
         const { x, y } = entityPx(cellX, cellY, this.cell);
         // left/top, not a transform: the moveUp animation owns the transform.
         message.style.left = `${x}px`;
-        message.style.top = `${y}px`;
+        message.style.top = `${y + stackOffset}px`;
         message.addEventListener('animationend', () => message.remove(), { once: true });
         this.fxLayer.appendChild(message);
     }
@@ -300,7 +434,10 @@ export class Board {
         if (!board) return;
         const whole = Math.max(1, Math.round(ms));
         const { x, y } = entityPx(cellX, cellY, this.cell);
-        board.style.setProperty('--zoom-origin', `${x}px ${y}px`);
+        // In camera mode the cell sits this far into the window, not into the maze.
+        const shiftX = this.camera !== null ? this.camera.x * this.cell : 0;
+        const shiftY = this.camera !== null ? this.camera.y * this.cell : 0;
+        board.style.setProperty('--zoom-origin', `${x - shiftX}px ${y - shiftY}px`);
         this.restartAnimation(board, 'fx-zoom', whole);
     }
 
@@ -375,6 +512,7 @@ export class Board {
         this.entitiesLayer.replaceChildren();
         this.itemElements.clear();
         this.enemyElements.clear();
+        this.traitElement = null;
         this.layerImages = [];
 
         this.playerElement = document.createElement('div');
@@ -413,11 +551,14 @@ export class Board {
         this.place(this.exitElement, run.exit.x, run.exit.y);
         this.syncTileVisibility();
         this.syncItems(run);
+        this.syncTrait(run);
         this.syncEnemies(run);
         this.placeBlob(run);
         this.placeKnot(run);
         this.syncMarks(run);
         this.playerSprite?.classList.toggle('flip-horizontal', run.player.facingLeft);
+        this.applyCamera(run);
+        this.drawMinimap(run);
     }
 
     private place(element: HTMLElement | null, cellX: number, cellY: number): void {
@@ -503,6 +644,61 @@ export class Board {
         }
     }
 
+    /**
+     * The trait pickup of the level (E58): one persistent element like an
+     * item, holding the PFP cropped to its bounding box (`.trait-crop`, sized
+     * by applyTraitCrop) inside the middle 16 tile pixels, with the four
+     * rarity corner brackets (`.trait-frame`, coloured by CSS).
+     */
+    private syncTrait(run: Run): void {
+        const trait = run.trait;
+        if (trait === null) {
+            if (this.traitElement !== null) {
+                this.traitElement.remove();
+                this.traitElement = null;
+            }
+            return;
+        }
+        if (this.traitElement === null) {
+            const element = document.createElement('div');
+            const crop = document.createElement('div');
+            crop.className = 'trait-crop';
+            const frame = document.createElement('div');
+            frame.className = 'trait-frame';
+            // The four corner brackets: one <i> each, drawn entirely by CSS.
+            for (let corner = 0; corner < 4; corner += 1) frame.appendChild(document.createElement('i'));
+            element.append(crop, frame);
+            this.traitElement = element;
+            this.entitiesLayer?.appendChild(element);
+        }
+        const element = this.traitElement;
+        element.className = `powerup trait-pickup trait-${trait.rarity}`;
+        element.classList.toggle('unseen', !this.cellShown(trait.x, trait.y));
+        // The outline and the rarity brackets are whole tile pixels (E61),
+        // not the CSS calc's fraction of the cell.
+        const bracket = Math.max(1, Math.round(this.cell / TILE_ART_PX));
+        element.style.setProperty('--trait-bracket', `${bracket}px`);
+        const crop = element.querySelector('.trait-crop');
+        if (crop instanceof HTMLElement) {
+            const url = `/images/nft/${trait.layer}/${trait.trait}pfp.png`;
+            const cellKey = String(this.cell);
+            if (crop.dataset.src !== url || crop.dataset.cell !== cellKey) {
+                crop.dataset.src = url;
+                crop.dataset.cell = cellKey;
+                crop.style.backgroundImage = `url("${url}")`;
+                // Whole pixels before the picture is measured too: the whole
+                // 16 at the largest whole scale that fits the tile's middle.
+                const base = wholePixelScale(PFP_ART_PX, this.cell);
+                crop.style.width = `${PFP_ART_PX * base}px`;
+                crop.style.height = `${PFP_ART_PX * base}px`;
+                crop.style.backgroundSize = `${PFP_ART_PX * base}px ${PFP_ART_PX * base}px`;
+                crop.style.backgroundPosition = '0px 0px';
+                applyTraitCrop(crop, url, this.cell);
+            }
+        }
+        this.place(element, trait.x, trait.y);
+    }
+
     private syncEnemies(run: Run): void {
         const alive = new Set<number>();
         for (const enemy of run.enemies) {
@@ -536,6 +732,146 @@ export class Board {
         }
     }
 
+    /**
+     * Size the three layers for the viewport last set (E56). Whole-maze, they
+     * are the board as always (the grid from the CSS variables, the absolute
+     * layers at 100%). In camera mode each draws the WHOLE maze at the camera
+     * cell — so they get the maze's pixel size outright, or the tiles grid
+     * would centre its own overflow — and `applyCamera` slides them. The
+     * `camera-move` class gives the slide the reptile's glide timing (CSS).
+     */
+    private applyViewport(): void {
+        const viewport = this.viewport;
+        const camera = viewport !== null && viewport.mode === 'camera';
+        const size = viewport !== null && viewport.mode === 'camera' ? `${viewport.board}px` : '';
+        for (const layer of [this.tilesLayer, this.entitiesLayer, this.fxLayer]) {
+            if (!layer) continue;
+            layer.style.width = size;
+            layer.style.height = size;
+            layer.classList.toggle('camera-move', camera);
+        }
+    }
+
+    /**
+     * Slide the layers so the camera window keeps the reptile centred
+     * (game/camera.ts): the whole-maze layers shift by minus the window's
+     * top-left tile, clamped at the maze's edges. The `camera-move` transition
+     * makes it the same glide as the reptile's; under reduced motion the CSS
+     * drops it and the window jumps.
+     */
+    private applyCamera(run: Run): void {
+        const viewport = this.viewport;
+        if (viewport === null || viewport.mode !== 'camera') {
+            this.camera = null;
+            for (const layer of [this.tilesLayer, this.entitiesLayer, this.fxLayer]) {
+                if (layer) layer.style.transform = '';
+            }
+            return;
+        }
+        const tiles = run.maze.wallGrid.length;
+        // The reptile's tile in the wall grid, the space the window counts in.
+        this.camera = cameraOffset(
+            { x: 2 * run.player.x + 1, y: 2 * run.player.y + 1 },
+            tiles,
+            viewport.viewTiles,
+        );
+        const shift = `translate(${-this.camera.x * this.cell}px, ${-this.camera.y * this.cell}px)`;
+        for (const layer of [this.tilesLayer, this.entitiesLayer, this.fxLayer]) {
+            if (layer) layer.style.transform = shift;
+        }
+    }
+
+    /**
+     * Redraw the minimap: the whole maze's walls at 1 or 2 pixels a tile, the
+     * reptile and the exit as single bright pixels and the camera window as an
+     * outline, on a ~96 px square at the device pixel ratio, whole pixels per
+     * tile (the CSS draws its well and line frame).
+     * Shown only in camera mode, and on a Blackout level it keeps its secret:
+     * nothing but the reptile and the frame. Redrawn only when the maze, the
+     * reptile, the window or the twist changed.
+     */
+    private drawMinimap(run: Run): void {
+        const canvas = this.minimapCanvas;
+        const viewport = this.viewport;
+        const camera = viewport !== null && viewport.mode === 'camera';
+        if (!canvas) return;
+        canvas.hidden = !camera;
+        if (!camera || this.camera === null) return;
+        const blackout = run.vision !== null;
+        const gridTiles = run.maze.wallGrid.length;
+        // E59: the drawing buffer is exactly the square CSS displays times the
+        // device pixel ratio, rounded to whole pixels, so one canvas pixel
+        // lands on one screen pixel and nothing is rescaled. Each wall-grid
+        // tile then draws at a whole number of buffer pixels (CSS keeps it
+        // nearest-neighbour with image-rendering: pixelated).
+        const dpr = window.devicePixelRatio || 1;
+        const cssSide = canvas.clientWidth || MINIMAP_PX;
+        const side = Math.max(1, Math.round(cssSide * dpr));
+        const maxTilePx = Math.max(1, Math.round(MINIMAP_MAX_TILE_PX * dpr));
+        const px = Math.min(maxTilePx, Math.max(1, Math.floor(side / gridTiles)));
+        const signature = [
+            this.gridRevision,
+            run.player.x, run.player.y,
+            this.camera.x, this.camera.y,
+            blackout ? 'b' : 'p',
+            this.cell,
+            side,
+        ].join(':');
+        if (signature === this.minimapSignature) return;
+        this.minimapSignature = signature;
+
+        if (canvas.width !== side) {
+            canvas.width = side;
+            canvas.height = side;
+        }
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, side, side);
+        const tokens = getComputedStyle(document.documentElement);
+        const wallColour = tokens.getPropertyValue('--line').trim() || '#0b9363';
+        const bright = tokens.getPropertyValue('--ink').trim() || '#ffffff';
+        const exitColour = tokens.getPropertyValue('--gold').trim() || '#ffd700';
+        if (!blackout) {
+            ctx.fillStyle = wallColour;
+            for (let ty = 0; ty < gridTiles; ty++) {
+                const row = run.maze.wallGrid[ty];
+                for (let tx = 0; tx < row.length; tx++) {
+                    if (row[tx] === '0000') continue;
+                    ctx.fillRect(tx * px, ty * px, px, px);
+                }
+            }
+            this.paintMinimapPixel(ctx, run.exit.x, run.exit.y, px, exitColour);
+            // The camera window as an outline, one buffer pixel wide and
+            // crisp: a half-pixel inset only when the line is an odd width.
+            ctx.strokeStyle = bright;
+            const lineWidth = Math.max(1, Math.round(dpr));
+            ctx.lineWidth = lineWidth;
+            const inset = lineWidth % 2 === 1 ? 0.5 : 0;
+            ctx.strokeRect(
+                this.camera.x * px + inset,
+                this.camera.y * px + inset,
+                viewport.viewTiles * px - lineWidth,
+                viewport.viewTiles * px - lineWidth,
+            );
+        }
+        // The reptile shows even on Blackout: it is the one thing the player
+        // has always been allowed to find.
+        this.paintMinimapPixel(ctx, run.player.x, run.player.y, px, bright);
+    }
+
+    /** One bright pixel at the maze cell's wall-grid tile of the minimap. */
+    private paintMinimapPixel(
+        ctx: CanvasRenderingContext2D,
+        cellX: number,
+        cellY: number,
+        px: number,
+        colour: string,
+    ): void {
+        ctx.fillStyle = colour;
+        ctx.fillRect((2 * cellX + 1) * px, (2 * cellY + 1) * px, px, px);
+    }
+
     private placeBlob(run: Run): void {
         if (!this.blobElement) return;
         const { left, top, size } = blobRect(run.maze.origin, this.cell, CONFIG.blobTiles);
@@ -555,23 +891,47 @@ export class Board {
         this.knotElement.classList.toggle('knot-frozen', run.anchored > 0);
     }
 
-    /** Replace the wall marks with one element per tile the forecast changes. */
+    /**
+     * Redraw the forecast's ghost walls: an incoming wall is the real wall
+     * picture on the marks layer, breathing faint; an outgoing wall is its own
+     * tile in the tiles layer, breathing just below full strength through the
+     * `wall-outgoing` class. The class is cleared from every tile on each
+     * update, so no wall keeps it after the change has happened.
+     *
+     * On a Blackout level the forecast never makes a hidden tile more visible:
+     * `markTiles` gets the same view `syncTileVisibility` dims (through
+     * `tileShown`), so a hidden wall gets no `wall-outgoing` breathing (whose
+     * 0.8 to 0.9 opacity would override the hidden tile's 0.06 and reveal it)
+     * and no incoming ghost picture either.
+     */
     private syncMarks(run: Run): void {
         if (!this.marksLayer) return;
+        for (const row of this.tileImages) {
+            for (const image of row) image.classList.remove('wall-outgoing');
+        }
         const forecast = run.forecast;
         if (!forecast) {
             this.marksLayer.replaceChildren();
             return;
         }
         const marks: HTMLElement[] = [];
-        for (const mark of markTiles(forecast)) {
-            const element = document.createElement('div');
-            element.className = `mark mark-${mark.kind}`;
-            element.style.left = `${mark.tx * this.cell}px`;
-            element.style.top = `${mark.ty * this.cell}px`;
-            element.style.width = `${this.cell}px`;
-            element.style.height = `${this.cell}px`;
-            marks.push(element);
+        for (const mark of markTiles(forecast, run.maze.wallGrid, (tx, ty) => this.tileShown(tx, ty))) {
+            if (mark.kind === 'open') {
+                // The wall that will go away breathes on its own tile element.
+                const tile = this.tileImages[mark.ty]?.[mark.tx];
+                if (tile) tile.classList.add('wall-outgoing');
+                continue;
+            }
+            // The wall that will appear: its real picture, faint and breathing.
+            const image = document.createElement('img');
+            image.className = 'mark mark-incoming';
+            image.src = `${WALL_IMAGE_BASE}${mark.code}.png`;
+            image.alt = '';
+            image.style.left = `${mark.tx * this.cell}px`;
+            image.style.top = `${mark.ty * this.cell}px`;
+            image.style.width = `${this.cell}px`;
+            image.style.height = `${this.cell}px`;
+            marks.push(image);
         }
         // A stalker's intent (game/run.ts): a small chevron on the cell it means
         // to step to, pointing from the stalker toward that cell.

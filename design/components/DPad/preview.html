@@ -1,0 +1,27 @@
+<!-- @dsCard group="Controls" height=260 subtitle="Touch D-pad and the pause button" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DPad</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="me-stage" style="gap:var(--space-48)">
+  <div class="me-dpad" role="group" aria-label="Move">
+    <button class="me-btn is-u" aria-label="Up"><i class="me-arrow is-up"></i></button>
+    <button class="me-btn is-l" aria-label="Left"><i class="me-arrow is-left"></i></button>
+    <button class="me-btn is-r is-pressed" aria-label="Right"><i class="me-arrow"></i></button>
+    <button class="me-btn is-d" aria-label="Down"><i class="me-arrow is-down"></i></button>
+  </div>
+  <div class="me-col">
+    <p class="me-caption">Pause, top right of the board</p>
+    <div class="me-row">
+      <button class="me-btn me-btn-icon" aria-label="Pause"><span class="me-pause-bars"><i></i><i></i></span></button>
+      <button class="me-btn me-btn-icon is-pressed" aria-label="Pause"><span class="me-pause-bars"><i></i><i></i></span></button>
+    </div>
+    <p class="me-hint" style="max-width:280px">Keys are 64px with a 4px gap; pause is 48px. The pressed key (Right) drops its lip and brightens to <code>maze-500</code>.</p>
+  </div>
+</div>
+</body>
+</html>

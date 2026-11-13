@@ -22,11 +22,22 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
 }
 
 /**
- * The title menu: the title art as the background of the board area with a dark
- * gradient over its lower half (so the painted START is covered), the mode row
- * and the menu's real-text buttons stacked on it. It draws while the shell is
- * on "title", "howto" or "countdown" — the buttons only on "title", the art
- * dimmed while the countdown runs over it.
+ * The title screen and the title art (design/components/MenuList).
+ *
+ * On "title" the whole title block shows INSIDE the fixed stage (E65,
+ * app/page.tsx): the board area keeps its box and the block sits in it, over
+ * the void, with the board hidden beneath. The painting band at its own
+ * aspect ratio with the whole lettering, then the mode picker (its name and
+ * best line in one cell, the blurb dropped below 480 px), the buttons and
+ * their 8 px gaps at their natural height. Nothing inside it scrolls by
+ * itself and the page never scrolls for it: the art band never squashes
+ * (.title-screen .title-art in styles/globals.css keeps the 500/150 ratio
+ * with object-fit: contain, at least 90 px tall on a phone), and the block
+ * is centred in the stage.
+ *
+ * On "howto" and "countdown" only the art shows, as an overlay on the board
+ * area (dimmed while the countdown runs over it); the buttons belong to the
+ * title alone.
  *
  * The mode row (game/modes.ts) shows the chosen mode's name between two arrow
  * buttons, its blurb and its best underneath; while the row is focused, Left
@@ -49,7 +60,6 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
     const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
     const modeRowRef = useRef<HTMLDivElement | null>(null);
 
-    const showsArt = model.screen === 'title' || model.screen === 'howto' || model.screen === 'countdown';
     const showsButtons = model.screen === 'title';
 
     // The menu appearing (first show or a return to the title) starts at the
@@ -63,10 +73,13 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
 
     // The first button takes focus when the menu appears, and the focused entry
     // follows the index the arrow keys move; the last slot is the mode row.
+    // preventScroll keeps the page at the top: the menu sits below the title
+    // painting's own band, and focusing Play must never scroll the page down
+    // (and with it the painting) on its own.
     useEffect(() => {
         if (!showsButtons) return;
-        if (focusIndex === modeSlot) modeRowRef.current?.focus();
-        else buttonRefs.current[focusIndex]?.focus();
+        if (focusIndex === modeSlot) modeRowRef.current?.focus({ preventScroll: true });
+        else buttonRefs.current[focusIndex]?.focus({ preventScroll: true });
     }, [focusIndex, showsButtons, modeSlot]);
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -85,61 +98,70 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
         setFocusIndex((index) => moveFocus(index, slots, action));
     };
 
-    if (!showsArt) return null;
+    if (model.screen === 'howto' || model.screen === 'countdown') {
+        // The art alone over the board area, dimmed while the countdown runs.
+        return (
+            <div className={model.screen === 'countdown' ? 'title-menu dimmed' : 'title-menu'}>
+                <img src="/images/title.png" alt="Manic Entanglement" className="title-art" draggable={false} />
+            </div>
+        );
+    }
+
+    if (model.screen !== 'title') return null;
 
     return (
-        <div className={model.screen === 'countdown' ? 'title-menu dimmed' : 'title-menu'}>
+        <div className="title-screen">
             <img src="/images/title.png" alt="Manic Entanglement" className="title-art" draggable={false} />
-            <div className="title-gradient" aria-hidden="true" />
-            {showsButtons && (
-                <div className="menu-buttons" onKeyDown={handleKeyDown} role="menu" aria-label="Main menu">
-                    <div
-                        className="mode-row"
-                        role="menuitem"
-                        tabIndex={0}
-                        aria-label={`Mode: ${model.modeName}. ${model.modeBlurb} Best: ${model.modeBestText}`}
-                        ref={modeRowRef}
+            <div className="me-menu" onKeyDown={handleKeyDown} role="menu" aria-label="Main menu">
+                <div
+                    className="me-mode"
+                    role="menuitem"
+                    tabIndex={0}
+                    aria-label={`Mode: ${model.modeName}. ${model.modeBlurb} Best ${model.modeBestText}`}
+                    ref={modeRowRef}
+                >
+                    <button
+                        type="button"
+                        className="me-btn me-btn-icon"
+                        aria-label="Previous mode"
+                        onClick={() => gameState.setMode(cycleMode(model.mode, -1))}
                     >
-                        <div className="mode-picker">
-                            <button
-                                type="button"
-                                aria-label="Previous mode"
-                                onClick={() => gameState.setMode(cycleMode(model.mode, -1))}
-                            >
-                                &#9664;
-                            </button>
-                            <span className="mode-name">{model.modeName}</span>
-                            <button
-                                type="button"
-                                aria-label="Next mode"
-                                onClick={() => gameState.setMode(cycleMode(model.mode, 1))}
-                            >
-                                &#9654;
-                            </button>
-                        </div>
-                        <p className="mode-blurb">{model.modeBlurb}</p>
-                        <p className="mode-best">Best: {model.modeBestText}</p>
+                        <i className="me-arrow is-left" aria-hidden="true" />
+                    </button>
+                    <div className="me-mode-text">
+                        <p className="me-display-md">{model.modeName}</p>
+                        <p className="me-best">Best {model.modeBestText}</p>
                     </div>
-                    {items.map((item, index) => (
-                        <button
-                            key={item.id}
-                            role="menuitem"
-                            ref={(element) => {
-                                buttonRefs.current[index] = element;
-                            }}
-                            onClick={() => {
-                                if (item.id === 'play') gameState.play();
-                                else if (item.id === 'settings') gameState.openSettings();
-                                else if (item.id === 'feats') gameState.openFeats();
-                                else if (item.id === 'wardrobe') gameState.openWardrobe();
-                                else gameState.openHowTo();
-                            }}
-                        >
-                            {item.label}
-                        </button>
-                    ))}
+                    <button
+                        type="button"
+                        className="me-btn me-btn-icon"
+                        aria-label="Next mode"
+                        onClick={() => gameState.setMode(cycleMode(model.mode, 1))}
+                    >
+                        <i className="me-arrow" aria-hidden="true" />
+                    </button>
+                    <p className="me-hint">{model.modeBlurb}</p>
                 </div>
-            )}
+                {items.map((item, index) => (
+                    <button
+                        key={item.id}
+                        role="menuitem"
+                        className={item.id === 'play' ? 'me-btn me-btn-primary me-menu-wide' : 'me-btn'}
+                        ref={(element) => {
+                            buttonRefs.current[index] = element;
+                        }}
+                        onClick={() => {
+                            if (item.id === 'play') gameState.play();
+                            else if (item.id === 'settings') gameState.openSettings();
+                            else if (item.id === 'feats') gameState.openFeats();
+                            else if (item.id === 'wardrobe') gameState.openWardrobe();
+                            else gameState.openHowTo();
+                        }}
+                    >
+                        {item.label}
+                    </button>
+                ))}
+            </div>
         </div>
     );
 };

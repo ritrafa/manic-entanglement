@@ -23,10 +23,15 @@ export function rpcUrl(): string | null {
 export interface Reptile {
     look: Look;
     image: string | null;
+    /** The collection number as four digits ("0412"), null when the asset
+     *  carries none. */
+    number: string | null;
 }
 
 export type LoadResult =
-    | { status: 'found'; look: Look; image: string | null }
+    /** The number is present only when the asset carries one; saving and
+     *  minting come later, so nothing else rides on the reply. */
+    | { status: 'found'; look: Look; image: string | null; number?: string }
     | { status: 'none' }
     | { status: 'error' };
 
@@ -61,6 +66,25 @@ function httpsImage(item: Record<string, unknown>): string | null {
     return null;
 }
 
+/** The collection number the asset carries: a "#123" in its name (either
+ *  place the metadata may keep it), padded to four digits; null when neither
+ *  name is there or neither holds a number. */
+function reptileNumber(item: Record<string, unknown>): string | null {
+    const names: unknown[] = [];
+    const content = item.content;
+    if (isRecord(content)) {
+        names.push(content.name);
+        const metadata = content.metadata;
+        if (isRecord(metadata)) names.push(metadata.name);
+    }
+    for (const name of names) {
+        if (typeof name !== 'string') continue;
+        const match = /#\s*(\d{1,4})/.exec(name);
+        if (match !== null) return match[1].padStart(4, '0');
+    }
+    return null;
+}
+
 /** Walk the asset list defensively (anything may be missing or of the wrong
  *  type) and return the first item from our collection as a sanitized look
  *  plus an optional image URL. Pure: no fetch, no DOM. */
@@ -88,7 +112,7 @@ export function findReptile(items: unknown): Reptile | null {
             }
         }
         // Unknown or missing traits fall back to DEFAULT_LOOK per layer.
-        return { look: sanitizeLook(look), image: httpsImage(item) };
+        return { look: sanitizeLook(look), image: httpsImage(item), number: reptileNumber(item) };
     }
     return null;
 }
@@ -115,12 +139,18 @@ export async function loadReptile(
         });
         if (!response.ok) return { status: 'error' };
         const reply: unknown = await response.json();
+        // A JSON-RPC error reply, or one without a result at all, is a
+        // network failure and must not read as an empty wallet (E15 review).
+        if (!isRecord(reply) || reply.error !== undefined || reply.result === undefined) {
+            return { status: 'error' };
+        }
         // result.items is the asset list; anything else is treated as empty.
-        const result = isRecord(reply) ? reply.result : undefined;
-        const items = isRecord(result) ? result.items : undefined;
+        const items = isRecord(reply.result) ? reply.result.items : undefined;
         const reptile = findReptile(items);
         if (reptile === null) return { status: 'none' };
-        return { status: 'found', look: reptile.look, image: reptile.image };
+        return reptile.number === null
+            ? { status: 'found', look: reptile.look, image: reptile.image }
+            : { status: 'found', look: reptile.look, image: reptile.image, number: reptile.number };
     } catch {
         return { status: 'error' };
     }

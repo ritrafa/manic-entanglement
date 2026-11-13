@@ -1,0 +1,68 @@
+<!-- @dsCard group="Game" height=580 subtitle="PFP portrait, meters, stats, tools" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HudBar</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="me-stage" style="flex-direction:column;align-items:stretch">
+  <p class="me-caption">Desktop: one row under the board</p>
+  <div class="me-hud">
+    <div class="me-portrait"><div class="me-sprite" style="--s:48px" role="img" aria-label="Your reptile"><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/05fac2229711e6dce87ceb4a58ca46c8" alt=""><img src="/_blob/94e8d5672b5a701159a890e5b4039d1c" alt=""></div></div>
+    <div class="me-hud-meters">
+      <span class="me-label">Energy</span><span class="me-num me-energy">71</span>
+      <div class="me-meter" role="progressbar" aria-label="Energy" aria-valuenow="71" aria-valuemin="0" aria-valuemax="100" style="--v:71%"><i></i></div>
+      <span class="me-label">Score</span><span class="me-num me-gold">125</span>
+      <div class="me-meter is-gold" role="progressbar" aria-label="Progress toward best score" aria-valuenow="40" aria-valuemin="0" aria-valuemax="100" style="--v:40%"><i></i></div>
+    </div>
+    <div class="me-stats">
+      <div class="me-stat"><img class="me-icon" src="/_blob/c68e4a7ab6e702c189e0a510ef055925" alt=""><span class="me-label">Attack</span><b>1.0</b></div>
+      <div class="me-stat"><img class="me-icon" src="/_blob/38d4c546bb79865f5bfa6e8cc9f06c54" alt=""><span class="me-label">Defense</span><b>1.0</b></div>
+      <div class="me-stat"><img class="me-icon" src="/_blob/c0689d6af75a84d9a2d4bff3c8ea1382" alt=""><span class="me-label">Clock</span><b>100%</b></div>
+      <div class="me-stat"><img class="me-icon" src="/_blob/46e959a060d7563f79aaeb9077b556e4" alt=""><span class="me-label">Step cost</span><b>100%</b></div>
+    </div>
+    <div class="me-tools">
+      <button class="me-btn me-tool">Anchor <span class="me-key">1</span><span class="me-count">x2</span></button>
+      <button class="me-btn me-tool">Twist <span class="me-key">2</span><span class="me-count">x1</span></button>
+      <button class="me-btn me-tool" disabled>Cut 3 x0</button>
+    </div>
+  </div>
+
+  <p class="me-caption">Phone (390 wide): stacked, with the carried marker</p>
+  <div class="me-hud is-phone" style="width:390px">
+    <div class="me-row" style="flex-wrap:nowrap">
+    <div class="me-portrait"><div class="me-sprite" style="--s:48px" role="img" aria-label="Your reptile"><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/05fac2229711e6dce87ceb4a58ca46c8" alt=""><img src="/_blob/94e8d5672b5a701159a890e5b4039d1c" alt=""></div></div>
+    <div class="me-hud-meters" style="flex:1">
+      <span class="me-label">Energy</span><span class="me-num me-energy">71</span>
+      <div class="me-meter" style="--v:71%"><i></i></div>
+      <span class="me-label">Score</span><span class="me-num me-gold">125</span>
+      <div class="me-meter is-gold" style="--v:40%"><i></i></div>
+    </div>
+    </div>
+    <div class="me-stats">
+      <div class="me-stat"><img class="me-icon" src="/_blob/c68e4a7ab6e702c189e0a510ef055925" alt=""><span class="me-label">Atk</span><b>1.2</b></div>
+      <div class="me-stat"><img class="me-icon" src="/_blob/38d4c546bb79865f5bfa6e8cc9f06c54" alt=""><span class="me-label">Def</span><b>1.0</b></div>
+      <div class="me-stat"><img class="me-icon" src="/_blob/c0689d6af75a84d9a2d4bff3c8ea1382" alt=""><span class="me-label">Clock</span><b>90%</b></div>
+      <div class="me-stat"><img class="me-icon" src="/_blob/46e959a060d7563f79aaeb9077b556e4" alt=""><span class="me-label">Step</span><b>80%</b></div>
+    </div>
+    <div class="me-row" style="justify-content:space-between">
+      <span class="me-carried" title="Reach the exit to keep it">Carried 2</span>
+      <span class="me-hint">Reach the exit to keep it</span>
+    </div>
+    <div class="me-tools">
+      <button class="me-btn me-tool">Anchor <span class="me-count">x2</span></button>
+      <button class="me-btn me-tool">Twist <span class="me-count">x1</span></button>
+      <button class="me-btn me-tool" disabled>Cut x0</button>
+    </div>
+  </div>
+
+  <p class="me-caption">Low energy: the meter turns to danger and says so</p>
+  <div class="me-hud-meters" style="width:390px">
+    <span class="me-label me-danger">Energy low</span><span class="me-num me-danger">12</span>
+    <div class="me-meter is-low" style="--v:12%"><i></i></div>
+  </div>
+</div>
+</body>
+</html>

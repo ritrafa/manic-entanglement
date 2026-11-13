@@ -1,8 +1,9 @@
 // One pure function decides how a level is built from its depth: the maze size, the
 // shifts per move, the pickup count range, the energy share of the pickups, the enemy
 // count and the exit bonus. Every number comes from CONFIG; no DOM, no clocks, no
-// global randomness. The curve: one size step every two levels up to 13 x 13, shifts
-// from 3 to 9 per move, 2 to 2 + floor(size / 3) pickups, 1 to 6 enemies.
+// global randomness. The curve: one size step every two levels, growing without
+// limit at every depth and in every mode (E54), shifts from 3 to 9 per move,
+// 2 to 2 + floor(size / 3) pickups, 1 to 6 enemies.
 
 import { CONFIG } from "./config";
 
@@ -28,7 +29,7 @@ export interface LevelPlan {
 export function levelPlan(depth: number): LevelPlan {
     const d = Number.isFinite(depth) ? Math.max(1, Math.floor(depth)) : 1;
     const step = Math.floor((d - 1) / 2);
-    const size = Math.min(CONFIG.maxSize, CONFIG.startSize + CONFIG.sizeStep * step);
+    const size = CONFIG.startSize + CONFIG.sizeStep * step;
     return {
         size,
         shifts: Math.min(CONFIG.maxShifts, CONFIG.baseShifts + step),

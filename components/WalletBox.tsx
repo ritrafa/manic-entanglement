@@ -4,6 +4,7 @@ import React, { useCallback, useState } from 'react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { loadReptile } from '@/lib/reptile';
+import { pfpLayers, type Look } from '@/game/sprite';
 import GameState from '@/lib/GameState';
 import WalletContextProvider from './WalletContextProvider';
 
@@ -13,25 +14,41 @@ interface WalletBoxProps {
 
 type LoadStatus = 'idle' | 'loading' | 'found' | 'none' | 'error';
 
-/** One short line under the button so a failure tells the player something
- *  instead of dying silently in an unawaited promise. */
-const STATUS_TEXT: Record<Exclude<LoadStatus, 'idle' | 'found'>, string> = {
-    loading: 'Loading...',
-    none: 'No Entangled Reptile in this wallet',
-    error: 'Could not reach the network',
-};
+/** The reptile the last lookup found, kept for the "found" state. */
+interface FoundReptile {
+    look: Look;
+    number: string | null;
+}
 
-/** The left box of the HUD: connect, look up the reptile, show its image and
- *  a status line. It only changes the look (gameState.setLook), never stats
- *  or the high score. Rendered only when an RPC endpoint is configured, so
- *  the useWallet hook here always has its provider.
+/** A CSS custom property in a style object (--s sizes the sprite). */
+function cssVars(vars: Record<string, string>): React.CSSProperties {
+    return vars as React.CSSProperties;
+}
+
+/** An address shows shortened only: first four, last four (design/components/WalletBox). */
+function shortAddress(address: string): string {
+    return address.length > 8 ? `${address.slice(0, 4)}...${address.slice(-4)}` : address;
+}
+
+/** The wallet corner of the HUD, the design's WalletBox
+ *  (design/components/WalletBox): closed until the HUD's Wallet button pulls
+ *  this in, then one small box — connect, looking up, reptile found with its
+ *  PFP and number, none found, network failure. A JSON-RPC error reply from
+ *  the endpoint reads as a network failure, never as an empty wallet
+ *  (lib/reptile.ts, E15 review). Saving and minting come later, so no chain
+ *  feature is advertised here; the box only ever changes the look
+ *  (gameState.setLook), never stats or the high score, and the HUD's own PFP
+ *  portrait follows that look — it is built locally, never from the NFT's
+ *  image address.
  *
  *  The wallet code lives behind components/WalletGate.tsx (next/dynamic,
  *  ssr: false): this file brings its own provider — and with it the wallet
  *  CSS the provider imports — so nothing from @solana/* is on the page
  *  before the Wallet button is clicked. The connect button and the reptile
  *  loader sit in the inner component, under the provider, so their hooks
- *  see the live wallet context. */
+ *  see the live wallet context. Rendered only when an RPC endpoint is
+ *  configured (components/Hud.tsx), so the useWallet hook here always has
+ *  its provider. */
 const WalletBox: React.FC<WalletBoxProps> = ({ gameState }) => (
     <WalletContextProvider>
         <WalletBoxContent gameState={gameState} />
@@ -41,36 +58,84 @@ const WalletBox: React.FC<WalletBoxProps> = ({ gameState }) => (
 /** The box as it was before the lazy split, unchanged: it only ever renders
  *  as a child of WalletContextProvider, so useWallet has its context. */
 const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
-    const { publicKey } = useWallet();
-    const [assetImage, setAssetImage] = useState<string | null>(null);
+    const { publicKey, disconnect } = useWallet();
     const [status, setStatus] = useState<LoadStatus>('idle');
+    const [reptile, setReptile] = useState<FoundReptile | null>(null);
 
     const handleCheckAssets = useCallback(async () => {
         if (!publicKey) return;
         setStatus('loading');
-        // loadReptile never throws: every failure comes back as a status.
+        // loadReptile never throws: every failure comes back as a status,
+        // and a JSON-RPC error reply comes back as 'error' too.
         const result = await loadReptile(publicKey.toBase58());
         if (result.status === 'found') {
+            // The loaded look goes straight to the shell; the HUD portrait follows.
             gameState.setLook(result.look);
-            setAssetImage(result.image);
+            setReptile({ look: result.look, number: result.number ?? null });
         } else {
-            setAssetImage(null);
+            setReptile(null);
         }
         setStatus(result.status);
     }, [publicKey, gameState]);
 
+    const handleDisconnect = useCallback(() => {
+        setStatus('idle');
+        setReptile(null);
+        void disconnect();
+    }, [disconnect]);
+
+    const address = publicKey?.toBase58();
+
     return (
         <div className="left-box">
-            <WalletMultiButton />
-            {publicKey && (
-                <button className="wallet-actions" onClick={handleCheckAssets} disabled={status === 'loading'}>
-                    🔍 Assets
-                </button>
-            )}
-            {status !== 'idle' && status !== 'found' && (
-                <div className="wallet-status">{STATUS_TEXT[status]}</div>
-            )}
-            {assetImage && <img src={assetImage} alt="Your Entangled Reptile" className="asset-image" />}
+            <div className="me-wallet">
+                <WalletMultiButton />
+                {address !== undefined && status !== 'found' && (
+                    <button
+                        type="button"
+                        className="me-btn me-btn-block"
+                        onClick={handleCheckAssets}
+                        disabled={status === 'loading'}
+                    >
+                        Check assets
+                    </button>
+                )}
+                {status === 'loading' && (
+                    <p className="me-status is-busy" role="status">Loading...</p>
+                )}
+                {status === 'found' && reptile !== null && (
+                    <>
+                        <div className="me-wallet-id">
+                            <div className="me-sprite" style={cssVars({ '--s': '48px' })} role="img" aria-label="Your Entangled Reptile">
+                                {pfpLayers(reptile.look).map((url) => (
+                                    <img key={url} src={url} alt="" width={48} height={48} draggable={false} />
+                                ))}
+                            </div>
+                            <div>
+                                <p className="me-display-sm">{reptile.number !== null ? `Reptile #${reptile.number}` : 'Entangled Reptile'}</p>
+                                {address !== undefined && <p className="me-hint">Wallet {shortAddress(address)}</p>}
+                            </div>
+                        </div>
+                        <div className="me-row">
+                            <button type="button" className="me-btn me-btn-sm" onClick={handleDisconnect}>Disconnect</button>
+                        </div>
+                    </>
+                )}
+                {status === 'none' && (
+                    <>
+                        {address !== undefined && <p className="me-hint">Wallet {shortAddress(address)}</p>}
+                        <p className="me-status" role="status">No Entangled Reptile in this wallet</p>
+                    </>
+                )}
+                {status === 'error' && (
+                    <>
+                        <p className="me-status is-bad" role="alert">Could not reach the network</p>
+                        <button type="button" className="me-btn me-btn-block" onClick={handleCheckAssets}>
+                            Try again
+                        </button>
+                    </>
+                )}
+            </div>
         </div>
     );
 };
