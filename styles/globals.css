@@ -50,14 +50,21 @@ body {
 }
 /* The drifting galaxy moves by transform only (translate + scale), so the
    compositor slides a layer instead of repainting the board every frame. The
-   picture lives on #maze::before, a layer larger than the board, so neither
-   the drift nor the scale ever exposes an edge. */
+   picture lives on #maze::before, a layer 13x the board (inset: -600%), so
+   neither the zoom-out nor the long pan ever exposes an edge; #maze's
+   overflow keeps that huge layer strictly inside the board. The picture is
+   tiled at 6 board widths (6/13 of the layer) and the keyframes halve it to
+   3 while panning 2 boards left and 1 board up: on a ~500 px board that is
+   the pre-E38 zoom-out (600% -> 300%) with its ~1000 x 500 px drift, scaled
+   to the board. The origin sits on the board's top-left corner (6/13 of the
+   layer), where the old background-position: 0 0 anchored the zoom. */
 @keyframes moveBackground {
   0% {
     transform: translate(0, 0) scale(1);
   }
   100% {
-    transform: translate(-80px, -50px) scale(0.92);
+    /* -2 and -1 board widths over the 13-board layer, halving the picture. */
+    transform: translate(-15.385%, -7.693%) scale(0.5);
   }
 }
 #maze-container {
@@ -73,18 +80,24 @@ body {
 #maze {
   position: relative;
   /* Its own stacking context, so the galaxy layer (z-index: -1) stays behind
-     the tiles but inside the board. */
+     the tiles but inside the board; the clip keeps the oversized drifting
+     layer from ever showing outside the board. */
   isolation: isolate;
+  overflow: hidden;
 }
 #maze::before {
   content: '';
   position: absolute;
-  /* Half the board beyond every edge: the slow drift never uncovers a side. */
-  inset: -50%;
+  /* Six boards beyond every edge (a 13-board layer): the zoom-out to half
+     and the 2 x 1 board pan never uncover a side, and #maze clips the rest. */
+  inset: -600%;
   z-index: -1;
-  /* One picture per board (50% of this twice-as-large layer), tiled. */
+  /* One picture every 6 boards (6/13 of this 13-board layer), tiled; the
+     keyframes scale it down to 3 boards, the original 600% -> 300% zoom. */
   background: url('/images/galaxy2.jpg') repeat;
-  background-size: 50% 50%;
+  background-size: 46.154% 46.154%;
+  /* Zoom from the board's top-left corner, where the old background sat. */
+  transform-origin: 46.154% 46.154%;
   animation: moveBackground 45s ease-in-out infinite alternate;
   pointer-events: none;
 }

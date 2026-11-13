@@ -598,3 +598,13 @@
   are), and `loadSave` in `game/save.ts` seeds the seen markers for every
   trait a marker-less old save's feats already unlocked, so such a save loads
   as already seen, all covered by the wardrobe cases in `game/save.test.ts`.
+
+- E48: brought the galaxy's zoom drift back behind the board. `#maze::before`
+  is now a 13-board layer (inset: -600%) tiled with one picture every 6 boards
+  (background-size: 46.154%), and `@keyframes moveBackground` halves that to 3
+  boards while panning 2 boards left and 1 board up over the same 45s
+  ease-in-out alternate — the pre-E38 600% -> 300% zoom with its ~1000 x 500 px
+  drift, scaled to the board, by transform only; `transform-origin` sits on the
+  board's top-left corner where the old background-position anchored the zoom,
+  and `#maze` gained `overflow: hidden` so the oversized layer never shows
+  outside the board. Reduced motion and high contrast still stop and dim it.
