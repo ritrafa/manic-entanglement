@@ -26,12 +26,17 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Top-aligned column (E51): the content starts at the top of the screen
-     and flows down, on phones and desktop alike. The page may scroll
-     vertically when its content is taller than the screen (the title screen
-     on a short phone); during play the board area keeps touch-action: none,
-     so swipes there never scroll the page. */
+  /* E67: the column is centred vertically between the safe-area insets
+     when the stage, the HUD (and the D-pad, when shown) are shorter than
+     the viewport, on every screen — the loading skeleton included, which
+     hangs its two boxes on the body directly. `safe` keeps the E51
+     behaviour wherever the content is taller than the screen: it starts at
+     the top and the page scrolls; where a browser does not know the `safe`
+     keyword the flex-start below stays and nothing else changes. During
+     play the board area keeps touch-action: none, so swipes there never
+     scroll the page. */
   justify-content: flex-start;
+  justify-content: safe center;
   min-height: 100vh;
   min-height: 100dvh;
   /* viewportFit=cover runs the page under notches and browser bars: the page
@@ -60,7 +65,14 @@ body {
 .touch-layer {
   display: flex;
   flex-direction: column;
+  /* E67: the stage, the HUD and the D-pad (when shown) ride as one column
+     in the vertical middle of the screen when shorter than it, and stay
+     top-aligned and scrollable when taller (`safe`, with the flex-start
+     fallback for browsers without the keyword). Their sizes are the same
+     strings on every screen (E65), so the column sits at the same pixels
+     from the title to level 3 and nothing jumps between screens. */
   justify-content: flex-start;
+  justify-content: safe center;
   min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2 * var(--space-16));
   min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2 * var(--space-16));
 }
@@ -265,24 +277,27 @@ body {
   justify-content: center;
 }
 .title-screen .title-art {
-  /* Shrink first when the stage is short, but never below a 60 px band. */
-  flex: 0 1 auto;
-  min-height: 60px;
+  /* E67: the band never squashes. It keeps the painting's own 500/150
+     lettering ratio at every size (flex: none — the stage's room comes from
+     the tightened mode row and gaps below, not from crushing the art), and
+     object-fit: contain scales the painting into that box without ever
+     cropping its sides or its bottom, so the whole "MANIC ENTANGLEMENT"
+     lettering shows. The 90 px floor is what a very narrow viewport gets at
+     worst, with the void as the only letterboxing. */
+  flex: none;
+  min-height: 90px;
   box-sizing: border-box;
   /* The painting's lettering band, cropped by CSS (E52 — the file is never
      edited): the 500 px square holds the whole "MANIC ENTANGLEMENT"
      lettering in its top 150 px rows and its own painted "START" button far
      below, which would read as a second, dead button beside the menu's real
-     Play. The band keeps the top 30% of the picture (aspect-ratio 500/150),
-     object-fit cover scales the painting to the band's width and object-
-     position pins the crop to the top, so the lettering shows in full and
-     the painted START never does. The cap keeps the menu under it on screen
-     at 1280x800, where the page must not need scrolling to reach the buttons. */
+     Play. The band keeps the top 30% of the picture (aspect-ratio 500/150)
+     and contain shows all of it, so the lettering reads whole and the
+     painted START never does. */
   width: min(100%, 420px);
   height: auto;
   aspect-ratio: 500 / 150;
-  object-fit: cover;
-  object-position: center top;
+  object-fit: contain;
   border-bottom: var(--border-thick) solid var(--line);
   /* The buttons are the only interactive part of the menu; the art is scenery. */
   pointer-events: none;
@@ -304,6 +319,41 @@ body {
 .title-screen .me-mode {
   padding: var(--space-8);
   gap: var(--space-8);
+}
+/* The mode's name with its best line under it, in the mode row's middle
+   cell (E67): one row instead of two keeps the title block inside the
+   stage on a short phone. */
+.me-mode-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+/* Phones (E67): the block must fit the stage with the art band whole at
+   90 px or more at 403x900 and 390x844, so the mode row tightens — the
+   blurb (also spoken in the row's aria-label) drops out below 480 px, the
+   best line shrinks with it, and the menu sits 4 px under the art with its
+   8 px gaps and 14 px button text. */
+@media (max-width: 480px) {
+  .title-screen {
+    padding: var(--space-8);
+  }
+  .title-screen .me-menu {
+    margin-top: var(--space-4);
+  }
+  .title-screen .me-mode {
+    padding: var(--space-4);
+  }
+  .title-screen .me-mode .me-hint {
+    display: none;
+  }
+  .title-screen .me-mode .me-best {
+    font: 400 12px/16px var(--font-display);
+  }
+  .title-screen .me-menu .me-btn {
+    font: 400 14px/24px var(--font-display);
+  }
 }
 .title-screen .me-menu .me-mode,
 .title-screen .me-menu .me-menu-wide {
@@ -1302,6 +1352,29 @@ body {
     margin-left: var(--space-4);
     font: 400 16px/24px var(--font-display);
   }
+
+  /* E67 (the 403x900 review): at the 371 px bar "ANCHOR (" was cut off —
+     the name in the 16 px display face was wider than the third of the row
+     each button owns. The name drops to 11 px with no letter-spacing and
+     the count to 12 px, the gaps tighten to space-2, and the armed Cut's
+     "Choose a direction" line (always said in the button's aria-label)
+     leaves the narrow button — every button shows its icon, its name and
+     its count whole from 360 px to 430 px, with nothing clipped. */
+  #hud.me-hud .me-tools .me-btn {
+    gap: var(--space-2);
+  }
+  #hud.me-hud .me-tools .me-btn > span:not([class]) {
+    font: 400 11px/14px var(--font-display);
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  #hud.me-hud .me-tools .me-btn .me-count {
+    margin-left: var(--space-2);
+    font: 400 12px/14px var(--font-display);
+  }
+  #hud.me-hud .me-tools .me-btn .me-hint {
+    display: none;
+  }
 }
 
 /* --- Settings, accessibility and the player's own asks ----------------------
@@ -1624,6 +1697,39 @@ body {
 .wardrobe-grid {
   height: 100%;
   overflow: hidden;
+  /* E67: the cards shrink so a page holds more of them — 104 px wide with
+     the 80 px art (five times the 16 px masters). The desktop tracks match
+     the card exactly so the grid's own columns and the measured page agree;
+     the phone grid below keeps its three equal tracks. */
+  grid-template-columns: repeat(auto-fill, 104px);
+  justify-items: center;
+}
+.wardrobe-grid .me-trait {
+  width: 104px;
+}
+.wardrobe-grid .me-trait .me-sprite {
+  /* The card art: 80 px whole-number scale, whatever the inline --s says. */
+  width: 80px;
+  height: 80px;
+}
+.wardrobe-grid .me-trait-name {
+  /* The longest trait name (COSMONAUT) reads on one line inside 84 px. */
+  font: 400 11px/16px var(--font-display);
+}
+/* The trait count and its bar share one line (E67), so the preview column
+   costs the grid page one line instead of two. */
+.wardrobe-count-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+.wardrobe-count-row .me-display-sm {
+  flex: none;
+  white-space: nowrap;
+}
+.wardrobe-stage .wardrobe-count-row .me-meter {
+  flex: 1 1 auto;
 }
 /* The hidden copy of the layer's whole list (components/Wardrobe.tsx): the
    same grid at the same width with every card laid out, so the ResizeObserver
@@ -1654,12 +1760,27 @@ body {
      height — the hint and the Back button sit under the preview, in the
      left column that used to stay empty below it — and the preview rides
      sticky at the top of that column. */
+  .wardrobe-panel {
+    /* E67: the panel takes its full 720 px on the desktop, so the grid
+       column beside the preview is wide enough for four 104 px cards. */
+    width: min(720px, 100%);
+  }
+  .wardrobe-layout {
+    /* The preview column tightens to 220 px (its duo at 80 px sprites
+       fits inside) and the grid column takes the rest. */
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
   .wardrobe-stage {
     grid-column: 1;
     grid-row: 1;
     position: sticky;
     top: 0;
     align-self: start;
+  }
+  .wardrobe-stage .me-sprite {
+    /* Both renditions of the look at 80 px beside each other. */
+    width: 80px;
+    height: 80px;
   }
   .wardrobe-grid-col {
     grid-column: 2;
@@ -1675,10 +1796,10 @@ body {
   }
 }
 @media (max-width: 640px) {
-  /* Phones: the stage goes above the tabs, the PFP drops to 96 px and the
-     runner to 48 px, and the grid is three cards wide. On desktop the design's
-     me-grid (auto-fill of 120 px cards) fills the 720 px panel with several
-     cards per row. */
+  /* Phones: the stage goes above the tabs and the grid is three cards wide
+     (E67: both preview sprites at 64 px, cards 104 px with 80 px art — six
+     a page). On desktop the grid (auto-fill of 104 px cards) fills the
+     720 px panel's grid column with four per row. */
   .wardrobe-layout {
     grid-template-columns: minmax(0, 1fr);
     /* E64: one column, items in document order — stage, then the grid
@@ -1690,11 +1811,31 @@ body {
   .wardrobe-stage {
     order: -1;
   }
-  .wardrobe-pfp {
-    --s: 96px;
+  /* E67 (the 403x900 review): the preview goes compact — the two sprites
+     side by side at 64 px, less padding in the stagebox, the trait count
+     and its bar on one line — and the layout gaps tighten to space-8, so
+     the grid keeps enough height for two rows of 80 px cards: six a page
+     at 403x900 and 390x844. The panel's title and body padding ride in
+     with it; the tabs shrink to one line. */
+  .wardrobe-stage .me-sprite {
+    width: 64px;
+    height: 64px;
   }
-  .wardrobe-runner {
-    --s: 48px;
+  .wardrobe-stage .me-stagebox {
+    padding: var(--space-8);
+  }
+  .wardrobe-panel .me-panel-title {
+    font: 700 24px/32px var(--font-display);
+  }
+  .wardrobe-panel .me-panel-body {
+    padding: var(--space-8);
+  }
+  .wardrobe-layout {
+    gap: var(--space-8);
+  }
+  .wardrobe-panel .me-tab {
+    padding: 0 var(--space-4);
+    font: 400 14px/24px var(--font-display);
   }
   .wardrobe-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

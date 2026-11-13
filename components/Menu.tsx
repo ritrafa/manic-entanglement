@@ -27,12 +27,13 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
  * On "title" the whole title block shows INSIDE the fixed stage (E65,
  * app/page.tsx): the board area keeps its box and the block sits in it, over
  * the void, with the board hidden beneath. The painting band at its own
- * aspect ratio with the whole lettering, then the mode picker, the buttons
- * and the best line at their natural height. Nothing inside it scrolls by
- * itself and the page never scrolls for it: where the block is taller than
- * the stage on a small phone the art band shrinks first, down to its 60 px
- * floor (.title-screen .title-art in styles/globals.css), and the block is
- * centred in the stage.
+ * aspect ratio with the whole lettering, then the mode picker (its name and
+ * best line in one cell, the blurb dropped below 480 px), the buttons and
+ * their 8 px gaps at their natural height. Nothing inside it scrolls by
+ * itself and the page never scrolls for it: the art band never squashes
+ * (.title-screen .title-art in styles/globals.css keeps the 500/150 ratio
+ * with object-fit: contain, at least 90 px tall on a phone), and the block
+ * is centred in the stage.
  *
  * On "howto" and "countdown" only the art shows, as an overlay on the board
  * area (dimmed while the countdown runs over it); the buttons belong to the
@@ -127,7 +128,10 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                     >
                         <i className="me-arrow is-left" aria-hidden="true" />
                     </button>
-                    <p className="me-display-md">{model.modeName}</p>
+                    <div className="me-mode-text">
+                        <p className="me-display-md">{model.modeName}</p>
+                        <p className="me-best">Best {model.modeBestText}</p>
+                    </div>
                     <button
                         type="button"
                         className="me-btn me-btn-icon"
@@ -137,7 +141,6 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                         <i className="me-arrow" aria-hidden="true" />
                     </button>
                     <p className="me-hint">{model.modeBlurb}</p>
-                    <p className="me-best">Best {model.modeBestText}</p>
                 </div>
                 {items.map((item, index) => (
                     <button

@@ -15,7 +15,9 @@ interface WardrobeProps {
 /** The stage shows both renditions of the current look at this size
  *  (design/components/Wardrobe: 16 px PFP art at 9x; the runner matches it). */
 const STAGE_PX = 144;
-/** The card art: the trait's PFP layer at 6x the 16 px masters. */
+/** The card art: the trait's PFP layer at 6x the 16 px masters. The
+ *  stylesheet shrinks the box to 80 px (5x) on both layouts (E67) so a page
+ *  holds six cards on a phone and twelve on the desktop. */
 const CARD_PX = 96;
 /** The preview repaints on this beat; frameAt picks the frame from the clock. */
 const PREVIEW_TICK_MS = 150;
@@ -413,9 +415,14 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                                     </figure>
                                 </div>
                             </div>
-                            <p className="me-display-sm" style={{ textAlign: 'center' }}>{unlockedCount} of {TOTAL_TRAITS} traits</p>
-                            <div className="me-meter is-gold" role="presentation">
-                                <i style={cssVars({ '--v': `${unlockedPct}%` })} />
+                            {/* The trait count and its bar share one line
+                                (E67), so the compact phone preview costs the
+                                card grid one line, not two. */}
+                            <div className="wardrobe-count-row">
+                                <p className="me-display-sm" style={{ textAlign: 'center' }}>{unlockedCount} of {TOTAL_TRAITS} traits</p>
+                                <div className="me-meter is-gold" role="presentation">
+                                    <i style={cssVars({ '--v': `${unlockedPct}%` })} />
+                                </div>
                             </div>
                         </div>
                         <div className="me-col wardrobe-grid-col">

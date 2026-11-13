@@ -987,3 +987,41 @@
   `game/audio/music.test.ts` tests determinism, the bounds at every depth 1-12
   and energy, the kick on step 0 of every bar, the snare from depth 2 only,
   the tune from depth 4 only, no tune below 25% energy and the 128-step loop.
+
+- E67: phone polish after the E63-E66 review at 403x900, four fixes. The
+  title art band is never squashed again: `.title-screen .title-art` is
+  `flex: none` with `object-fit: contain` (styles/globals.css), so the
+  painting's 500/150 lettering box scales whole — no `cover` crop, no
+  shrinking menu over it — with a 90 px floor; the room comes from the
+  tightened block instead: the mode row's name and best line share one cell
+  (`div.me-mode-text` in components/Menu.tsx), the blurb (still in the row's
+  aria-label) drops below 480 px, the best line goes 12 px there, the menu
+  sits 4 px under the art with its 8 px gaps and 14 px button text, and the
+  block pads 8 px inside the stage — at 403x900 the band is ~106 px and at
+  390x844 ~105 px, and the whole block stays inside the stage. The HUD's
+  tool buttons fit the 371 px bar: below 480 px the name is 11 px with no
+  letter-spacing, the count 12 px, the gaps space-2 and the armed Cut's
+  "Choose a direction" line (always in the aria-label) leaves the narrow
+  button, so icon, name and count show whole from 360 px to 430 px with
+  nothing clipped. The wardrobe shows six cards a page on a phone and
+  twelve on the desktop: cards are 104 px wide with 80 px art (the grid's
+  desktop tracks match the card at `repeat(auto-fill, 104px)`, the phone
+  keeps three equal tracks), the trait name reads at 11 px, and the phone
+  preview goes compact — both sprites side by side at 64 px, the stagebox at
+  8 px padding, the trait count and its bar on one line
+  (`div.wardrobe-count-row` in components/Wardrobe.tsx), a 24 px panel
+  title, 8 px body padding and layout gaps, and one-line tabs — while the
+  desktop panel takes its full 720 px with a 220 px preview column and 80 px
+  preview sprites. And the column centres: `body` and `.touch-layer` answer
+  `justify-content: safe center` (flex-start kept as the fallback), so the
+  stage, HUD and D-pad (when shown) ride in the vertical middle between the
+  safe-area insets on every screen — title, countdown, play, panels and the
+  loading skeleton — and stay top-aligned and scrollable when taller; the
+  boxes' sizes are still the same strings on every screen (E65), so
+  `#maze-container` and `#hud` keep their rects across screens. No browser
+  is available in this sandbox: the widths were computed from the shipped
+  Silkscreen and Atkinson metrics (the display face averages 0.75em an
+  em), so "ANCHOR 0" at 11/12 px fits the 96 px button a 360 px viewport
+  leaves, the longest trait name fits the 84 px card, and the measured page
+  (game/pages.ts arithmetic) holds 3x2 cards on the phone and 4x3 on the
+  desktop.
