@@ -25,7 +25,10 @@ export interface SaveData {
     feats: string[];
     /** The saved look, or null when none was kept. */
     look: Record<string, string> | null;
-    /** One-time messages already shown. */
+    /** One-time messages already shown ("howto" and the like), plus the
+     *  wardrobe's trait markers, one key per card as trait:<Layer>:<Trait>.
+     *  Saves kept before the markers existed simply hold no trait keys and
+     *  load unchanged: every missing key reads as "not seen yet". */
     seen: Record<string, boolean>;
 }
 
@@ -62,6 +65,16 @@ function keepNumbers(value: unknown): Record<string, number> {
     if (!isRecord(value)) return kept;
     for (const [key, entry] of Object.entries(value)) {
         if (typeof entry === "number" && Number.isFinite(entry) && entry >= 0) kept[key] = entry;
+    }
+    return kept;
+}
+
+/** A copy of a stored record keeping only true flags (the seen markers). */
+function keepBooleans(value: unknown): Record<string, boolean> {
+    const kept: Record<string, boolean> = {};
+    if (!isRecord(value)) return kept;
+    for (const [key, entry] of Object.entries(value)) {
+        if (entry === true) kept[key] = true;
     }
     return kept;
 }
@@ -110,7 +123,7 @@ export function loadSave(storage: StorageLike): SaveData {
         totals: keepNumbers(parsed.totals),
         feats: Array.isArray(parsed.feats) ? parsed.feats.filter((f): f is string => typeof f === "string") : fresh.feats,
         look: keepStrings(parsed.look),
-        seen: keepRecord(parsed.seen, fresh.seen),
+        seen: keepBooleans(parsed.seen),
     } as SaveData;
 }
 

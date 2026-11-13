@@ -806,26 +806,12 @@ body {
   }
 }
 
-/* The pause and game-over panels (components/Overlay.tsx) are me-panel on the
-   scrim (see the overlay rules above). The two selectors below survive only
-   for the wardrobe panel, the later card that keeps its own sheet for now. */
-.overlay-title {
-  font-size: 28px;
-  font-weight: bold;
-  letter-spacing: 1px;
-}
-.overlay-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 4px;
-}
-
 /* The HUD is the design's HudBar (design/components/HudBar): components/Hud.tsx
    renders #hud as one me-hud row and lib/GameState.ts sizeBoard writes the
    board's width onto it, so on desktop it is one wrapping row at the board's
    width. The portrait (me-portrait), meters (me-meter), stats (me-stat) and
-   carried marker (me-carried) all come from design/components.css; the wallet
-   box below is the only part still drawing its own sheet. */
+   carried marker (me-carried) all come from design/components.css; only the
+   closed wallet button below still draws its own sheet. */
 .left-box {
   display: flex;
   align-items: center;
@@ -835,9 +821,9 @@ body {
 }
 
 /* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
-   in the wallet panel on click. */
-.wallet-open,
-.wallet-actions {
+   in the wallet panel on click. The open box itself is the design's
+   me-wallet (design/components/WalletBox), styled in design/components.css. */
+.wallet-open {
   color: white;
   background-color: rgba(0, 0, 0, 0.8);
   border: none;
@@ -848,20 +834,9 @@ body {
   width: 120px;
 }
 
-.wallet-open:disabled,
-.wallet-actions:disabled {
+.wallet-open:disabled {
   opacity: 0.6;
   cursor: default;
-}
-
-.wallet-status {
-  color: #cfd8dc;
-  background-color: rgba(0, 0, 0, 0.6);
-  font-size: 11px;
-  border-radius: 5px;
-  padding: 4px 6px;
-  margin-top: 5px;
-  max-width: 160px;
 }
 
 /* Custom styling for wallet adapter button */
@@ -924,8 +899,7 @@ body {
 
   /* The plain button WalletGate.tsx shows in the wallet box's place; it pulls
      in the wallet panel on click. */
-  .wallet-open,
-  .wallet-actions {
+  .wallet-open {
     width: auto;
     padding: 4px 8px;
     margin-top: 0;
@@ -945,10 +919,6 @@ body {
 /* Text size: the HUD and the panels grow with --ui-scale (1, 1.25 or 1.5). */
 #hud {
   font-size: calc(1em * var(--ui-scale, 1));
-}
-
-.overlay-title {
-  font-size: calc(28px * var(--ui-scale, 1));
 }
 
 /* Motion: the player's own ask, not only the operating system's. The drifting
@@ -1003,9 +973,7 @@ body {
 }
 
 [data-contrast="true"] .wallet-open,
-[data-contrast="true"] .wallet-actions,
-[data-contrast="true"] .me-panel,
-[data-contrast="true"] .wardrobe-panel {
+[data-contrast="true"] .me-panel {
   background-color: #000000;
   color: #ffffff;
 }
@@ -1143,107 +1111,56 @@ body {
   }
 }
 
-/* The wardrobe (components/Wardrobe.tsx): a panel in the same family as the
-   feats sheet. The preview stacks the trait layers of spriteLayers on top of
-   each other, blown up from the 48 px art and kept pixel-crisp; one row per
-   layer shows the layer's name, a previous button, the current trait's name
-   and a next button. Rows take focus so the arrow keys can cycle them. */
-.wardrobe-panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 10px;
-  background-color: rgba(8, 10, 16, 0.94);
-  color: white;
-  text-align: center;
-  z-index: 3;
-  overflow-y: auto;
-  padding: 16px;
-  font-size: calc(1em * var(--ui-scale, 1));
+/* The wardrobe (components/Wardrobe.tsx, design/components/Wardrobe): the
+   panel is a me-panel on the scrim and the parts are the design's me-tabs,
+   me-grid, me-trait, me-sprite, me-tag and me-pips from design/components.css.
+   Only what the sheet cannot say lives here: the wider panel (720 px, per
+   design/README), the two-column layout, the stage sizes with their phone
+   drops, the three-card phone grid and the locked hint's ink-dim. */
+#maze-container .me-scrim > .me-panel.wardrobe-panel {
+  max-width: min(720px, 100%);
 }
-.wardrobe-panel p {
-  margin: 0;
+.wardrobe-layout {
+  display: grid;
+  grid-template-columns: 284px minmax(0, 1fr);
+  gap: var(--space-16);
 }
-.wardrobe-preview {
-  position: relative;
-  flex: none;
+.wardrobe-layout > .me-col {
+  min-width: 0;
 }
-.wardrobe-preview img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  pointer-events: none;
+.wardrobe-stage {
+  align-items: stretch;
 }
-.wardrobe-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: min(320px, 84%);
-  max-width: 84%;
+.wardrobe-pfp {
+  --s: 144px;
 }
-.wardrobe-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: calc(15px * var(--ui-scale, 1));
+.wardrobe-runner {
+  --s: 144px;
 }
-.wardrobe-row:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+/* The locked card's hint is disabled text, not a tip: ink-dim (design/README,
+   Colour: "ink-dim for disabled and locked"). */
+.me-trait.is-locked .me-hint {
+  color: var(--ink-dim);
 }
-.wardrobe-layer {
-  min-width: 5em;
-  text-align: left;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: calc(12px * var(--ui-scale, 1));
-}
-.wardrobe-trait {
-  flex: 1;
-  text-align: center;
-}
-.wardrobe-row button {
-  font: inherit;
-  padding: 4px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.wardrobe-row button:hover,
-.wardrobe-row button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
-}
-.wardrobe-count {
-  font-weight: 700;
-}
-.wardrobe-hint {
-  opacity: 0.85;
-  font-size: calc(13px * var(--ui-scale, 1));
-}
-.wardrobe-panel .overlay-buttons button {
-  font: inherit;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.12);
-  color: white;
-  cursor: pointer;
-}
-.wardrobe-panel .overlay-buttons button:hover,
-.wardrobe-panel .overlay-buttons button:focus-visible {
-  background-color: rgba(255, 255, 255, 0.25);
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+@media (max-width: 640px) {
+  /* Phones: the stage goes above the tabs, the PFP drops to 96 px and the
+     runner to 48 px, and the grid is three cards wide. */
+  .wardrobe-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wardrobe-stage {
+    order: -1;
+  }
+  .wardrobe-pfp {
+    --s: 96px;
+  }
+  .wardrobe-runner {
+    --s: 48px;
+  }
+  .wardrobe-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-items: center;
+  }
 }
 
 /* --- Status pages (app/error.tsx, app/not-found.tsx) ------------------------

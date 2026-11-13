@@ -538,3 +538,37 @@
   intent chevron lost their 1 px drop shadows. Tiles, entities and sprites all
   already render with `image-rendering: pixelated`; the galaxy drift and the
   reduced-motion and contrast rules are unchanged.
+
+- E46: rebuilt the wardrobe as the design's trait grid and the wallet box on
+  the WalletBox states. `components/Wardrobe.tsx` is now a `me-panel` on the
+  scrim with `me-tabs` per layer and a `me-grid` of TraitCards: each card
+  stacks the trait's PFP layer (from `pfpLayers`) over a ghost of the body,
+  names it, and shows its state — `On` when equipped, the layer label when
+  available, `New` for a trait unlocked since the panel was last closed, and
+  `Locked` with the unlocking feat's name under a silhouette; feat-granted
+  traits carry the three `is-feat` pips, free ones the `is-found` pip. The
+  equipped card is `is-equipped`, choosing any other available card equips it
+  through `setWardrobeLook`, and locked cards stay out of the button order but
+  answer Tab so their hint can be read. Above the grid the current look shows
+  twice at 144 px: the stacked PFP as "Your NFT" and the framed runner as "In
+  the maze", with the "n of 22 traits" count and a gold meter over them. The
+  New markers live in the save's existing `seen` record as
+  `trait:<Layer>:<Trait>` keys: `GameState.openWardrobe` snapshots the
+  wearable cards the save has not seen into the new `newTraits` snapshot
+  field and `GameState.markTraitsSeen` marks them when the panel closes,
+  `game/save.ts` now sanitizes `seen` to true flags, and
+  `game/save.test.ts` proves old saves without any marker still load.
+  `components/WalletBox.tsx` follows design/components/WalletBox: one
+  `me-wallet` box with the connect button, a disabled "Check assets" and a
+  busy `me-status` while looking up, the found reptile as a 48 px PFP with
+  "Reptile #<n>" (the number read from the asset's name) and the shortened
+  address, "No Entangled Reptile in this wallet" when the list holds none,
+  and "Could not reach the network" with a Try again button on failure. In
+  `lib/reptile.ts` a reply carrying a JSON-RPC `error`, or no `result` at
+  all, is now that network failure instead of an empty wallet, covered by two
+  new cases in `lib/reptile.test.ts`. `styles/globals.css` lost the old
+  `.wardrobe-*` rows, `.wallet-actions`, `.wallet-status` and the unused
+  `.overlay-title`/`.overlay-buttons`, and gained only the wardrobe sheet the
+  design parts cannot say: the 720 px panel, the two-column layout, the
+  stage sizes with their phone drops and the three-card phone grid. No chain
+  feature was added: saving and minting come later.

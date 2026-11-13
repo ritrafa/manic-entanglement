@@ -205,3 +205,33 @@ describe("resetProgress", () => {
     expect(loaded.settings).toEqual({ muted: true });
   });
 });
+
+describe("the wardrobe's trait-seen markers", () => {
+  it("loads an old save without any trait marker, seen and all", () => {
+    // A save written before the wardrobe kept "new" markers: no seen field
+    // at all, and one with only the old messages, must both keep loading.
+    const old = loadSave(storageWith('{ "v": 1, "best": { "descent": 12 }, "feats": ["first-exit"] }'));
+    expect(old.seen).toEqual({});
+    expect(old.best.descent).toBe(12);
+    expect(old.feats).toEqual(["first-exit"]);
+    const messages = loadSave(storageWith('{ "v": 1, "seen": { "howto": true } }'));
+    expect(messages.seen).toEqual({ howto: true });
+  });
+
+  it("keeps trait markers through a write and a load", () => {
+    const data: SaveData = {
+      ...defaultSave(),
+      seen: { howto: true, "trait:Head:Crown": true, "trait:Back:Wings": true },
+    };
+    const storage = fakeStorage();
+    expect(writeSave(storage, data)).toBe(true);
+    expect(loadSave(storage)).toEqual(data);
+  });
+
+  it("drops non-boolean entries and keeps the rest", () => {
+    const loaded = loadSave(storageWith(
+      '{ "v": 1, "seen": { "trait:Body:Gold": true, "bogus": "yes", "count": 3 } }',
+    ));
+    expect(loaded.seen).toEqual({ "trait:Body:Gold": true });
+  });
+});

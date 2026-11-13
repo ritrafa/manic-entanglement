@@ -1,7 +1,7 @@
 import { Run } from '@/game/run';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
-import { LAYER_ORDER, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
+import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
 import { boardLayout } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
@@ -18,7 +18,7 @@ import { MODES, betterScore, cycleMode, dailySeed, type ModeId, type ModeRules }
 import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/game/settings';
 import { MODIFIER_INFO } from '@/game/modifiers';
 import { evaluateFeats, featById, updateTotals } from '@/game/feats';
-import { UNLOCKS, fitLook } from '@/game/wardrobe';
+import { UNLOCKS, fitLook, isUnlocked } from '@/game/wardrobe';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -63,11 +63,20 @@ export interface GameSnapshot extends HudModel {
     feats: string[];
     /** The look the reptile wears now (game/sprite.ts); the wardrobe edits it. */
     look: Look;
+    /** The trait cards unlocked since the wardrobe was last closed, as the
+     *  save's seen keys trait:<Layer>:<Trait>; the wardrobe shows a New tag
+     *  on exactly these. */
+    newTraits: string[];
 }
 
 /** True when two feat lists hold the same ids in the same order. */
 function sameFeats(a: string[], b: string[]): boolean {
     return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** True when two key lists hold the same keys in the same order. */
+function sameKeys(a: string[], b: string[]): boolean {
+    return a.length === b.length && a.every((key, index) => key === b[index]);
 }
 
 /** True when two looks wear the same trait on every layer. */
@@ -107,6 +116,9 @@ class GameState {
     /** performance.now() of the last low-energy pulse, so it plays about once a second. */
     private lastWarnAt: number = 0;
     private look: Look;
+    /** The trait cards the wardrobe showed as new when it last opened; the
+     *  snapshot hands them to the panel (E46 "new" markers). */
+    private newTraitKeys: string[] = [];
     /** The one code that touches the board's DOM: patched tiles and gliding sprites. */
     private board: Board = new Board();
     /** The effects bus gate: at most three shakes and three flashes a second. */
@@ -183,7 +195,7 @@ class GameState {
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
         this.look = fitLook(sanitizeLook(this.save.look), this.save.feats);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look } };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, newTraits: [] };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -770,15 +782,50 @@ class GameState {
         this.dispatch('back');
     }
 
-    /** The title menu's Wardrobe entry: opens the look picker. */
+    /** The title menu's Wardrobe entry: opens the look picker, remembering
+     *  which wearable cards the save has not seen yet so they can carry the
+     *  New tag until the panel is next closed. */
     openWardrobe(): void {
         if (this.screen !== 'title') return;
+        this.newTraitKeys = GameState.unlockedTraitKeys(this.save.feats)
+            .filter((key) => !this.save.seen[key]);
         this.dispatch('wardrobe');
     }
 
     /** The wardrobe panel's Back button: Esc and the button both close it. */
     closeWardrobe(): void {
         this.dispatch('back');
+    }
+
+    /** Every wearable trait as a seen key of the form trait:<Layer>:<Trait>.
+     *  A bare (None) trait never carries a marker: there is nothing new to see. */
+    private static unlockedTraitKeys(feats: readonly string[]): string[] {
+        const keys: string[] = [];
+        for (const layer of LAYER_ORDER) {
+            for (const trait of TRAITS[layer]) {
+                if (trait !== 'None' && isUnlocked(layer, trait, feats)) keys.push(`trait:${layer}:${trait}`);
+            }
+        }
+        return keys;
+    }
+
+    /**
+     * Mark trait cards as seen (the wardrobe's "new" markers, keys of the
+     * form trait:<Layer>:<Trait>, game/save.ts `seen`) and land them in the
+     * save at once, so the cards show as new only until the wardrobe is next
+     * closed. Old saves hold no trait keys; marking simply adds them.
+     */
+    markTraitsSeen(keys: readonly string[]): void {
+        const missing = keys.filter((key) => !this.save.seen[key]);
+        if (missing.length === 0) {
+            this.newTraitKeys = [];
+            return;
+        }
+        const seen = { ...this.save.seen };
+        for (const key of missing) seen[key] = true;
+        this.save = { ...this.save, seen };
+        writeSave(this.storage, this.save);
+        this.newTraitKeys = [];
     }
 
     /** M: every sound the shell owns goes quiet together, and back. */
@@ -1073,6 +1120,7 @@ class GameState {
             finished: this.lastFinished,
             feats: [...this.save.feats],
             look: { ...this.look },
+            newTraits: [...this.newTraitKeys],
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
