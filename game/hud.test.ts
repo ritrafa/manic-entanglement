@@ -13,10 +13,18 @@ function runAt(over: { energy?: number; score?: number; level?: number; stats?: 
 }
 
 describe("hudModel", () => {
-  it("formats the energy and score texts", () => {
+  it("formats the energy and score as plain number texts", () => {
     const model = hudModel(runAt(), 50);
-    expect(model.energyText).toBe("Energy: 87");
-    expect(model.scoreText).toBe("Score: 12");
+    expect(model.energyText).toBe("87");
+    expect(model.scoreText).toBe("12");
+  });
+
+  it("flags the energy as low under the warning line", () => {
+    expect(hudModel(runAt({ energy: 87 }), 50).energyLow).toBe(false);
+    expect(hudModel(runAt({ energy: 25 }), 50).energyLow).toBe(false);
+    expect(hudModel(runAt({ energy: 24 }), 50).energyLow).toBe(true);
+    expect(hudModel(runAt({ energy: 0 }), 50).energyLow).toBe(true);
+    expect(hudModel(runAt({ energy: -3 }), 50).energyLow).toBe(true);
   });
 
   it("shows 0% progress when the best is 0", () => {
@@ -31,7 +39,7 @@ describe("hudModel", () => {
 
   it("never lets the energy text or bar go below 0", () => {
     const model = hudModel(runAt({ energy: -3 }), 50);
-    expect(model.energyText).toBe("Energy: 0");
+    expect(model.energyText).toBe("0");
     expect(model.energyPct).toBe(0);
   });
 
@@ -72,6 +80,7 @@ describe("hudModel", () => {
   it("notices a changed run", () => {
     const before: HudModel = hudModel(runAt(), 50);
     expect(sameHudModel(before, hudModel(runAt({ score: 13 }), 50))).toBe(false);
+    expect(sameHudModel(hudModel(runAt({ energy: 80 }), 50), hudModel(runAt({ energy: 20 }), 50))).toBe(false);
   });
 });
 

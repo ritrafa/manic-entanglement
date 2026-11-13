@@ -21,10 +21,12 @@ const STATUS_TEXT: Record<Exclude<LoadStatus, 'idle' | 'found'>, string> = {
     error: 'Could not reach the network',
 };
 
-/** The left box of the HUD: connect, look up the reptile, show its image and
- *  a status line. It only changes the look (gameState.setLook), never stats
- *  or the high score. Rendered only when an RPC endpoint is configured, so
- *  the useWallet hook here always has its provider.
+/** The wallet box of the HUD: connect, look up the reptile and show a status
+ *  line. It only changes the look (gameState.setLook), never stats or the high
+ *  score; the look then feeds the HUD's own PFP portrait (components/Hud.tsx),
+ *  which is built locally from the loadout, never from the NFT's image address.
+ *  Rendered only when an RPC endpoint is configured, so the useWallet hook
+ *  here always has its provider.
  *
  *  The wallet code lives behind components/WalletGate.tsx (next/dynamic,
  *  ssr: false): this file brings its own provider — and with it the wallet
@@ -42,7 +44,6 @@ const WalletBox: React.FC<WalletBoxProps> = ({ gameState }) => (
  *  as a child of WalletContextProvider, so useWallet has its context. */
 const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
     const { publicKey } = useWallet();
-    const [assetImage, setAssetImage] = useState<string | null>(null);
     const [status, setStatus] = useState<LoadStatus>('idle');
 
     const handleCheckAssets = useCallback(async () => {
@@ -50,12 +51,8 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
         setStatus('loading');
         // loadReptile never throws: every failure comes back as a status.
         const result = await loadReptile(publicKey.toBase58());
-        if (result.status === 'found') {
-            gameState.setLook(result.look);
-            setAssetImage(result.image);
-        } else {
-            setAssetImage(null);
-        }
+        // The loaded look goes straight to the shell; the HUD portrait follows.
+        if (result.status === 'found') gameState.setLook(result.look);
         setStatus(result.status);
     }, [publicKey, gameState]);
 
@@ -70,7 +67,6 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
             {status !== 'idle' && status !== 'found' && (
                 <div className="wallet-status">{STATUS_TEXT[status]}</div>
             )}
-            {assetImage && <img src={assetImage} alt="Your Entangled Reptile" className="asset-image" />}
         </div>
     );
 };

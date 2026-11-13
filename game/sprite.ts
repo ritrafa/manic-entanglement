@@ -59,3 +59,17 @@ export function frameAt(ms: number): 1 | 2 | 3 | 4 {
   const step = Math.floor(Math.max(0, ms) / FRAME_MS);
   return (((step % 4) + 4) % 4 + 1) as 1 | 2 | 3 | 4;
 }
+
+/** PFP layer image URLs in draw order (back first): the 16x16 portrait masters
+ *  at <Layer>/<Trait>pfp.png, stacked like the runner frames. `None` traits are
+ *  skipped and unknown traits fall back exactly as they do in spriteLayers. */
+export function pfpLayers(look: Look): string[] {
+  const urls: string[] = [];
+  const safeLook = sanitizeLook(look);
+  for (const layer of LAYER_ORDER) {
+    const trait = safeLook[layer];
+    if (trait === 'None') continue;
+    urls.push(`/images/nft/${layer}/${trait}pfp.png`);
+  }
+  return urls;
+}

@@ -492,3 +492,30 @@
   `.feats-row`, `.feats-name`, `.feats-text`, `.feats-state`, `.me-dpad`
   (placement), `.pause-button` (placement), `.title-menu`, `.title-art`,
   `.level-banner` and `.message` stay as token-based layout or pattern rules.
+
+- E44: made the HUD the design's `HudBar` (design/components/HudBar).
+  `game/sprite.ts` gained the pure `pfpLayers(look)` — the 16-grid portrait
+  masters `/images/nft/<Layer>/<Trait>pfp.png` in draw order, `None` skipped
+  and unknown traits falling back exactly as the runner does — tested in
+  `game/sprite.test.ts` (all five layers, a skipped `None`, the fallback, and
+  every pfp file on disk). `game/hud.ts` gives the model an `energyLow` flag
+  (game/fx.ts lowEnergy over the bar percentage, compared by sameHudModel) and
+  `energyText`/`scoreText` are now plain number texts the HUD pairs with its
+  own labels. `components/Hud.tsx` renders `#hud` as one wrapping `me-hud` row
+  at the board's width: a `me-portrait` stacking the current look's
+  `pfpLayers` as pixelated `<img>` layers at 48px (the PFP, never the runner,
+  built locally so it always matches the loadout), the energy and score meters
+  as `me-meter`s (`--energy` teal, score `is-gold`, numbers in the display
+  face), the four stats as `me-stat`s with the 24px gear sprites — gloves
+  attack, shield defense, speed clock, boots step cost — and no emoji, the
+  `me-carried` marker and the tool row. Low energy now reaches the bar itself:
+  the meter takes `is-low`, the label and number turn to danger and the label
+  reads "Energy low", and the breathe pulse moved from the unreachable
+  `.low-energy #energy-bar-inner` to `.me-meter.is-low > i` (stilled under
+  reduced motion). `components/WalletBox.tsx` no longer shows the remote NFT
+  image in the HUD; a loaded reptile's look feeds the same portrait through
+  the shell. `styles/globals.css` deleted the unused old HUD selectors (`#hud`
+  box, `.asset-image`, `.right-box`, `.bar-container`, `#energy-bar`/
+  `#progress-bar` and their inners, `.stats-container`, `.stat`,
+  `.carried-marker`, `#stat-*`), restyled `.left-box` as the wallet box inside
+  the row, and stacks the HUD below 480px on the `is-phone` pattern.

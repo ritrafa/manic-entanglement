@@ -6,6 +6,7 @@ import {
   LAYER_ORDER,
   TRAITS,
   frameAt,
+  pfpLayers,
   sanitizeLook,
   spriteLayers,
   type Look,
@@ -54,6 +55,48 @@ describe("spriteLayers", () => {
           const file = join(process.cwd(), "public", "images", "nft", layer, `${trait}${frame}.png`);
           expect(existsSync(file), `missing ${file}`).toBe(true);
         }
+      }
+    }
+  });
+});
+
+describe("pfpLayers", () => {
+  it("stacks all five layers in draw order", () => {
+    const look: Look = { Back: "Wings", Body: "Gold", Clothes: "Robe", Eye: "Asleep", Head: "Crown" };
+    expect(pfpLayers(look)).toEqual([
+      "/images/nft/Back/Wingspfp.png",
+      "/images/nft/Body/Goldpfp.png",
+      "/images/nft/Clothes/Robepfp.png",
+      "/images/nft/Eye/Asleeppfp.png",
+      "/images/nft/Head/Crownpfp.png",
+    ]);
+  });
+
+  it("skips None traits and keeps draw order", () => {
+    expect(pfpLayers(DEFAULT_LOOK)).toEqual([
+      "/images/nft/Body/Greenpfp.png",
+      "/images/nft/Eye/Regularpfp.png",
+    ]);
+    const noHead: Look = { Back: "Jetpack", Body: "Pink", Clothes: "None", Eye: "Scanner", Head: "None" };
+    expect(pfpLayers(noHead)).toEqual([
+      "/images/nft/Back/Jetpackpfp.png",
+      "/images/nft/Body/Pinkpfp.png",
+      "/images/nft/Eye/Scannerpfp.png",
+    ]);
+  });
+
+  it("falls back like the runner when a trait is unknown", () => {
+    const evil = { Back: "../../x", Body: "Green", Clothes: "a<b>", Eye: "Regular", Head: {} } as unknown as Look;
+    expect(pfpLayers(evil)).toEqual(pfpLayers(DEFAULT_LOOK));
+    expect(pfpLayers(null as unknown as Look)).toEqual(pfpLayers(DEFAULT_LOOK));
+  });
+
+  it("has the pfp file on disk for every non-None trait", () => {
+    for (const layer of LAYER_ORDER) {
+      for (const trait of TRAITS[layer]) {
+        if (trait === "None") continue;
+        const file = join(process.cwd(), "public", "images", "nft", layer, `${trait}pfp.png`);
+        expect(existsSync(file), `missing ${file}`).toBe(true);
       }
     }
   });
