@@ -7,11 +7,11 @@ export type Layer = 'Back' | 'Body' | 'Clothes' | 'Eye' | 'Head';
 export const LAYER_ORDER: readonly Layer[] = ['Back', 'Body', 'Clothes', 'Eye', 'Head'];
 
 export const TRAITS: Record<Layer, readonly string[]> = {
-  Back: ['None', 'Wings', 'Jetpack', 'Billhook', 'Oxygen', 'Panel'],
-  Body: ['Blue', 'Chrome', 'Ember', 'Gold', 'Green', 'Pink', 'Purple', 'Skeleton', 'Solana'],
-  Clothes: ['Astronaut', 'None', 'Plate', 'Robe', 'Scarf', 'Tank'],
-  Eye: ['Asleep', 'Eclipse', 'One', 'Regular', 'Scanner', 'Visor', 'Zero'],
-  Head: ['Cosmonaut', 'Cowboy', 'Crown', 'Halo', 'Hood', 'Miner', 'None'],
+  Back: ['None', 'Wings', 'Jetpack', 'Billhook', 'Oxygen', 'Panel', 'Shell', 'Quiver', 'Sword', 'Antenna', 'Balloon', 'Cape', 'Dish', 'Lantern', 'Rucksack', 'Mushroom', 'Sail', 'Tentacles', 'Crystal', 'Drone'],
+  Body: ['Blue', 'Chrome', 'Ember', 'Gold', 'Green', 'Pink', 'Purple', 'Skeleton', 'Solana', 'Frost', 'Coral', 'Camo', 'Copper', 'Lunar', 'Tide', 'Garnet', 'Mint', 'Dune', 'Nebula', 'Toxic', 'Circuit', 'Glitch', 'Opal'],
+  Clothes: ['Astronaut', 'None', 'Plate', 'Robe', 'Scarf', 'Tank', 'Poncho', 'Vest', 'Trench', 'Mail', 'Bandolier', 'Aloha', 'Overalls', 'Toga', 'Parka', 'Tabard', 'Kimono', 'Tuxedo', 'Lamellar', 'Circuit', 'Crystal'],
+  Eye: ['Asleep', 'Eclipse', 'One', 'Regular', 'Scanner', 'Visor', 'Zero', 'Monocle', 'Goggles', 'Shades', 'Wide', 'Glare', 'Slit', 'Patch', 'Dazed', 'Bored', 'Target', 'Glint', 'Bionic', 'Alien', 'Blaze'],
+  Head: ['Cosmonaut', 'Cowboy', 'Crown', 'Halo', 'Hood', 'Miner', 'None', 'Beanie', 'Tophat', 'Bandana', 'Straw', 'Toque', 'Fez', 'Headset', 'Mohawk', 'Propeller', 'Knight', 'Wizard', 'Viking', 'Jester', 'Pharaoh', 'Saucer'],
 };
 
 export type Look = Record<Layer, string>;

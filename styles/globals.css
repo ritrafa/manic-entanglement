@@ -1507,6 +1507,16 @@ body {
 .me-trait.is-locked .me-hint {
   color: var(--ink-dim);
 }
+/* With about twenty traits per layer (E60's batch) the open grid scrolls
+   inside the panel: the tabs (the grid's layer headings) and the stage stay
+   put while the cards move, and the panel never grows past the screen. */
+.wardrobe-grid {
+  max-height: min(520px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--space-4);
+  scrollbar-width: thin;
+}
 @media (max-width: 640px) {
   /* Phones: the stage goes above the tabs, the PFP drops to 96 px and the
      runner to 48 px, and the grid is three cards wide. On desktop the design's

@@ -821,3 +821,21 @@
   `imageSmoothingEnabled` off beside the CSS `image-rendering: pixelated`,
   and folds the buffer side into the redraw key so a zoom or ratio change
   repaints it.
+
+- E60: the second trait batch is in the maze. `game/sprite.ts` `TRAITS` grew
+  by the 72 names the owner picked (Back 14, Body 14, Clothes 15, Eye 14,
+  Head 15, each appended after its layer's existing names with `None` kept
+  where it was) and `game/wardrobe.ts` `PICKUP_TRAITS` registers every one
+  with its rarity — 49 Found and 23 Rare beside the shipped 5 and 5 — so
+  E58's drop roll hands them out and the wardrobe wears them once kept. The
+  two names that repeat across layers (Circuit in Body and Clothes, Crystal
+  in Back and Clothes) were checked everywhere traits are keyed: the save's
+  `pickedUp` entries, the wardrobe's New-marker seen keys, the kept/dedup
+  checks in `lib/GameState.ts` and the HUD's held-trait icon all carry the
+  layer beside the name already, and `game/wardrobe.test.ts` now pins that
+  holding Body/Circuit never frees Clothes/Circuit (same for Crystal) while
+  `game/sprite.test.ts` reads the six files of every registered trait
+  (`<Trait>1..4.png`, `<Trait>pfp.png`, `<Trait>.png`) off
+  `public/images/nft/<Layer>/` with `node:fs`. With about twenty traits per
+  layer the wardrobe grid gained a `max-height` and scrolls inside its panel
+  in `styles/globals.css`, leaving the layer tabs and the stage in place.

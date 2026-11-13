@@ -18,7 +18,7 @@ const CARD_PX = 96;
 /** The preview repaints on this beat; frameAt picks the frame from the clock. */
 const PREVIEW_TICK_MS = 150;
 
-/** How many non-None traits exist across all layers (32 with the shipped art). */
+/** How many non-None traits exist across all layers (104 with the shipped art). */
 const TOTAL_TRAITS = LAYER_ORDER.reduce(
     (total, layer) => total + TRAITS[layer].filter((trait) => trait !== 'None').length,
     0,

@@ -47,12 +47,14 @@ describe("spriteLayers", () => {
     ]);
   });
 
-  it("has all four frame files on disk for every non-None trait", () => {
+  it("has all six files on disk for every non-None trait", () => {
+    // <Trait>1..4.png, <Trait>pfp.png and <Trait>.png under
+    // public/images/nft/<Layer>/, read straight from the filesystem.
     for (const layer of LAYER_ORDER) {
       for (const trait of TRAITS[layer]) {
         if (trait === "None") continue;
-        for (let frame = 1; frame <= 4; frame++) {
-          const file = join(process.cwd(), "public", "images", "nft", layer, `${trait}${frame}.png`);
+        for (const suffix of ["1", "2", "3", "4", "pfp", ""]) {
+          const file = join(process.cwd(), "public", "images", "nft", layer, `${trait}${suffix}.png`);
           expect(existsSync(file), `missing ${file}`).toBe(true);
         }
       }
@@ -99,6 +101,24 @@ describe("pfpLayers", () => {
         expect(existsSync(file), `missing ${file}`).toBe(true);
       }
     }
+  });
+
+  it("keeps the two shared names apart by layer", () => {
+    // Circuit (Body and Clothes) and Crystal (Back and Clothes) are separate
+    // traits: each only ever reaches a URL under its own layer's folder.
+    const circuit: Look = { Back: "None", Body: "Circuit", Clothes: "Circuit", Eye: "Regular", Head: "None" };
+    expect(spriteLayers(circuit, 1)).toEqual([
+      "/images/nft/Body/Circuit1.png",
+      "/images/nft/Clothes/Circuit1.png",
+      "/images/nft/Eye/Regular1.png",
+    ]);
+    const crystal: Look = { Back: "Crystal", Body: "Green", Clothes: "Crystal", Eye: "Regular", Head: "None" };
+    expect(pfpLayers(crystal)).toEqual([
+      "/images/nft/Back/Crystalpfp.png",
+      "/images/nft/Body/Greenpfp.png",
+      "/images/nft/Clothes/Crystalpfp.png",
+      "/images/nft/Eye/Regularpfp.png",
+    ]);
   });
 });
 

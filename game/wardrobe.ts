@@ -1,6 +1,6 @@
 // The pure wardrobe: which traits a player may wear, which feat unlocks which
 // and which the maze hands out. Five traits are free; every other one of the
-// thirty-two belongs to exactly one feat (the showiest ones to the hardest
+// one hundred four belongs to exactly one feat (the showiest ones to the hardest
 // feats) or to one pickup slot in the maze, with a Found or Rare rarity. Pure
 // data and pure functions: no DOM, no images, no clocks — trait names still
 // reach a URL only through spriteLayers in game/sprite.ts.
@@ -49,9 +49,12 @@ export type PickupRarity = "found" | "rare";
 export type HeldTrait = { layer: string; trait: string };
 
 /**
- * The traits that drop as pickups in the maze (trait cards come with E58),
- * five Found and five Rare. A trait here is wearable once the save's
- * `pickedUp` list holds it; the feat table above never names these.
+ * The traits that drop as pickups in the maze (trait cards come with E58):
+ * the ten shipped ones (five Found, five Rare) plus the 72 of the second
+ * batch (49 Found, 28 Rare in all). A trait here is wearable once the save's
+ * `pickedUp` list holds it; the feat table above never names these. Two
+ * names repeat across layers (Circuit in Body and Clothes, Crystal in Back
+ * and Clothes), so an entry is only ever read as its layer plus trait.
  */
 export const PICKUP_TRAITS: readonly { layer: Layer; trait: string; rarity: PickupRarity }[] = [
     { layer: "Back", trait: "Oxygen", rarity: "found" },
@@ -64,6 +67,78 @@ export const PICKUP_TRAITS: readonly { layer: Layer; trait: string; rarity: Pick
     { layer: "Eye", trait: "Eclipse", rarity: "rare" },
     { layer: "Head", trait: "Miner", rarity: "found" },
     { layer: "Head", trait: "Halo", rarity: "rare" },
+    { layer: "Back", trait: "Shell", rarity: "found" },
+    { layer: "Back", trait: "Quiver", rarity: "found" },
+    { layer: "Back", trait: "Sword", rarity: "found" },
+    { layer: "Back", trait: "Antenna", rarity: "found" },
+    { layer: "Back", trait: "Balloon", rarity: "found" },
+    { layer: "Back", trait: "Cape", rarity: "found" },
+    { layer: "Back", trait: "Dish", rarity: "found" },
+    { layer: "Back", trait: "Lantern", rarity: "found" },
+    { layer: "Back", trait: "Rucksack", rarity: "found" },
+    { layer: "Back", trait: "Mushroom", rarity: "found" },
+    { layer: "Back", trait: "Sail", rarity: "rare" },
+    { layer: "Back", trait: "Tentacles", rarity: "rare" },
+    { layer: "Back", trait: "Crystal", rarity: "rare" },
+    { layer: "Back", trait: "Drone", rarity: "rare" },
+    { layer: "Body", trait: "Frost", rarity: "found" },
+    { layer: "Body", trait: "Coral", rarity: "found" },
+    { layer: "Body", trait: "Camo", rarity: "found" },
+    { layer: "Body", trait: "Copper", rarity: "found" },
+    { layer: "Body", trait: "Lunar", rarity: "found" },
+    { layer: "Body", trait: "Tide", rarity: "found" },
+    { layer: "Body", trait: "Garnet", rarity: "found" },
+    { layer: "Body", trait: "Mint", rarity: "found" },
+    { layer: "Body", trait: "Dune", rarity: "found" },
+    { layer: "Body", trait: "Nebula", rarity: "rare" },
+    { layer: "Body", trait: "Toxic", rarity: "rare" },
+    { layer: "Body", trait: "Circuit", rarity: "rare" },
+    { layer: "Body", trait: "Glitch", rarity: "rare" },
+    { layer: "Body", trait: "Opal", rarity: "rare" },
+    { layer: "Clothes", trait: "Poncho", rarity: "found" },
+    { layer: "Clothes", trait: "Vest", rarity: "found" },
+    { layer: "Clothes", trait: "Trench", rarity: "found" },
+    { layer: "Clothes", trait: "Mail", rarity: "found" },
+    { layer: "Clothes", trait: "Bandolier", rarity: "found" },
+    { layer: "Clothes", trait: "Aloha", rarity: "found" },
+    { layer: "Clothes", trait: "Overalls", rarity: "found" },
+    { layer: "Clothes", trait: "Toga", rarity: "found" },
+    { layer: "Clothes", trait: "Parka", rarity: "found" },
+    { layer: "Clothes", trait: "Tabard", rarity: "found" },
+    { layer: "Clothes", trait: "Kimono", rarity: "rare" },
+    { layer: "Clothes", trait: "Tuxedo", rarity: "rare" },
+    { layer: "Clothes", trait: "Lamellar", rarity: "rare" },
+    { layer: "Clothes", trait: "Circuit", rarity: "rare" },
+    { layer: "Clothes", trait: "Crystal", rarity: "rare" },
+    { layer: "Eye", trait: "Monocle", rarity: "found" },
+    { layer: "Eye", trait: "Goggles", rarity: "found" },
+    { layer: "Eye", trait: "Shades", rarity: "found" },
+    { layer: "Eye", trait: "Wide", rarity: "found" },
+    { layer: "Eye", trait: "Glare", rarity: "found" },
+    { layer: "Eye", trait: "Slit", rarity: "found" },
+    { layer: "Eye", trait: "Patch", rarity: "found" },
+    { layer: "Eye", trait: "Dazed", rarity: "found" },
+    { layer: "Eye", trait: "Bored", rarity: "found" },
+    { layer: "Eye", trait: "Target", rarity: "found" },
+    { layer: "Eye", trait: "Glint", rarity: "rare" },
+    { layer: "Eye", trait: "Bionic", rarity: "rare" },
+    { layer: "Eye", trait: "Alien", rarity: "rare" },
+    { layer: "Eye", trait: "Blaze", rarity: "rare" },
+    { layer: "Head", trait: "Beanie", rarity: "found" },
+    { layer: "Head", trait: "Tophat", rarity: "found" },
+    { layer: "Head", trait: "Bandana", rarity: "found" },
+    { layer: "Head", trait: "Straw", rarity: "found" },
+    { layer: "Head", trait: "Toque", rarity: "found" },
+    { layer: "Head", trait: "Fez", rarity: "found" },
+    { layer: "Head", trait: "Headset", rarity: "found" },
+    { layer: "Head", trait: "Mohawk", rarity: "found" },
+    { layer: "Head", trait: "Propeller", rarity: "found" },
+    { layer: "Head", trait: "Knight", rarity: "found" },
+    { layer: "Head", trait: "Wizard", rarity: "rare" },
+    { layer: "Head", trait: "Viking", rarity: "rare" },
+    { layer: "Head", trait: "Jester", rarity: "rare" },
+    { layer: "Head", trait: "Pharaoh", rarity: "rare" },
+    { layer: "Head", trait: "Saucer", rarity: "rare" },
 ];
 
 /** The rarity of a maze-pickup trait, or null for a free or feat-only one. */
