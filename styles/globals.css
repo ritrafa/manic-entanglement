@@ -297,7 +297,11 @@ body {
   width: min(100%, 420px);
   height: auto;
   aspect-ratio: 500 / 150;
-  object-fit: contain;
+  /* Cover, pinned to the top: the band shows the painting's top 30% at the
+     band's full width, which is exactly the whole lettering (contain shrank
+     the whole square painting into the band instead). */
+  object-fit: cover;
+  object-position: center top;
   border-bottom: var(--border-thick) solid var(--line);
   /* The buttons are the only interactive part of the menu; the art is scenery. */
   pointer-events: none;
@@ -1633,6 +1637,10 @@ body {
      the safe-area insets inside the gutters — so the title, preview, tabs,
      cards, page controls and Back all fit with nothing cut off. */
   max-height: 100%;
+  /* The panel fills the scrim's height, so the grid's flex row has real room
+     to measure: with a content height the grid got its minimum and paged one
+     row at a time. */
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
