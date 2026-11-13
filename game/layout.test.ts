@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { boardLayout, blobRect } from "@/game/layout";
+import {
+    boardLayout,
+    blobRect,
+    viewportFor,
+    MIN_READABLE_CELL,
+    CAMERA_CELL_STEP,
+    MIN_VIEW_TILES,
+    WIDTH_SHARE,
+    HEIGHT_SHARE,
+} from "@/game/layout";
 
 describe("boardLayout", () => {
     it("snaps the height-limited cell to the pixel grid when it is close on a desktop viewport", () => {
@@ -87,6 +96,97 @@ describe("blobRect", () => {
             const centreY = top + size / 2;
             expect(centreX).toBe((2 * origin.x + 1) * cell + cell / 2);
             expect(centreY).toBe((2 * origin.y + 1) * cell + cell / 2);
+        }
+    });
+});
+
+describe("viewportFor", () => {
+    it("keeps a desktop's first level whole-maze, exactly as boardLayout", () => {
+        // 1280x800, 11 tiles: boardLayout's 48 px cell is well above the
+        // readable floor, so nothing changes for early levels.
+        expect(viewportFor(1280, 800, 11)).toEqual({
+            mode: 'whole', cell: 48, board: 528, viewTiles: 11, view: 528,
+        });
+    });
+
+    it("keeps a phone's first level whole-maze", () => {
+        // 403x900, 11 tiles: the 34 px cell stands, board and window coincide.
+        expect(viewportFor(403, 900, 11)).toEqual({
+            mode: 'whole', cell: 34, board: 374, viewTiles: 11, view: 374,
+        });
+    });
+
+    it("switches a phone at depth 41 to a camera with a readable cell", () => {
+        // Depth 41 is a 45-cell maze: 91 wall-grid tiles. Whole-maze the cell
+        // would be floor(378.82 / 91) = 4, far below the readable 12. The
+        // camera takes the largest multiple of 12 with a 13-tile window:
+        // floor(378.82 / 13 / 12) * 12 = 24, and 15 tiles of 24 fit the width.
+        const vp = viewportFor(403, 900, 91);
+        expect(vp.mode).toBe('camera');
+        if (vp.mode !== 'camera') return;
+        expect(vp.cell).toBeGreaterThanOrEqual(MIN_READABLE_CELL);
+        expect(vp.cell % CAMERA_CELL_STEP).toBe(0);
+        expect(vp.cell).toBe(24);
+        expect(vp.viewTiles).toBe(15);
+        expect(vp.view).toBe(24 * 15);
+        expect(vp.view).toBeLessThanOrEqual(403 * WIDTH_SHARE);
+        expect(vp.view).toBeLessThanOrEqual(900 * HEIGHT_SHARE);
+        expect(vp.board).toBe(24 * 91);
+    });
+
+    it("never drops the camera cell below the readable floor", () => {
+        // A viewport too small for even a 13-tile window at 12 px still gets
+        // 12 px tiles and the minimum window.
+        const vp = viewportFor(100, 100, 91);
+        expect(vp.mode).toBe('camera');
+        if (vp.mode !== 'camera') return;
+        expect(vp.cell).toBe(MIN_READABLE_CELL);
+        expect(vp.viewTiles).toBe(MIN_VIEW_TILES);
+        expect(vp.view).toBe(12 * MIN_VIEW_TILES);
+    });
+
+    it("caps the window at the maze's own size", () => {
+        // 27 tiles on a viewport whose camera cell (12) affords far more than
+        // 27: the window never grows past the maze.
+        const vp = viewportFor(1280, 800, 27);
+        if (vp.mode === 'whole') return; // a big enough screen stays whole
+        expect(vp.viewTiles).toBeLessThanOrEqual(27);
+    });
+
+    it("falls back to the minimum camera window for a zero or NaN viewport", () => {
+        for (const [w, h] of [[0, 0], [NaN, 844], [390, NaN]] as const) {
+            const vp = viewportFor(w, h, 91);
+            expect(vp.mode).toBe('camera');
+            expect(vp.cell).toBe(MIN_READABLE_CELL);
+            expect(vp.viewTiles).toBe(MIN_VIEW_TILES);
+        }
+    });
+
+    it("stays whole exactly while the whole-maze cell is readable", () => {
+        const screens = [
+            { w: 1280, h: 800 },
+            { w: 390, h: 844 },
+            { w: 403, h: 900 },
+        ];
+        for (const { w, h } of screens) {
+            for (const tiles of [11, 21, 27, 51, 91]) {
+                const vp = viewportFor(w, h, tiles);
+                const whole = boardLayout(w, h, tiles);
+                if (whole.cell >= MIN_READABLE_CELL) {
+                    expect(vp.mode).toBe('whole');
+                    expect(vp.cell).toBe(whole.cell);
+                    expect(vp.board).toBe(whole.board);
+                    expect(vp.viewTiles).toBe(tiles);
+                    expect(vp.view).toBe(whole.board);
+                } else {
+                    expect(vp.mode).toBe('camera');
+                    expect(vp.cell).toBeGreaterThanOrEqual(MIN_READABLE_CELL);
+                    expect(vp.viewTiles).toBeGreaterThanOrEqual(MIN_VIEW_TILES);
+                    expect(vp.viewTiles).toBeLessThanOrEqual(tiles);
+                    expect(vp.view).toBe(vp.cell * vp.viewTiles);
+                    expect(vp.board).toBe(vp.cell * tiles);
+                }
+            }
         }
     });
 });

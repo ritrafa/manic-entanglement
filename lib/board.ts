@@ -7,6 +7,9 @@ import type { Run } from '@/game/run';
 import { CONFIG, FX } from '@/game/config';
 import { visibleCells } from '@/game/modifiers';
 import { blobRect } from '@/game/layout';
+import type { BoardViewport } from '@/game/layout';
+import { cameraOffset } from '@/game/camera';
+import type { CameraWindow } from '@/game/camera';
 import { entityPx, markTiles, tileDiff } from '@/game/view';
 import type { Fx, FxTone } from '@/game/fx';
 
@@ -33,6 +36,10 @@ function preloadWallImages(): void {
 const EFFECT_GRACE_MS = 250;
 /** Milliseconds the gold flash on a Cut-opened wall tile lasts. */
 const TILE_FLASH_MS = 450;
+/** The E56 minimap's side in pixels: a small square in a board corner. */
+const MINIMAP_PX = 96;
+/** The minimap draws each wall-grid tile at 1 or 2 pixels, never more. */
+const MINIMAP_MAX_TILE_PX = 2;
 
 function copyGrid(grid: string[][]): string[][] {
     return grid.map((row) => row.slice());
@@ -75,6 +82,21 @@ export class Board {
      */
     private visible: boolean[][] | null = null;
 
+    /**
+     * The E56 viewport the layers were last sized for: whole-maze, or a
+     * camera window that slides over the full-maze layers to follow the
+     * reptile. Null before the first setLevel.
+     */
+    private viewport: BoardViewport | null = null;
+    /** Where the camera window last sat in the wall grid (game/camera.ts). */
+    private camera: CameraWindow | null = null;
+    /** The minimap canvas mount() creates; only shown in camera mode. */
+    private minimapCanvas: HTMLCanvasElement | null = null;
+    /** Raised whenever the wall grid changes, part of the minimap's redraw key. */
+    private gridRevision = 0;
+    /** The last thing the minimap drew, so a move that changed nothing skips it. */
+    private minimapSignature: string | null = null;
+
     /** Create the three layers inside #maze: the grid, the gliding entities and the effects. */
     mount(el: HTMLElement): void {
         this.tilesLayer = document.createElement('div');
@@ -86,7 +108,14 @@ export class Board {
         this.marksLayer = document.createElement('div');
         this.marksLayer.className = 'marks';
         this.fxLayer.appendChild(this.marksLayer);
-        el.replaceChildren(this.tilesLayer, this.entitiesLayer, this.fxLayer);
+        // The E56 minimap: a small canvas in a board corner, shown only when
+        // the maze is too big to draw whole. The CSS (well, line border) draws
+        // the frame; the canvas draws the maze, the reptile, the exit and the
+        // window.
+        this.minimapCanvas = document.createElement('canvas');
+        this.minimapCanvas.className = 'minimap';
+        this.minimapCanvas.hidden = true;
+        el.replaceChildren(this.tilesLayer, this.entitiesLayer, this.fxLayer, this.minimapCanvas);
 
         this.boardElement = el;
         this.sparks = [];
@@ -107,12 +136,19 @@ export class Board {
         this.itemElements.clear();
         this.enemyElements.clear();
         this.visible = null;
+        this.viewport = null;
+        this.camera = null;
+        this.gridRevision = 0;
+        this.minimapSignature = null;
     }
 
     /** Rebuild the tile grid for the level's size and create the entity elements. */
-    setLevel(run: Run, cell: number): void {
+    setLevel(run: Run, cell: number, viewport: BoardViewport | null = null): void {
         this.cell = cell;
         this.lastRun = run;
+        this.viewport = viewport;
+        this.gridRevision += 1;
+        this.applyViewport();
         this.buildTiles(run);
         this.buildEntities(run);
     }
@@ -125,17 +161,21 @@ export class Board {
     update(run: Run): void {
         this.lastRun = run;
         const grid = run.maze.wallGrid;
-        for (const change of tileDiff(this.lastGrid, grid)) {
+        const changes = tileDiff(this.lastGrid, grid);
+        for (const change of changes) {
             const image = this.tileImages[change.y]?.[change.x];
             if (image) image.src = `${WALL_IMAGE_BASE}${change.code}.png`;
         }
+        if (changes.length > 0) this.gridRevision += 1;
         this.lastGrid = copyGrid(grid);
         this.placeAll(run);
     }
 
     /** Re-apply every position for a new tile size (the window was resized). */
-    resize(cell: number): void {
+    resize(cell: number, viewport: BoardViewport | null = null): void {
         this.cell = cell;
+        this.viewport = viewport;
+        this.applyViewport();
         if (this.lastRun && this.playerElement) this.placeAll(this.lastRun);
     }
 
@@ -300,7 +340,10 @@ export class Board {
         if (!board) return;
         const whole = Math.max(1, Math.round(ms));
         const { x, y } = entityPx(cellX, cellY, this.cell);
-        board.style.setProperty('--zoom-origin', `${x}px ${y}px`);
+        // In camera mode the cell sits this far into the window, not into the maze.
+        const shiftX = this.camera !== null ? this.camera.x * this.cell : 0;
+        const shiftY = this.camera !== null ? this.camera.y * this.cell : 0;
+        board.style.setProperty('--zoom-origin', `${x - shiftX}px ${y - shiftY}px`);
         this.restartAnimation(board, 'fx-zoom', whole);
     }
 
@@ -418,6 +461,8 @@ export class Board {
         this.placeKnot(run);
         this.syncMarks(run);
         this.playerSprite?.classList.toggle('flip-horizontal', run.player.facingLeft);
+        this.applyCamera(run);
+        this.drawMinimap(run);
     }
 
     private place(element: HTMLElement | null, cellX: number, cellY: number): void {
@@ -534,6 +579,132 @@ export class Board {
                 this.enemyElements.delete(id);
             }
         }
+    }
+
+    /**
+     * Size the three layers for the viewport last set (E56). Whole-maze, they
+     * are the board as always (the grid from the CSS variables, the absolute
+     * layers at 100%). In camera mode each draws the WHOLE maze at the camera
+     * cell — so they get the maze's pixel size outright, or the tiles grid
+     * would centre its own overflow — and `applyCamera` slides them. The
+     * `camera-move` class gives the slide the reptile's glide timing (CSS).
+     */
+    private applyViewport(): void {
+        const viewport = this.viewport;
+        const camera = viewport !== null && viewport.mode === 'camera';
+        const size = viewport !== null && viewport.mode === 'camera' ? `${viewport.board}px` : '';
+        for (const layer of [this.tilesLayer, this.entitiesLayer, this.fxLayer]) {
+            if (!layer) continue;
+            layer.style.width = size;
+            layer.style.height = size;
+            layer.classList.toggle('camera-move', camera);
+        }
+    }
+
+    /**
+     * Slide the layers so the camera window keeps the reptile centred
+     * (game/camera.ts): the whole-maze layers shift by minus the window's
+     * top-left tile, clamped at the maze's edges. The `camera-move` transition
+     * makes it the same glide as the reptile's; under reduced motion the CSS
+     * drops it and the window jumps.
+     */
+    private applyCamera(run: Run): void {
+        const viewport = this.viewport;
+        if (viewport === null || viewport.mode !== 'camera') {
+            this.camera = null;
+            for (const layer of [this.tilesLayer, this.entitiesLayer, this.fxLayer]) {
+                if (layer) layer.style.transform = '';
+            }
+            return;
+        }
+        const tiles = run.maze.wallGrid.length;
+        // The reptile's tile in the wall grid, the space the window counts in.
+        this.camera = cameraOffset(
+            { x: 2 * run.player.x + 1, y: 2 * run.player.y + 1 },
+            tiles,
+            viewport.viewTiles,
+        );
+        const shift = `translate(${-this.camera.x * this.cell}px, ${-this.camera.y * this.cell}px)`;
+        for (const layer of [this.tilesLayer, this.entitiesLayer, this.fxLayer]) {
+            if (layer) layer.style.transform = shift;
+        }
+    }
+
+    /**
+     * Redraw the minimap: the whole maze's walls at 1 or 2 pixels a tile, the
+     * reptile and the exit as single bright pixels and the camera window as an
+     * outline, on a ~96 px square (the CSS draws its well and line frame).
+     * Shown only in camera mode, and on a Blackout level it keeps its secret:
+     * nothing but the reptile and the frame. Redrawn only when the maze, the
+     * reptile, the window or the twist changed.
+     */
+    private drawMinimap(run: Run): void {
+        const canvas = this.minimapCanvas;
+        const viewport = this.viewport;
+        const camera = viewport !== null && viewport.mode === 'camera';
+        if (!canvas) return;
+        canvas.hidden = !camera;
+        if (!camera || this.camera === null) return;
+        const blackout = run.vision !== null;
+        const signature = [
+            this.gridRevision,
+            run.player.x, run.player.y,
+            this.camera.x, this.camera.y,
+            blackout ? 'b' : 'p',
+            this.cell,
+        ].join(':');
+        if (signature === this.minimapSignature) return;
+        this.minimapSignature = signature;
+
+        const gridTiles = run.maze.wallGrid.length;
+        const px = Math.min(MINIMAP_MAX_TILE_PX, Math.max(1, Math.floor(MINIMAP_PX / gridTiles)));
+        const side = gridTiles * px;
+        if (canvas.width !== side) {
+            canvas.width = side;
+            canvas.height = side;
+        }
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.clearRect(0, 0, side, side);
+        const tokens = getComputedStyle(document.documentElement);
+        const wallColour = tokens.getPropertyValue('--line').trim() || '#0b9363';
+        const bright = tokens.getPropertyValue('--ink').trim() || '#ffffff';
+        const exitColour = tokens.getPropertyValue('--gold').trim() || '#ffd700';
+        if (!blackout) {
+            ctx.fillStyle = wallColour;
+            for (let ty = 0; ty < gridTiles; ty++) {
+                const row = run.maze.wallGrid[ty];
+                for (let tx = 0; tx < row.length; tx++) {
+                    if (row[tx] === '0000') continue;
+                    ctx.fillRect(tx * px, ty * px, px, px);
+                }
+            }
+            this.paintMinimapPixel(ctx, run.exit.x, run.exit.y, px, exitColour);
+            // The camera window as an outline, one pixel inside its edges.
+            ctx.strokeStyle = bright;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(
+                this.camera.x * px + 0.5,
+                this.camera.y * px + 0.5,
+                viewport.viewTiles * px - 1,
+                viewport.viewTiles * px - 1,
+            );
+        }
+        // The reptile shows even on Blackout: it is the one thing the player
+        // has always been allowed to find.
+        this.paintMinimapPixel(ctx, run.player.x, run.player.y, px, bright);
+    }
+
+    /** One bright pixel at the maze cell's wall-grid tile of the minimap. */
+    private paintMinimapPixel(
+        ctx: CanvasRenderingContext2D,
+        cellX: number,
+        cellY: number,
+        px: number,
+        colour: string,
+    ): void {
+        ctx.fillStyle = colour;
+        ctx.fillRect((2 * cellX + 1) * px, (2 * cellY + 1) * px, px, px);
     }
 
     private placeBlob(run: Run): void {

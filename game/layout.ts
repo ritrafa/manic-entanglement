@@ -74,3 +74,73 @@ export function blobRect(origin: { x: number; y: number }, cell: number, tiles: 
     const centreY = (2 * origin.y + 1) * cell + cell / 2;
     return { left: centreX - size / 2, top: centreY - size / 2, size };
 }
+
+/** Below this cell (E56, the owner's 2026-11-13 decision) the whole maze is no
+ *  longer worth drawing at once: the walls turn to mush and the reptile is a
+ *  dot. A maze that would need a smaller cell gets the camera instead: a
+ *  window of the maze at a readable size that follows the reptile. */
+export const MIN_READABLE_CELL = 12;
+
+/** The camera's cell is a multiple of this (half the art grid: sprites still
+ *  draw at whole pixels) — the largest one that keeps the window roomy. */
+export const CAMERA_CELL_STEP = 12;
+
+/** The camera window is never narrower than this many wall-grid tiles. */
+export const MIN_VIEW_TILES = 13;
+
+/** The whole maze drawn at once, as before E56: the board is the maze. */
+export interface WholeViewport {
+    mode: 'whole';
+    /** cell * tiles: the exact board side in pixels. */
+    board: number;
+    /** The visible window in wall-grid tiles: the whole maze. */
+    viewTiles: number;
+    /** The visible window in pixels: the board. */
+    view: number;
+    /** Whole pixels per wall-grid tile, at least MIN_CELL. */
+    cell: number;
+}
+
+/** A window of the maze at a readable size; the board renders the whole maze
+ *  at `cell` inside it and the layers slide to keep the reptile centred. */
+export interface CameraViewport {
+    mode: 'camera';
+    /** Whole pixels per wall-grid tile: a multiple of CAMERA_CELL_STEP, or
+     *  MIN_READABLE_CELL where even that would leave a window under
+     *  MIN_VIEW_TILES tiles across (a viewport that small still gets a board). */
+    cell: number;
+    /** The visible window in wall-grid tiles per side. */
+    viewTiles: number;
+    /** viewTiles * cell: the visible window in pixels. */
+    view: number;
+    /** cell * tiles: the whole maze in pixels, the size the layers draw at. */
+    board: number;
+}
+
+export type BoardViewport = WholeViewport | CameraViewport;
+
+/**
+ * Decide how a square maze of `tiles` wall-grid tiles is shown on a
+ * `viewW` x `viewH` viewport (E56): the whole maze when its cell stays
+ * readable, the camera otherwise. The camera takes the largest multiple of
+ * CAMERA_CELL_STEP that still affords MIN_VIEW_TILES tiles of window in the
+ * available area (never below MIN_READABLE_CELL), and the window is however
+ * many tiles of that cell fit, never more than the maze itself.
+ */
+export function viewportFor(viewW: number, viewH: number, tiles: number): BoardViewport {
+    const whole = boardLayout(viewW, viewH, tiles);
+    if (whole.cell >= MIN_READABLE_CELL) {
+        return { mode: 'whole', cell: whole.cell, board: whole.board, viewTiles: tiles, view: whole.board };
+    }
+    const usable = Math.min(viewW * WIDTH_SHARE, viewH * HEIGHT_SHARE);
+    let cell = MIN_READABLE_CELL;
+    let viewTiles = MIN_VIEW_TILES;
+    if (Number.isFinite(usable) && usable > 0 && Number.isFinite(tiles) && tiles > 0) {
+        // The largest multiple of the step whose window still fits MIN_VIEW_TILES.
+        const roomy = Math.floor(usable / MIN_VIEW_TILES / CAMERA_CELL_STEP) * CAMERA_CELL_STEP;
+        if (roomy > cell) cell = roomy;
+        viewTiles = Math.max(MIN_VIEW_TILES, Math.floor(usable / cell));
+        if (viewTiles > tiles) viewTiles = tiles;
+    }
+    return { mode: 'camera', cell, viewTiles, view: cell * viewTiles, board: cell * tiles };
+}

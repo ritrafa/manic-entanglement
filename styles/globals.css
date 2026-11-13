@@ -135,6 +135,38 @@ body {
   pointer-events: none;
 }
 
+/* E56 camera: when the whole maze would need tiles below the readable size,
+   the three layers draw the whole maze at a readable cell inside the board
+   (which is then only the window) and slide together to keep the reptile
+   centred (lib/board.ts applyCamera). The slide is the reptile's own glide
+   timing, so window and sprite move as one; under reduced motion the rule at
+   the bottom of this file drops it and the window jumps. */
+.camera-move {
+  transition: transform var(--step-ms, 110ms) linear;
+  will-change: transform;
+}
+
+/* The E56 minimap: a small square in a board corner, shown only in camera
+   mode (lib/board.ts drawMinimap). The maze's walls at 1-2 px a tile, the
+   reptile and the exit as single bright pixels and the camera window as an
+   outline are drawn on the canvas; the frame is the well under a line border.
+   On a Blackout level only the reptile and this frame show. */
+.minimap {
+  position: absolute;
+  right: var(--space-8);
+  bottom: var(--space-8);
+  width: 96px;
+  height: 96px;
+  background: var(--well);
+  border: var(--border-thin) solid var(--line);
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.minimap[hidden] {
+  display: none;
+}
+
 /* The title art over the board area while the how-to panel shows or the
    countdown runs (components/Menu.tsx): the picture shown whole at its own
    aspect ratio, centred on void, dimmed under the countdown; the panels sit
@@ -1095,6 +1127,12 @@ body {
 [data-motion="reduced"] #maze-container *,
 [data-motion="reduced"] #maze-container {
   transition-duration: 150ms !important;
+}
+
+/* The camera's slide is motion the reduced-motion player asked not to have:
+   the window jumps to keep the reptile centred, instantly. */
+[data-motion="reduced"] #maze .camera-move {
+  transition: none !important;
 }
 
 [data-motion="reduced"] .me-meter.is-low > i {

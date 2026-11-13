@@ -2,7 +2,8 @@ import { Run } from '@/game/run';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
 import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
-import { boardLayout } from '@/game/layout';
+import { viewportFor } from '@/game/layout';
+import type { BoardViewport } from '@/game/layout';
 import { clampDt } from '@/game/clock';
 import { actionFor, dirOf, rebind, DEFAULT_KEYS, type Action, type KeyMap } from '@/game/keys';
 import { CONFIG, FX, MODIFIER_RULES } from '@/game/config';
@@ -136,6 +137,8 @@ class GameState {
     private timeouts: Set<ReturnType<typeof setTimeout>> = new Set();
     /** The wall-grid tile size in whole pixels, set by sizeBoard and handed to the board. */
     private cellSize: number = 4;
+    /** The E56 viewport sizeBoard decided: whole maze, or a camera window. */
+    private viewport: BoardViewport | null = null;
     /** The player's settings, sanitized from the save; every change re-applies them. */
     private settings: Settings = sanitizeSettings(undefined);
     /** True while the Controls screen waits for a key: the global handler stands down. */
@@ -316,7 +319,7 @@ class GameState {
         if (!mazeElement) return;
         this.board.mount(mazeElement);
         this.sizeBoard(this.run.maze.width);
-        this.board.setLevel(this.run, this.cellSize);
+        this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
     }
 
@@ -550,7 +553,7 @@ class GameState {
         this.bestBeforeRun = this.highScore;
         // The title shows a run of the chosen mode's rules, ready for the countdown.
         this.run = new Run({ seed: this.seedForMode(), gear: this.gearForMode(), mode: this.modeRules });
-        this.board.setLevel(this.run, this.cellSize);
+        this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
         this.publishHud();
     }
@@ -673,7 +676,7 @@ class GameState {
         this.run.abandon();
         // The page shows the title again by itself: the title art belongs to
         // components/Menu.tsx, driven by the screen in the snapshot.
-        this.board.setLevel(this.run, this.cellSize);
+        this.board.setLevel(this.run, this.cellSize, this.viewport);
         this.refreshSprite();
     }
 
@@ -1229,7 +1232,7 @@ class GameState {
                     this.pickupStreak = 0;
                     this.dispatch('levelStarted');
                     this.sizeBoard(event.size);
-                    this.board.setLevel(this.run, this.cellSize);
+                    this.board.setLevel(this.run, this.cellSize, this.viewport);
                     this.refreshSprite();
                     // The level the stalkers join (game/enemies.ts): the maze
                     // says so once, in its own words.
@@ -1399,16 +1402,22 @@ class GameState {
         const mazeElement = document.getElementById('maze');
         if (!mazeElement) return;
         const tiles = size * 2 + 1;
-        const { cell, board } = boardLayout(window.innerWidth, window.innerHeight, tiles);
-        this.cellSize = cell;
-        mazeElement.style.width = `${board}px`;
-        mazeElement.style.height = `${board}px`;
+        // E56: a maze whose cell would drop below the readable floor is shown
+        // through a camera window that follows the reptile, with a minimap;
+        // anything readable is still drawn whole, exactly as before. The board
+        // element is the visible window either way, so the galaxy on
+        // #maze::before stays the size of what is seen.
+        const viewport = viewportFor(window.innerWidth, window.innerHeight, tiles);
+        this.viewport = viewport;
+        this.cellSize = viewport.cell;
+        mazeElement.style.width = `${viewport.view}px`;
+        mazeElement.style.height = `${viewport.view}px`;
 
         const hudElement = document.getElementById('hud');
-        if (hudElement) hudElement.style.width = `${board}px`;
+        if (hudElement) hudElement.style.width = `${viewport.view}px`;
 
-        document.documentElement.style.setProperty('--cell-size', `${cell}px`);
-        document.documentElement.style.setProperty('--item-size', `${cell}px`);
+        document.documentElement.style.setProperty('--cell-size', `${viewport.cell}px`);
+        document.documentElement.style.setProperty('--item-size', `${viewport.cell}px`);
         document.documentElement.style.setProperty('--grid-size', `${tiles}`);
     }
 
@@ -1426,7 +1435,7 @@ class GameState {
         if (!mazeElement) return;
         // Same sizing path as the level start, then every sprite follows the new cell size.
         this.sizeBoard(this.run.maze.width);
-        this.board.resize(this.cellSize);
+        this.board.resize(this.cellSize, this.viewport);
     }
 }
 

@@ -735,3 +735,24 @@
   resolve to zero when it is taller, so a tall block still starts at the top
   and the page scrolls as before; countdown, how-to and play keep their top
   alignment.
+
+- E56: deep mazes now get a camera and a minimap instead of unreadable tiles.
+  Since E54 the maze grows without limit, and past ~depth 44 on a phone the
+  whole-maze cell fell below 12 px (at depth 41 the tile is 4 px and the
+  reptile a dot). `game/layout.ts` adds `MIN_READABLE_CELL` (12),
+  `CAMERA_CELL_STEP` (12), `MIN_VIEW_TILES` (13) and the pure `viewportFor`,
+  which returns `whole` exactly where `boardLayout` stays readable (early
+  levels look pixel-identical) and `camera` otherwise: the largest multiple of
+  12 whose window still fits 13 tiles (never below 12), the window as wide as
+  that cell affords, capped at the maze. The new pure `game/camera.ts`
+  `cameraOffset(player, tiles, viewTiles)` keeps the reptile centred and
+  clamps at the maze's edges; both are tested beside the old layout cases.
+  `lib/board.ts` takes the viewport from `lib/GameState.ts` `sizeBoard`: in
+  camera mode the three layers draw the whole maze at the camera cell inside
+  the now window-sized `#maze` (so the galaxy on `#maze::before` stays the
+  size of what is seen), slide by a transform with the reptile's glide timing
+  (`.camera-move`, instant under reduced motion), and a ~96 px canvas in the
+  board's corner — `well` under a `line` border — redraws on maze or reptile
+  changes only: walls at 1-2 px a tile, reptile and exit as bright pixels, the
+  window as an outline, and on Blackout levels nothing but the reptile and the
+  frame.
