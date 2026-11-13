@@ -1499,38 +1499,39 @@ body {
    board is only ~500 px, and a panel as wide as the board showed one card per
    row), the two-column layout with its full-panel-height grid column and
    sticky preview (E62), the stage sizes with their phone drops, the
-   three-card phone grid and the locked hint's ink-dim. */
+   three-card phone grid and the locked hint's ink-dim.
+   E64: the panel never runs past the screen and nothing in it scrolls. The
+   scrim pads the viewport by the safe-area insets plus the 16 px gutters and
+   clips; the panel caps at that box; the grid shows one page of whole cards
+   (the paging lives in components/Wardrobe.tsx and game/pages.ts) above the
+   Prev / "Page 2 of 4" / Next row, and the old inner scroll and its fade cue
+   are gone. */
 #maze-container .me-scrim.wardrobe-scrim {
   /* Fixed to the viewport, not the board: the panel gets the whole screen to
      be 720 px wide on, and it rides above the touch controls. */
   position: fixed;
   inset: 0;
   z-index: 30;
-  /* A panel taller than the phone screen scrolls inside the scrim instead of
-     being clipped at both ends. */
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-#maze-container .me-scrim.wardrobe-scrim::-webkit-scrollbar {
-  display: none;
+  /* E64: the panel lives between the safe-area insets, inside the 16 px
+     gutters, and nothing scrolls — the base scrim centres it, the padding
+     holds it in, and the overflow clips whatever a mis-measured page would
+     otherwise push out. */
+  box-sizing: border-box;
+  padding:
+    calc(env(safe-area-inset-top) + var(--space-16))
+    calc(env(safe-area-inset-right) + var(--space-16))
+    calc(env(safe-area-inset-bottom) + var(--space-16))
+    calc(env(safe-area-inset-left) + var(--space-16));
+  overflow: hidden;
 }
 #maze-container .me-scrim > .me-panel.wardrobe-panel {
   max-width: min(720px, 100%);
-  /* margin auto keeps a taller-than-the-screen panel centred without the
-     flex centring clipping its top inside the scrolling scrim. */
-  margin: auto;
-  flex: none;
-  /* E61: the panel keeps the screen's height and hands it down to the
-     trait grid, so a layer of twenty-odd traits shows most of itself at
-     once instead of a two-and-a-half-row window. */
+  /* E64: the panel is the scrim's content box at most — the screen between
+     the safe-area insets inside the gutters — so the title, preview, tabs,
+     cards, page controls and Back all fit with nothing cut off. */
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  /* E62 (the E61 review): the panel is the screen between the scrim's
-     gutters, so the grid below gets the panel's whole height and at
-     1280x800 four rows of cards show at once. */
-  max-height: calc(100vh - var(--space-24) * 2);
-  max-height: calc(100dvh - var(--space-24) * 2);
 }
 .wardrobe-panel .me-panel-body {
   flex: 1 1 auto;
@@ -1540,9 +1541,9 @@ body {
   display: grid;
   grid-template-columns: 284px minmax(0, 1fr);
   /* E62: three rows, and the grid column's row is exactly the height the
-     panel has left (an auto row would size to the cards and the column
-     would overflow the panel instead of scrolling its grid). Rows two and
-     three are the hint and the Back button, under the preview. */
+     panel has left (an auto row would size itself to the cards and the
+     column would overflow the panel). Rows two and three are the hint and
+     the Back button, under the preview. */
   grid-template-rows: minmax(min-content, 1fr) auto auto;
   gap: var(--space-16);
   /* The body's flex column (E61): the layout takes the body's height and
@@ -1553,6 +1554,14 @@ body {
 .wardrobe-layout > .me-col {
   min-width: 0;
   min-height: 0;
+}
+/* The grid column is a flex column (E64): the tabs and the page row keep
+   their height and the grid's wrapper takes all that is left, so the grid's
+   box is exactly the space the page of cards must fill. */
+.wardrobe-grid-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
 }
 .wardrobe-stage {
   align-items: stretch;
@@ -1573,40 +1582,48 @@ body {
 .me-trait.is-locked .me-hint {
   color: var(--ink-dim);
 }
-/* With about twenty traits per layer (E60's batch) the open grid scrolls,
-   and it takes the panel's whole height (E61, E62): the grid column spans
-   the panel from the tabs to its bottom edge, so at 1280x800 four rows of
-   cards show at once, and the tabs and the stage stay put while the cards
-   move. The wrapper carries the scroll cue: a fade over the grid's bottom
-   edge, shown by components/Wardrobe.tsx only while cards below are out of
-   sight. */
+/* The grid shows one page of whole cards (E64): the wrapper takes the height
+   the column has left, the grid fills it and clips (nothing scrolls — the
+   E61 inner scroll and its fade cue are gone), and the cards that do not fit
+   wait on the next page. */
 .wardrobe-grid-wrap {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
 }
-.wardrobe-grid-wrap.is-scrollable::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: var(--space-4);
-  bottom: 0;
-  height: var(--space-48);
-  pointer-events: none;
-  background: linear-gradient(to bottom, transparent, var(--surface));
-}
 .wardrobe-grid {
   height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: var(--space-4);
-  scrollbar-width: thin;
+  overflow: hidden;
+}
+/* The hidden copy of the layer's whole list (components/Wardrobe.tsx): the
+   same grid at the same width with every card laid out, so the ResizeObserver
+   measurement can read the card's box — the tallest card's, locked hints
+   included — and divide the grid's box by it. */
+.wardrobe-grid-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* The page controls under the grid (E64): Prev and Next are design me-btns
+   (48 px touch targets) that disable at the ends, and the page of the whole
+   reads out between them. */
+.wardrobe-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  flex: none;
 }
 @media (min-width: 641px) {
   /* Desktop (E62, the E61 review): the grid column spans the panel's whole
      height — the hint and the Back button sit under the preview, in the
      left column that used to stay empty below it — and the preview rides
-     sticky at the top of that column while the grid scrolls. */
+     sticky at the top of that column. */
   .wardrobe-stage {
     grid-column: 1;
     grid-row: 1;
@@ -1634,9 +1651,11 @@ body {
      cards per row. */
   .wardrobe-layout {
     grid-template-columns: minmax(0, 1fr);
-    /* E62: one column, items in document order — stage, tabs and grid,
-       then the hint and Back, exactly as the panel scrolled before. */
-    grid-template-rows: none;
+    /* E64: one column, items in document order — stage, then the grid
+       column taking what is left, then the hint and Back — and the panel
+       still never passes the screen: the grid page turns instead of the
+       panel scrolling. */
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
   }
   .wardrobe-stage {
     order: -1;
@@ -1650,30 +1669,5 @@ body {
   .wardrobe-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     justify-items: center;
-  }
-  /* Phones (E61): a short screen cannot give the grid 60% of itself beside
-     the stage, so the panel keeps its natural height and the scrim scrolls
-     it as a whole — the grid never scrolls inside the column, and the fade
-     cue stands down with it. */
-  #maze-container .me-scrim > .me-panel.wardrobe-panel {
-    display: block;
-    max-height: none;
-  }
-  .wardrobe-panel .me-panel-body {
-    flex: none;
-  }
-  .wardrobe-layout {
-    flex: none;
-    min-height: 0;
-  }
-  .wardrobe-grid-wrap {
-    flex: none;
-  }
-  .wardrobe-grid-wrap.is-scrollable::after {
-    display: none;
-  }
-  .wardrobe-grid {
-    height: auto;
-    overflow-y: visible;
   }
 }

@@ -5,6 +5,8 @@ import GameState, { type GameSnapshot } from '@/lib/GameState';
 import { LAYER_ORDER, TRAITS, frameAt, pfpLayers, spriteLayers, type Layer, type Look } from '@/game/sprite';
 import { availableTraits, isUnlocked, pickupRarity, unlockedBy } from '@/game/wardrobe';
 import { featById } from '@/game/feats';
+import { cardsOnPage, clampPage, pageForIndex, pageCount } from '@/game/pages';
+import { classifyTouch } from '@/game/swipe';
 
 interface WardrobeProps {
     gameState: GameState;
@@ -17,6 +19,9 @@ const STAGE_PX = 144;
 const CARD_PX = 96;
 /** The preview repaints on this beat; frameAt picks the frame from the clock. */
 const PREVIEW_TICK_MS = 150;
+
+/** The card list of a panel that is not open. */
+const NO_CARDS: readonly WardrobeCard[] = [];
 
 /** How many non-None traits exist across all layers (104 with the shipped art). */
 const TOTAL_TRAITS = LAYER_ORDER.reduce(
@@ -44,6 +49,12 @@ function pfpUrl(layer: Layer, trait: string): string | null {
  *  the locked ones with the feat that unlocks them. */
 type CardState = 'equipped' | 'available' | 'locked';
 
+/** One card of the open layer's list: its trait and what it shows. */
+interface WardrobeCard {
+    trait: string;
+    state: CardState;
+}
+
 function cardState(
     layer: Layer,
     trait: string,
@@ -53,6 +64,23 @@ function cardState(
 ): CardState {
     if (look[layer] === trait) return 'equipped';
     return isUnlocked(layer, trait, feats, pickedUp) ? 'available' : 'locked';
+}
+
+/** Equipped first, then available, then locked — TRAITS order within each
+ *  group (design/components/Wardrobe: "equipped first, then unlocked, then
+ *  locked"). The list is sorted once when the panel opens or the tab
+ *  changes, never after an equip, so cards never move between pages while
+ *  the panel is open (E64). */
+function sortCards(
+    layer: Layer,
+    look: Look,
+    feats: readonly string[],
+    pickedUp: readonly { layer: string; trait: string }[],
+): WardrobeCard[] {
+    const rank: Record<CardState, number> = { equipped: 0, available: 1, locked: 2 };
+    return TRAITS[layer]
+        .map((trait) => ({ trait, state: cardState(layer, trait, look, feats, pickedUp) }))
+        .sort((a, b) => rank[a.state] - rank[b.state]);
 }
 
 /** The three rarity pips (design/README, Colour): feat-unlocked traits are
@@ -88,6 +116,16 @@ function RarityPips({ layer, trait }: { layer: Layer; trait: string }): React.Re
  * everything already seen. Every card is reachable by Tab, locked ones
  * included, and Esc or the Back button closes the panel. The rules of
  * game/wardrobe.ts decide what may be worn; nothing here changes them.
+ *
+ * The panel never runs past the screen (E64): it stays between the safe-area
+ * insets inside the scrim's gutters and nothing in it scrolls. Instead the
+ * cards turn in pages: the grid measures its own box with a ResizeObserver
+ * (a hidden copy of the whole list gives the card size) and shows as many
+ * whole cards as fit — columns x rows, at least one — and the rest wait on
+ * further pages under Prev / "Page 2 of 4" / Next buttons (game/pages.ts
+ * holds the arithmetic). PageUp / PageDown and [ / ] turn pages, a horizontal
+ * swipe on the grid turns them too, switching tabs opens the page that holds
+ * the equipped trait, and equipping a card keeps the current page.
  */
 const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -114,20 +152,95 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
         return () => clearInterval(timer);
     }, [open]);
 
-    // The grid's scroll cue (E61): the fade at its bottom edge (CSS) shows
-    // only while the grid actually scrolls and cards below are out of sight.
+    // The paging (E64): the grid shows cols x rows whole cards measured from
+    // its own box, and the rest of the layer waits on further pages.
     const gridRef = useRef<HTMLDivElement>(null);
-    const [gridHasMore, setGridHasMore] = useState(false);
-    const checkGridScroll = useCallback((): void => {
+    // A hidden copy of the whole list, laid out like the grid, that gives the
+    // card size the measurement divides the grid's box by.
+    const measureRef = useRef<HTMLDivElement>(null);
+    const [gridShape, setGridShape] = useState({ cols: 1, rows: 1 });
+    const [page, setPage] = useState(0);
+    // The layer's cards, sorted once when the panel opens or the tab changes
+    // so an equip cannot move cards between pages (E64). The key is the
+    // opening and the tab the sort was taken for.
+    const [sorted, setSorted] = useState<{ key: string; cards: WardrobeCard[] } | null>(null);
+    // Set when the panel opens or a tab is picked (the effect below): the
+    // next measurement opens the page that holds the equipped trait.
+    const jumpRef = useRef(false);
+    // One touch on the grid, for the swipe that turns pages.
+    const touchRef = useRef<{ x: number; y: number; ms: number } | null>(null);
+
+    // The card list is frozen per opening and per tab: the key carries both,
+    // and an equip (which changes neither) never re-sorts it. Closing drops
+    // the list, so the next opening sorts afresh. Adjusting the state during
+    // this render (React's own pattern) so the first painted frame already
+    // shows the equipped trait's page, not the page the last tab left.
+    const viewKey = `${open}:${layer}`;
+    if (!open && sorted !== null) {
+        setSorted(null);
+    }
+    if (open && sorted?.key !== viewKey) {
+        const fresh = sortCards(layer, look, feats, pickedUp);
+        const size = Math.max(1, gridShape.cols * gridShape.rows);
+        const equipped = fresh.findIndex((card) => card.state === 'equipped');
+        setSorted({ key: viewKey, cards: fresh });
+        setPage(pageForIndex(Math.max(0, equipped), size));
+    }
+
+    const cards = sorted !== null && sorted.key === viewKey ? sorted.cards : NO_CARDS;
+
+    // The grid's box over the card's box: as many whole cards as fit,
+    // at least one. The hidden copy of the whole list measures the card, so
+    // locked cards (taller by their hint) on a later page count too.
+    const measure = useCallback((): void => {
         const grid = gridRef.current;
-        if (grid === null) return;
-        setGridHasMore(grid.scrollHeight - grid.scrollTop - grid.clientHeight > 1);
-    }, []);
+        const measured = measureRef.current;
+        if (grid === null || measured === null) return;
+        const style = window.getComputedStyle(grid);
+        const gapX = Number.parseFloat(style.columnGap) || 0;
+        const gapY = Number.parseFloat(style.rowGap) || 0;
+        let cardW = 0;
+        let cardH = 0;
+        for (const child of Array.from(measured.children)) {
+            const el = child as HTMLElement;
+            cardW = Math.max(cardW, el.offsetWidth);
+            cardH = Math.max(cardH, el.offsetHeight);
+        }
+        const w = grid.clientWidth;
+        const h = grid.clientHeight;
+        let cols = 1;
+        let rows = 1;
+        if (cardW > 0 && cardH > 0 && w > 0 && h > 0) {
+            cols = Math.max(1, Math.floor((w + gapX) / (cardW + gapX)));
+            rows = Math.max(1, Math.floor((h + gapY) / (cardH + gapY)));
+        }
+        setGridShape((prev) => (prev.cols === cols && prev.rows === rows ? prev : { cols, rows }));
+        const size = Math.max(1, cols * rows);
+        const total = cards.length;
+        if (jumpRef.current) {
+            jumpRef.current = false;
+            const equipped = cards.findIndex((card) => card.state === 'equipped');
+            setPage(pageForIndex(Math.max(0, equipped), size));
+        } else {
+            // The size changed under the player: stay on a page that exists.
+            setPage((p) => clampPage(p, total, size));
+        }
+    }, [cards]);
+
+    // Measure when the panel opens, when the tab (and with it the cards)
+    // changes, and whenever the grid's box changes (ResizeObserver).
     useEffect(() => {
-        checkGridScroll();
-        window.addEventListener('resize', checkGridScroll);
-        return () => window.removeEventListener('resize', checkGridScroll);
-    }, [checkGridScroll, layer, model.newTraits]);
+        if (!open) return;
+        // A fresh opening or tab opens on the equipped trait's page; the
+        // measurement below is what knows how many cards a page holds.
+        jumpRef.current = true;
+        measure();
+        const grid = gridRef.current;
+        if (grid === null || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(() => measure());
+        observer.observe(grid);
+        return () => observer.disconnect();
+    }, [open, layer, measure]);
 
     if (!open) return null;
 
@@ -151,23 +264,117 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
         gameState.closeWardrobe();
     };
 
-    // Esc closes the wardrobe from anywhere inside it, the way the feats panel does.
-    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-        if (event.key !== 'Escape') return;
-        event.preventDefault();
-        event.stopPropagation();
-        closeWardrobe();
+    const pageSize = Math.max(1, gridShape.cols * gridShape.rows);
+    const pages = pageCount(cards.length, pageSize);
+    const safePage = clampPage(page, cards.length, pageSize);
+    const visible = cardsOnPage(cards, safePage, pageSize);
+
+    const turnPage = (delta: number): void => {
+        setPage((p) => clampPage(clampPage(p, cards.length, pageSize) + delta, cards.length, pageSize));
     };
 
-    // Equipped first, then available, then locked — TRAITS order within each
-    // group (design/components/Wardrobe: "equipped first, then unlocked, then locked").
-    const rank: Record<CardState, number> = { equipped: 0, available: 1, locked: 2 };
-    const cards = TRAITS[layer]
-        .map((trait) => ({ trait, state: cardState(layer, trait, look, feats, pickedUp) }))
-        .sort((a, b) => rank[a.state] - rank[b.state]);
+    // Esc closes the wardrobe from anywhere inside it, the way the feats
+    // panel does; PageUp / PageDown and [ / ] turn the cards' pages (E64).
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closeWardrobe();
+            return;
+        }
+        if (event.key === 'PageUp' || event.key === '[') {
+            event.preventDefault();
+            event.stopPropagation();
+            turnPage(-1);
+            return;
+        }
+        if (event.key === 'PageDown' || event.key === ']') {
+            event.preventDefault();
+            event.stopPropagation();
+            turnPage(1);
+        }
+    };
+
+    // A horizontal swipe on the grid turns the pages (E64); game/swipe.ts
+    // classifies the touch, so a tap stays a tap.
+    const handleGridTouchStart = (event: React.TouchEvent<HTMLDivElement>): void => {
+        const touch = event.touches[0];
+        touchRef.current = touch !== undefined ? { x: touch.clientX, y: touch.clientY, ms: Date.now() } : null;
+    };
+    const handleGridTouchEnd = (event: React.TouchEvent<HTMLDivElement>): void => {
+        const start = touchRef.current;
+        touchRef.current = null;
+        const touch = event.changedTouches[0];
+        if (start === null || touch === undefined) return;
+        const result = classifyTouch(touch.clientX - start.x, touch.clientY - start.y, Date.now() - start.ms);
+        if (result.kind === 'swipe' && result.dx !== 0) turnPage(result.dx < 0 ? 1 : -1);
+    };
 
     const bodyGhost = layer !== 'Body' ? pfpUrl('Body', look.Body) : null;
     const newCount = [...newKeys].length;
+
+    // One card of the grid, shared by the visible page and the hidden
+    // measurement copy so both lay out identically.
+    const renderCard = ({ trait, state }: WardrobeCard): React.ReactElement => {
+        const isNew = state === 'available' && newKeys.has(traitSeenKey(layer, trait));
+        const traitUrl = pfpUrl(layer, trait);
+        const cardClass = `me-trait me-notch${
+            state === 'equipped' ? ' is-equipped' : isNew ? ' is-new' : state === 'locked' ? ' is-locked' : ''
+        }`;
+        const art = (
+            <>
+                {bodyGhost !== null && state !== 'locked' && <img className="is-ghost" src={bodyGhost} alt="" draggable={false} />}
+                {traitUrl !== null && <img src={traitUrl} alt="" draggable={false} />}
+                {bodyGhost !== null && state === 'locked' && <img src={bodyGhost} alt="" draggable={false} />}
+            </>
+        );
+        const featId = unlockedBy(layer, trait);
+        const feat = featId === null ? null : featById(featId);
+        const meta = (
+            <span className="me-trait-meta">
+                {state === 'equipped' && <span className="me-tag is-equipped">On</span>}
+                {isNew && <span className="me-tag is-new">New</span>}
+                {state === 'available' && !isNew && <span className="me-label">{layer}</span>}
+                {state === 'locked' && <span className="me-tag is-locked">Locked</span>}
+                <RarityPips layer={layer} trait={trait} />
+            </span>
+        );
+        if (state === 'locked') {
+            // Not a button (design/components/TraitCard) but still
+            // reachable by Tab, so the hint can be read.
+            return (
+                <div key={trait} className={cardClass} aria-disabled="true" tabIndex={0}>
+                    <div className="me-sprite is-locked" style={cssVars({ '--s': `${CARD_PX}px` })} aria-hidden="true">
+                        {art}
+                    </div>
+                    <span className="me-trait-name">{trait}</span>
+                    {meta}
+                    <span className="me-hint">
+                        {feat !== null
+                            ? `Feat: ${feat.name}`
+                            : pickupRarity(layer, trait) !== null
+                                ? 'Found in the maze'
+                                : 'Find it in the maze'}
+                    </span>
+                </div>
+            );
+        }
+        return (
+            <button
+                key={trait}
+                type="button"
+                className={cardClass}
+                aria-pressed={state === 'equipped'}
+                onClick={() => gameState.setWardrobeLook({ ...look, [layer]: trait })}
+            >
+                <div className="me-sprite" style={cssVars({ '--s': `${CARD_PX}px` })} aria-hidden="true">
+                    {art}
+                </div>
+                <span className="me-trait-name">{trait}</span>
+                {meta}
+            </button>
+        );
+    };
 
     return (
         <div className="me-scrim wardrobe-scrim" onKeyDown={handleKeyDown}>
@@ -226,69 +433,49 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                                     </button>
                                 ))}
                             </div>
-                            <div className={gridHasMore ? 'wardrobe-grid-wrap is-scrollable' : 'wardrobe-grid-wrap'}>
-                            <div ref={gridRef} className="me-grid wardrobe-grid" role="tabpanel" aria-label={`${layer} traits`} onScroll={checkGridScroll}>
-                                {cards.map(({ trait, state }) => {
-                                    const isNew = state === 'available' && newKeys.has(traitSeenKey(layer, trait));
-                                    const traitUrl = pfpUrl(layer, trait);
-                                    const cardClass = `me-trait me-notch${
-                                        state === 'equipped' ? ' is-equipped' : isNew ? ' is-new' : state === 'locked' ? ' is-locked' : ''
-                                    }`;
-                                    const art = (
-                                        <>
-                                            {bodyGhost !== null && state !== 'locked' && <img className="is-ghost" src={bodyGhost} alt="" draggable={false} />}
-                                            {traitUrl !== null && <img src={traitUrl} alt="" draggable={false} />}
-                                            {bodyGhost !== null && state === 'locked' && <img src={bodyGhost} alt="" draggable={false} />}
-                                        </>
-                                    );
-                                    const featId = unlockedBy(layer, trait);
-                                    const feat = featId === null ? null : featById(featId);
-                                    const meta = (
-                                        <span className="me-trait-meta">
-                                            {state === 'equipped' && <span className="me-tag is-equipped">On</span>}
-                                            {isNew && <span className="me-tag is-new">New</span>}
-                                            {state === 'available' && !isNew && <span className="me-label">{layer}</span>}
-                                            {state === 'locked' && <span className="me-tag is-locked">Locked</span>}
-                                            <RarityPips layer={layer} trait={trait} />
-                                        </span>
-                                    );
-                                    if (state === 'locked') {
-                                        // Not a button (design/components/TraitCard) but still
-                                        // reachable by Tab, so the hint can be read.
-                                        return (
-                                            <div key={trait} className={cardClass} aria-disabled="true" tabIndex={0}>
-                                                <div className="me-sprite is-locked" style={cssVars({ '--s': `${CARD_PX}px` })} aria-hidden="true">
-                                                    {art}
-                                                </div>
-                                                <span className="me-trait-name">{trait}</span>
-                                                {meta}
-                                                <span className="me-hint">
-                                                    {feat !== null
-                                                        ? `Feat: ${feat.name}`
-                                                        : pickupRarity(layer, trait) !== null
-                                                            ? 'Found in the maze'
-                                                            : 'Find it in the maze'}
-                                                </span>
-                                            </div>
-                                        );
-                                    }
-                                    return (
-                                        <button
-                                            key={trait}
-                                            type="button"
-                                            className={cardClass}
-                                            aria-pressed={state === 'equipped'}
-                                            onClick={() => gameState.setWardrobeLook({ ...look, [layer]: trait })}
-                                        >
-                                            <div className="me-sprite" style={cssVars({ '--s': `${CARD_PX}px` })} aria-hidden="true">
-                                                {art}
-                                            </div>
-                                            <span className="me-trait-name">{trait}</span>
-                                            {meta}
-                                        </button>
-                                    );
-                                })}
+                            <div className="wardrobe-grid-wrap">
+                                <div
+                                    ref={gridRef}
+                                    className="me-grid wardrobe-grid"
+                                    role="tabpanel"
+                                    aria-label={`${layer} traits, page ${safePage + 1} of ${pages}`}
+                                    onTouchStart={handleGridTouchStart}
+                                    onTouchEnd={handleGridTouchEnd}
+                                    onTouchCancel={() => {
+                                        touchRef.current = null;
+                                    }}
+                                >
+                                    {visible.map(renderCard)}
+                                </div>
+                                {/* The hidden whole list: same classes, same
+                                    width, so its cards give the size the grid's
+                                    box is divided by (E64). */}
+                                <div ref={measureRef} className="me-grid wardrobe-grid wardrobe-grid-measure" aria-hidden="true">
+                                    {cards.map(renderCard)}
+                                </div>
                             </div>
+                            {/* The page controls (E64): 48 px buttons at the
+                                ends, the page of the whole in between. */}
+                            <div className="wardrobe-pager">
+                                <button
+                                    type="button"
+                                    className="me-btn wardrobe-prev"
+                                    onClick={() => turnPage(-1)}
+                                    disabled={safePage === 0}
+                                >
+                                    Prev
+                                </button>
+                                <span className="me-label wardrobe-page-label" role="status" aria-live="polite">
+                                    Page {safePage + 1} of {pages}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="me-btn wardrobe-next"
+                                    onClick={() => turnPage(1)}
+                                    disabled={safePage >= pages - 1}
+                                >
+                                    Next
+                                </button>
                             </div>
                         </div>
                         {/* E62 (the E61 review): the hint and the Back button

@@ -893,3 +893,30 @@
   with a describe block in `game/fx.test.ts`; `float()` in `lib/board.ts`
   only keeps the list of live texts, prunes the finished ones and adds the
   returned offset to the element's `top`.
+
+- E64: the wardrobe fits the screen and the cards turn in pages. The phone
+  report — with 104 traits the panel ran past the bottom of the screen — is
+  answered by paging instead of scrolling: `#maze-container .me-scrim.wardrobe-scrim`
+  (styles/globals.css) pads the viewport by the safe-area insets plus the
+  16 px gutters and clips, the panel caps at that box (`max-height: 100%`),
+  and neither the page nor the grid scrolls any more — the grid's inner
+  `overflow-y: auto`, its scrollbar and the E61 fade cue
+  (`.wardrobe-grid-wrap.is-scrollable::after`, `gridHasMore`,
+  `checkGridScroll`) are gone, on phones too, where the panel is now the
+  same capped flex column (`grid-template-rows: auto minmax(0, 1fr) auto
+  auto`) instead of a scrim-scrolled block. The grid shows one page of whole
+  cards: `components/Wardrobe.tsx` keeps a hidden copy of the layer's whole
+  list (`.wardrobe-grid-measure`) to read the card's box, divides the grid's
+  own box (measured with a `ResizeObserver`) by it into columns x rows, at
+  least one card, and hands the rest to further pages under a Prev /
+  "Page 2 of 4" / Next row (design `me-btn`s, 48 px targets, disabled at the
+  ends); PageUp / PageDown and `[` / `]` turn pages, and so does a horizontal
+  swipe on the grid (`classifyTouch` of `game/swipe.ts`). The arithmetic —
+  page count, the cards of a page, the page that holds an index, clamping
+  when the grid is resized, always one card per page — is the pure
+  `game/pages.ts` with a describe block each in `game/pages.test.ts`. The
+  layer's list is sorted once when the panel opens or the tab changes (an
+  equip cannot shuffle cards between pages while it is open), switching tabs
+  opens the page that holds the equipped trait, and equipping keeps the
+  current page. The New tags, the rarity pips, the unlocked-percentage line
+  and the close/seen behaviour are untouched.
