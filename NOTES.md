@@ -706,3 +706,14 @@
   stalker chevrons untouched. `game/view.test.ts` checks the incoming code
   comes from the forecast-applied grid and matches the real wallGrid after a
   walked shift.
+
+- E54: lifted the maze-size ceiling so the board keeps growing with depth in
+  every mode, the way the original did. `game/config.ts` drops `maxSize` and
+  `game/plan.ts` `levelPlan` now takes `size = startSize + sizeStep * step`
+  with no clamp, so depth 13 builds 17x17, depth 21 builds 25x25 and depth 41
+  builds 45x45; the shifts, enemy and item caps are untouched and no mode
+  overrides the size. `game/plan.test.ts` pins the new sizes, keeps asserting
+  the size is odd and follows the curve to depth 200, and checks no entry in
+  `MODES` carries a size field. The board still fits any viewport:
+  `game/layout.ts` `boardLayout` shrinks the cell as the maze grows and
+  `MIN_CELL` stays the floor.

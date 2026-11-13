@@ -8,8 +8,6 @@ export const CONFIG = {
     sizeStep: 2,
     /** Levels per size step: the size grows every this many levels. */
     sizeEveryLevels: 2,
-    /** Largest maze the depth curve reaches. */
-    maxSize: 13,
     /** Maze shifts applied to the maze after each successful move at depth 1. */
     baseShifts: 3,
     /** Largest number of shifts per move the depth curve reaches. */
