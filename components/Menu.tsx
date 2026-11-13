@@ -23,9 +23,9 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
 
 /**
  * The title menu (design/components/MenuList): the title painting keeps its
- * own band at the top, cropped from the top so the lettering shows, with a
- * line under it, and the MenuList sits below the band on void — nothing
- * overlaps the painting and no gradient covers it. It draws while the shell is
+ * own band at the top, shown whole at its own aspect ratio so the lettering
+ * is never cut, with a line under it, and the MenuList sits below the band
+ * on void — nothing overlaps the painting and no gradient covers it. It draws while the shell is
  * on "title", "howto" or "countdown" — the buttons only on "title", the art
  * dimmed while the countdown runs over it.
  *
@@ -42,8 +42,10 @@ function focusActionOf(key: string): 'up' | 'down' | 'left' | 'right' | null {
  *
  * The buttons sit in two columns (styles/globals.css) so the whole menu fits
  * below the painting without hidden scrolling at 1280x800. Where the board is
- * small enough that the menu still must scroll, a "More" hint fades in at the
- * bottom edge until the player has scrolled to the last entry.
+ * small enough that the menu still must scroll, a "More" hint shows as the
+ * menu's own last row — inside the menu's bottom edge, in its flow, so it
+ * never covers other text (a phone's best line included) — until the player
+ * has scrolled to the last entry.
  */
 const Menu: React.FC<MenuProps> = ({ gameState }) => {
     const model: GameSnapshot = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -60,28 +62,41 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
 
     // The "More" hint: true while the menu scrolls and the bottom entries are
     // out of view. The scroll container is the .title-menu box itself
-    // (styles/globals.css hides the bar and scrolls the menu inside).
-    // Recomputed on scroll, on resize and whenever the menu (or the mode
-    // blurb's length) re-renders; the effect is harmless on a menu that
-    // fits, where the hint simply never shows.
+    // (styles/globals.css hides the bar and scrolls the menu inside), but the
+    // overflow is measured from the .me-menu box — the painting's band sits
+    // above it, and the hint, being the menu's own last row, must never add
+    // an overflow of its own by appearing. Recomputed on scroll, on resize
+    // and whenever the menu (or the mode blurb's length, or the hint itself)
+    // re-renders; the effect is harmless on a menu that fits, where the hint
+    // simply never shows.
     const menuBoxRef = useRef<HTMLDivElement | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
     const [moreBelow, setMoreBelow] = useState(false);
     useEffect(() => {
         if (!showsButtons) return;
         const box = menuBoxRef.current;
-        if (!box) return;
+        const menu = menuRef.current;
+        if (!box || !menu) return;
         const update = () => {
-            const hidden = box.scrollHeight - box.clientHeight;
+            // The menu's own extent inside the scroll box: rows below its
+            // bottom edge are out of view while it reaches past the client
+            // height, and they stay out of view until the scroll nears it.
+            const hidden = menu.offsetTop + menu.offsetHeight - box.clientHeight;
             setMoreBelow(hidden > 4 && box.scrollTop < hidden - 4);
         };
         update();
         box.addEventListener('scroll', update, { passive: true });
         window.addEventListener('resize', update);
+        // The display font arrives after the first paint: a size observer on
+        // the menu re-measures when the loaded face changes the row heights.
+        const observe = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+        observe?.observe(menu);
         return () => {
             box.removeEventListener('scroll', update);
             window.removeEventListener('resize', update);
+            observe?.disconnect();
         };
-    }, [showsButtons, model.mode, model.modeBlurb, model.modeBestText]);
+    }, [showsButtons, model.mode, model.modeBlurb, model.modeBestText, moreBelow]);
 
     // The menu appearing (first show or a return to the title) starts at the
     // top: the reset is a render-time state adjustment, not an effect, so the
@@ -128,7 +143,7 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
         >
             <img src="/images/title.png" alt="Manic Entanglement" className="title-art" draggable={false} />
             {showsButtons && (
-                <div className="me-menu" onKeyDown={handleKeyDown} role="menu" aria-label="Main menu">
+                <div className="me-menu" ref={menuRef} onKeyDown={handleKeyDown} role="menu" aria-label="Main menu">
                     <div
                         className="me-mode"
                         role="menuitem"
@@ -175,13 +190,15 @@ const Menu: React.FC<MenuProps> = ({ gameState }) => {
                             {item.label}
                         </button>
                     ))}
-                </div>
-            )}
-            {/* The scroll hint: words plus a chevron over a fade, never an
-                emoji, and never in the way of a tap. */}
-            {showsButtons && moreBelow && (
-                <div className="menu-more-hint" aria-hidden="true">
-                    More
+                    {/* The scroll hint: words plus a chevron as the menu's
+                        own last row, inside its bottom edge — part of the
+                        flow, so it never covers other text, and never in the
+                        way of a tap. Never an emoji. */}
+                    {moreBelow && (
+                        <div className="menu-more-hint" aria-hidden="true">
+                            More
+                        </div>
+                    )}
                 </div>
             )}
         </div>

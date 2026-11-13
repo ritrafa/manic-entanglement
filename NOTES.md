@@ -632,3 +632,22 @@
   key once, `lib/GameState.ts` applies it at load and writes it at once, so a
   feat earned later stays unseen until the wardrobe opens, all covered by the
   marker cases in `game/save.test.ts`.
+- E50: polished the three layout faults the post-E49 screenshots showed at
+  1280x800 and 390x844. The HUD's second row no longer lets the Step cost
+  stat run under the Anchor button: `styles/globals.css` gives
+  `#hud.me-hud .me-stats` quarter tracks that may shrink to zero
+  (`repeat(4, minmax(0, 1fr))`) instead of the design's content-sized
+  `repeat(4, auto)`, so the four stats stay inside the width flex leaves
+  them and the `flex: none` tools keep their own space. The title painting
+  is whole again: `.title-art` keeps the picture's own square aspect ratio
+  (`aspect-ratio: 1 / 1` with `object-fit: contain`) instead of a full-width
+  `cover` band cropped from the top, so the lettering shows in full at both
+  sizes and the menu trims its own spacing for the painting, never the
+  reverse. And the "More" hint tells the truth: `.title-menu .me-menu`
+  trims its margins and gaps to `space-4` so the menu fits at 1280x800
+  without scrolling and the hint stays hidden there, `components/Menu.tsx`
+  measures the overflow from the `.me-menu` box itself (the band above it
+  excluded, the hint's own height unable to conjure an overflow), and the
+  hint renders as the menu's own last row inside its bottom edge — in the
+  flow, not pinned over the scroll box — so on a phone it sits under the
+  last button row instead of covering the mode row's best line.
