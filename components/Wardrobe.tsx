@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import GameState, { type GameSnapshot } from '@/lib/GameState';
 import { LAYER_ORDER, TRAITS, frameAt, pfpLayers, spriteLayers, type Layer, type Look } from '@/game/sprite';
 import { availableTraits, isUnlocked, pickupRarity, unlockedBy } from '@/game/wardrobe';
@@ -114,6 +114,21 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
         return () => clearInterval(timer);
     }, [open]);
 
+    // The grid's scroll cue (E61): the fade at its bottom edge (CSS) shows
+    // only while the grid actually scrolls and cards below are out of sight.
+    const gridRef = useRef<HTMLDivElement>(null);
+    const [gridHasMore, setGridHasMore] = useState(false);
+    const checkGridScroll = useCallback((): void => {
+        const grid = gridRef.current;
+        if (grid === null) return;
+        setGridHasMore(grid.scrollHeight - grid.scrollTop - grid.clientHeight > 1);
+    }, []);
+    useEffect(() => {
+        checkGridScroll();
+        window.addEventListener('resize', checkGridScroll);
+        return () => window.removeEventListener('resize', checkGridScroll);
+    }, [checkGridScroll, layer, model.newTraits]);
+
     if (!open) return null;
 
     const urls = spriteLayers(look, frameAt(now));
@@ -211,7 +226,8 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                                     </button>
                                 ))}
                             </div>
-                            <div className="me-grid wardrobe-grid" role="tabpanel" aria-label={`${layer} traits`}>
+                            <div className={gridHasMore ? 'wardrobe-grid-wrap is-scrollable' : 'wardrobe-grid-wrap'}>
+                            <div ref={gridRef} className="me-grid wardrobe-grid" role="tabpanel" aria-label={`${layer} traits`} onScroll={checkGridScroll}>
                                 {cards.map(({ trait, state }) => {
                                     const isNew = state === 'available' && newKeys.has(traitSeenKey(layer, trait));
                                     const traitUrl = pfpUrl(layer, trait);
@@ -272,6 +288,7 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                                         </button>
                                     );
                                 })}
+                            </div>
                             </div>
                         </div>
                     </div>

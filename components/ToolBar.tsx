@@ -47,7 +47,7 @@ const ToolBar: React.FC<ToolBarProps> = ({ gameState }) => {
                         <img className="me-tool-icon" src={TOOL_ICON[id]} alt="" width={24} height={24} draggable={false} />
                         <span>{TOOL_INFO[id].name}</span>
                         {armed && <span className="me-hint me-gold">Choose a direction</span>}
-                        <span className="me-key" aria-hidden="true">{key ? keyLabel(key) : ''}</span>
+                        <span className="me-key me-tool-key" aria-hidden="true">{key ? keyLabel(key) : ''}</span>
                         <span className="me-count" aria-hidden="true">{charges}</span>
                     </button>
                 );

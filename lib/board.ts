@@ -43,8 +43,21 @@ const MINIMAP_PX = 96;
 const MINIMAP_MAX_TILE_PX = 2;
 /** The side of a PFP master in art pixels (public/images/nft/<Layer>/<Trait>pfp.png). */
 const PFP_ART_PX = 16;
-/** A trait PFP crop this wide or narrower is drawn at two tile pixels per art pixel. */
-const TRAIT_CROP_SCALE_UP = 8;
+/** The design's art grid (design/pixel-art.md): art pixels per tile side. */
+const TILE_ART_PX = 24;
+
+/**
+ * The whole-pixel scale for a sprite `span` art pixels across (E61): the
+ * largest whole number of screen pixels per art pixel that keeps it inside
+ * the middle two thirds of the tile (the middle 16 of its 24 art pixels),
+ * never below one screen pixel per art pixel. Whole numbers only — a
+ * fractional scale draws the art pixels uneven.
+ */
+function wholePixelScale(span: number, cell: number): number {
+    const room = Math.floor((cell * 2) / 3);
+    const fit = Math.floor(room / Math.max(1, span));
+    return Math.max(1, fit);
+}
 
 /** The opaque bounding box of a PFP master, in art pixels, or null when the
     sprite is empty or its pixels cannot be read. */
@@ -81,17 +94,23 @@ function traitBoundingBox(image: HTMLImageElement): { x: number; y: number; w: n
 
 /**
  * Crop a trait pickup's floor sprite to its PFP's bounding box
- * (design/pixel-art.md, "Trait pickups on the board"): two tile pixels per
- * art pixel when the crop is at most 8 by 8, otherwise one, centred by CSS.
- * Until the picture has loaded (or when its pixels cannot be read) the CSS
- * default stands: the whole 16 at one tile pixel each.
+ * (design/pixel-art.md, "Trait pickups on the board"), drawn at whole art
+ * pixels for the current cell (E61): the crop scale is the floor of what
+ * fits in the middle two thirds of the tile, at least one screen pixel per
+ * art pixel, so the sprite and its outline never ride a fractional scale.
+ * The crop is centred by CSS; until the picture has loaded (or when its
+ * pixels cannot be read) the whole 16 stands at its own whole-pixel scale,
+ * sized by the caller the same way.
  */
-function applyTraitCrop(crop: HTMLElement, url: string): void {
+function applyTraitCrop(crop: HTMLElement, url: string, cell: number): void {
     const image = new Image();
     image.onload = () => {
         const box = traitBoundingBox(image);
         if (box === null) return;
-        const scale = box.w <= TRAIT_CROP_SCALE_UP && box.h <= TRAIT_CROP_SCALE_UP ? 2 : 1;
+        // The board may have been resized while the picture loaded: only the
+        // cell the crop still shows gets sized.
+        if (crop.dataset.cell !== String(cell)) return;
+        const scale = wholePixelScale(Math.max(box.w, box.h), cell);
         crop.style.width = `${box.w * scale}px`;
         crop.style.height = `${box.h * scale}px`;
         crop.style.backgroundSize = `${PFP_ART_PX * scale}px ${PFP_ART_PX * scale}px`;
@@ -642,17 +661,26 @@ export class Board {
         const element = this.traitElement;
         element.className = `powerup trait-pickup trait-${trait.rarity}`;
         element.classList.toggle('unseen', !this.cellShown(trait.x, trait.y));
+        // The outline and the rarity brackets are whole tile pixels (E61),
+        // not the CSS calc's fraction of the cell.
+        const bracket = Math.max(1, Math.round(this.cell / TILE_ART_PX));
+        element.style.setProperty('--trait-bracket', `${bracket}px`);
         const crop = element.querySelector('.trait-crop');
         if (crop instanceof HTMLElement) {
             const url = `/images/nft/${trait.layer}/${trait.trait}pfp.png`;
-            if (crop.dataset.src !== url) {
+            const cellKey = String(this.cell);
+            if (crop.dataset.src !== url || crop.dataset.cell !== cellKey) {
                 crop.dataset.src = url;
-                crop.style.width = '';
-                crop.style.height = '';
-                crop.style.backgroundSize = '';
-                crop.style.backgroundPosition = '';
+                crop.dataset.cell = cellKey;
                 crop.style.backgroundImage = `url("${url}")`;
-                applyTraitCrop(crop, url);
+                // Whole pixels before the picture is measured too: the whole
+                // 16 at the largest whole scale that fits the tile's middle.
+                const base = wholePixelScale(PFP_ART_PX, this.cell);
+                crop.style.width = `${PFP_ART_PX * base}px`;
+                crop.style.height = `${PFP_ART_PX * base}px`;
+                crop.style.backgroundSize = `${PFP_ART_PX * base}px ${PFP_ART_PX * base}px`;
+                crop.style.backgroundPosition = '0px 0px';
+                applyTraitCrop(crop, url, this.cell);
             }
         }
         this.place(element, trait.x, trait.y);

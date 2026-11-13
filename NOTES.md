@@ -839,3 +839,20 @@
   `public/images/nft/<Layer>/` with `node:fs`. With about twenty traits per
   layer the wardrobe grid gained a `max-height` and scrolls inside its panel
   in `styles/globals.css`, leaving the layer tabs and the stage in place.
+- E61: the pre-merge review of E57-E60 is answered. The tool row no longer
+  overflows a phone (E57): in the `max-width: 480px` block of
+  `styles/globals.css` `#hud.me-hud .me-tools` takes the whole line
+  (`flex: 1 1 100%`, `min-width: 0`, wrapping) and the three buttons share it
+  in equal shrinkable shares, while `components/ToolBar.tsx` gives the key
+  hint its own `me-tool-key` class so phones can drop it — icon, name and
+  count stay, and nothing scrolls sideways at 390 or 403 px. The wardrobe
+  grid (E60) uses the panel's height now: the panel is a height-capped flex
+  column, the grid fills the right column below the tabs (well past 60% of
+  the desktop viewport), and `components/Wardrobe.tsx` wraps it in a
+  `.wardrobe-grid-wrap` that shows a fade over its bottom edge exactly while
+  cards below are out of sight; phones keep the whole-panel scroll. And the
+  trait pickup (E58) draws at whole art pixels: `lib/board.ts` sizes the
+  crop at the floor of what fits the middle two thirds of the tile (never
+  under one screen pixel per art pixel) and gives `--trait-bracket` a whole
+  pixel value, so no fractional scale touches the sprite or its outline at
+  any cell size.

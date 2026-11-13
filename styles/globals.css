@@ -522,11 +522,14 @@ body {
 
 /* Trait pickups on the board (E58, design/components/Pickup, Pixel art):
    the trait's PFP master cropped to its bounding box, centred inside the
-   middle 16 tile pixels — two tile pixels per art pixel when the crop is at
-   most 8 by 8, else one (lib/board.ts measures the box and sizes the crop).
-   The game adds the one-pixel black outline (a hard drop-shadow ring) and
-   the rarity frame: four corner brackets, 1 tile pixel thick and 5 long, in
-   --energy (Found) or --gold (Rare). Nothing is baked into the art. */
+   middle 16 tile pixels, drawn at whole art pixels for the current cell —
+   the crop scale is the floor of what fits the middle two thirds of the
+   tile, at least one screen pixel per art pixel (lib/board.ts measures the
+   box and sizes the crop, and hands --trait-bracket its whole-pixel value;
+   the width/height below only stand until it sizes the crop). The game adds
+   the one-pixel black outline (a hard drop-shadow ring) and the rarity
+   frame: four corner brackets, 1 tile pixel thick and 5 long, in --energy
+   (Found) or --gold (Rare). Nothing is baked into the art. */
 .trait-pickup {
   background-image: none;
   --trait-bracket: calc(var(--cell-size, 24px) / 24);
@@ -1226,10 +1229,29 @@ body {
     padding: var(--space-4);
   }
 
+  /* The tool row is its own full-width line (E61): with the 24 px icons
+     the buttons kept their own size and the row ran past the gutters at
+     403 and 390 px. Here it takes the whole line and the three buttons
+     share it equally, min-width 0 so they can actually shrink to it. */
+  #hud.me-hud .me-tools {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
   #hud.me-hud .me-tools .me-btn {
-    flex: 1;
-    padding-left: var(--space-4);
-    padding-right: var(--space-4);
+    flex: 1 1 0;
+    min-width: 0;
+    gap: var(--space-4);
+    padding-left: 0;
+    padding-right: 0;
+    overflow: hidden;
+  }
+
+  /* The key hint is desktop only (design/components/HudBar): the phone
+     buttons keep the icon, the name and the count. */
+  #hud.me-hud .me-tool .me-tool-key {
+    display: none;
   }
 }
 
@@ -1479,14 +1501,29 @@ body {
      flex centring clipping its top inside the scrolling scrim. */
   margin: auto;
   flex: none;
+  /* E61: the panel keeps the screen's height and hands it down to the
+     trait grid, so a layer of twenty-odd traits shows most of itself at
+     once instead of a two-and-a-half-row window. */
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+.wardrobe-panel .me-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .wardrobe-layout {
   display: grid;
   grid-template-columns: 284px minmax(0, 1fr);
   gap: var(--space-16);
+  /* The body's flex column (E61): the layout takes the height the hint and
+     the Back button leave, and can shrink to it. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .wardrobe-layout > .me-col {
   min-width: 0;
+  min-height: 0;
 }
 .wardrobe-stage {
   align-items: stretch;
@@ -1507,11 +1544,29 @@ body {
 .me-trait.is-locked .me-hint {
   color: var(--ink-dim);
 }
-/* With about twenty traits per layer (E60's batch) the open grid scrolls
-   inside the panel: the tabs (the grid's layer headings) and the stage stay
-   put while the cards move, and the panel never grows past the screen. */
+/* With about twenty traits per layer (E60's batch) the open grid scrolls,
+   but it now uses the panel's height (E61): the grid area is the panel's
+   whole right column below the tabs — well past 60% of the viewport on the
+   desktop — and the tabs and the stage stay put while the cards move. The
+   wrapper carries the scroll cue: a fade over the grid's bottom edge, shown
+   by components/Wardrobe.tsx only while cards below are out of sight. */
+.wardrobe-grid-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.wardrobe-grid-wrap.is-scrollable::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: var(--space-4);
+  bottom: 0;
+  height: var(--space-48);
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+}
 .wardrobe-grid {
-  max-height: min(520px, 60vh);
+  height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: var(--space-4);
@@ -1537,5 +1592,30 @@ body {
   .wardrobe-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     justify-items: center;
+  }
+  /* Phones (E61): a short screen cannot give the grid 60% of itself beside
+     the stage, so the panel keeps its natural height and the scrim scrolls
+     it as a whole — the grid never scrolls inside the column, and the fade
+     cue stands down with it. */
+  #maze-container .me-scrim > .me-panel.wardrobe-panel {
+    display: block;
+    max-height: none;
+  }
+  .wardrobe-panel .me-panel-body {
+    flex: none;
+  }
+  .wardrobe-layout {
+    flex: none;
+    min-height: 0;
+  }
+  .wardrobe-grid-wrap {
+    flex: none;
+  }
+  .wardrobe-grid-wrap.is-scrollable::after {
+    display: none;
+  }
+  .wardrobe-grid {
+    height: auto;
+    overflow-y: visible;
   }
 }
