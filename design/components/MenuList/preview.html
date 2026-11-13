@@ -1,0 +1,40 @@
+<!-- @dsCard group="Navigation" height=540 subtitle="Title menu with the mode picker" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MenuList</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .title { position: relative; width: 390px; height: 488px; background: var(--void); display: flex; flex-direction: column; }
+  .title img { display: block; width: 100%; height: 200px; object-fit: cover; object-position: center top; border-bottom: var(--border-thick) solid var(--line); box-sizing: border-box; }
+  .title .me-menu { margin: var(--space-16) auto 0; }
+</style>
+</head>
+<body>
+<div class="me-stage">
+  <div class="title">
+    <img src="/_blob/c0b1e38a79b072292851b8b068517d0b" alt="Manic Entanglement">
+    <nav class="me-menu" aria-label="Main menu">
+      <div class="me-mode">
+        <button class="me-btn me-btn-icon" aria-label="Previous mode"><i class="me-arrow is-left"></i></button>
+        <p class="me-display-md">Descent</p>
+        <button class="me-btn me-btn-icon" aria-label="Next mode"><i class="me-arrow"></i></button>
+        <p class="me-hint">Go as deep as you can, with your gear.</p>
+        <p class="me-best">Best 125</p>
+      </div>
+      <button class="me-btn me-btn-primary">Play</button>
+      <button class="me-btn">How to play</button>
+      <button class="me-btn is-focus">Wardrobe</button>
+      <button class="me-btn">Feats 3/12</button>
+    </nav>
+  </div>
+  <div class="me-col" style="max-width:260px">
+    <p class="me-caption">Rules</p>
+    <p class="me-hint">The painting keeps its own band on top; the menu sits under it on <code>void</code> and never covers the lettering.</p>
+    <p class="me-hint">One primary button per screen: Play. Every other row is a secondary button of the same width.</p>
+    <p class="me-hint">Focus is the inset ink ring (shown on Wardrobe).</p>
+  </div>
+</div>
+</body>
+</html>

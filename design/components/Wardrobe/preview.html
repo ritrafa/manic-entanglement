@@ -1,0 +1,76 @@
+<!-- @dsCard group="Wardrobe" height=640 subtitle="PFP and runner on the stage, layer tabs, trait grid, save bar" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wardrobe</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .wardrobe { width: 720px; max-width: 100%; }
+  .layout { display: grid; grid-template-columns: 284px minmax(0, 1fr); gap: var(--space-16); }
+  @media (max-width: 640px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<div class="me-stage">
+  <section class="me-panel wardrobe" role="dialog" aria-label="Wardrobe">
+    <h2 class="me-panel-title">Wardrobe</h2>
+    <div class="me-panel-body">
+      <div class="layout">
+        <div class="me-col">
+          <div class="me-stagebox">
+            <div class="me-duo">
+              <figure class="me-fig"><div class="me-sprite" style="--s:144px" role="img" aria-label="Your NFT picture: Green body, Regular eye, Hood"><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/05fac2229711e6dce87ceb4a58ca46c8" alt=""><img src="/_blob/cca0837c2cac366a1cee4636274256da" alt=""></div><figcaption class="me-label">Your NFT</figcaption></figure>
+              <figure class="me-fig"><div class="me-sprite" style="--s:96px" role="img" aria-label="Your runner in the maze"><img src="/_blob/aabc7f9dae919867e190ec783162a134" alt=""><img src="/_blob/9ce74e4eb077be5e892f346d6f07ff8c" alt=""><img src="/_blob/75c2bdfeed7473f285850f7881bb9a87" alt=""></div><figcaption class="me-label">In the maze</figcaption></figure>
+            </div>
+          </div>
+          <p class="me-display-sm" style="text-align:center">6 of 22 traits</p>
+          <div class="me-meter is-gold" style="--v:27%;flex:none"><i></i></div>
+        </div>
+        <div class="me-col">
+          <div class="me-tabs" role="tablist">
+            <button class="me-tab" role="tab">Back</button>
+            <button class="me-tab" role="tab">Body</button>
+            <button class="me-tab" role="tab">Clothes</button>
+            <button class="me-tab" role="tab">Eye</button>
+            <button class="me-tab is-on" role="tab" aria-selected="true">Head</button>
+          </div>
+          <div class="me-grid">
+            <button class="me-trait me-notch is-equipped" aria-pressed="true">
+              <div class="me-sprite"><img class="is-ghost" src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/cca0837c2cac366a1cee4636274256da" alt=""></div>
+              <span class="me-trait-name">Hood</span>
+              <span class="me-trait-meta"><span class="me-tag is-equipped">On</span><span class="me-pips is-found"><i></i><i></i><i></i></span></span>
+            </button>
+            <button class="me-trait me-notch is-new">
+              <div class="me-sprite"><img class="is-ghost" src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/e06fcbe170a28861a2d7b364b31d7c14" alt=""></div>
+              <span class="me-trait-name">Crown</span>
+              <span class="me-trait-meta"><span class="me-tag is-new">New</span><span class="me-pips is-rare"><i></i><i></i><i></i></span></span>
+            </button>
+            <div class="me-trait me-notch is-locked" aria-disabled="true">
+              <div class="me-sprite is-locked"><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/94e8d5672b5a701159a890e5b4039d1c" alt=""></div>
+              <span class="me-trait-name">Cowboy</span>
+              <span class="me-trait-meta"><span class="me-tag is-locked">Locked</span><span class="me-pips is-feat"><i></i><i></i><i></i></span></span>
+              <span class="me-hint me-feat">Feat: Photo Finish</span>
+            </div>
+            <div class="me-trait me-notch is-locked" aria-disabled="true">
+              <div class="me-sprite is-locked"><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/99cae686c58abd51a9891c95aac1e0da" alt=""></div>
+              <span class="me-trait-name">Cosmonaut</span>
+              <span class="me-trait-meta"><span class="me-tag is-locked">Locked</span><span class="me-pips is-rare"><i></i><i></i><i></i></span></span>
+              <span class="me-hint">Find it in the maze</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <hr class="me-divider">
+      <div class="me-row" style="justify-content:space-between">
+        <p class="me-hint">1 new trait since your last save.</p>
+        <div class="me-row">
+          <button class="me-btn">Back</button>
+          <button class="me-btn me-btn-gold">Save to my NFT</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

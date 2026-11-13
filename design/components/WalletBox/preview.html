@@ -1,0 +1,62 @@
+<!-- @dsCard group="Wallet" height=420 subtitle="Closed, loading, reptile found, none found, network error" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WalletBox</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="me-stage">
+  <div class="me-col">
+    <p class="me-caption">Closed</p>
+    <button class="me-btn">Wallet</button>
+  </div>
+
+  <div class="me-col">
+    <p class="me-caption">Loading</p>
+    <div class="me-wallet">
+      <button class="me-btn me-btn-block" disabled>Check wallet</button>
+      <p class="me-status is-busy" role="status">Loading...</p>
+    </div>
+  </div>
+
+  <div class="me-col">
+    <p class="me-caption">Reptile found</p>
+    <div class="me-wallet">
+      <div class="me-wallet-id">
+        <div class="me-sprite" style="--s:48px;background:var(--well)" role="img" aria-label="Your Entangled Reptile">
+          <img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/94e8d5672b5a701159a890e5b4039d1c" alt="">
+        </div>
+        <div>
+          <p class="me-display-sm">Reptile #0412</p>
+          <p class="me-hint">Wallet 7Gk2...q9Xf</p>
+        </div>
+      </div>
+      <p class="me-status is-ok" role="status">Progress restored</p>
+      <div class="me-row">
+        <button class="me-btn me-btn-gold me-btn-sm">Save</button>
+        <button class="me-btn me-btn-sm">Disconnect</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="me-col">
+    <p class="me-caption">None found</p>
+    <div class="me-wallet">
+      <p class="me-hint">Wallet 7Gk2...q9Xf</p>
+      <p class="me-status" role="status">No Entangled Reptile in this wallet</p>
+      <button class="me-btn me-btn-block">Mint a reptile</button>
+    </div>
+  </div>
+
+  <div class="me-col">
+    <p class="me-caption">Network error</p>
+    <div class="me-wallet">
+      <p class="me-status is-bad" role="alert">Could not reach the network</p>
+      <button class="me-btn me-btn-block">Try again</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

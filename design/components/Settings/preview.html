@@ -1,0 +1,33 @@
+<!-- @dsCard group="Surfaces" height=500 subtitle="Slider, checkbox, radio group" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="me-stage">
+  <section class="me-panel" role="dialog" aria-label="Settings" style="width:400px;max-width:100%">
+    <h2 class="me-panel-title">Settings</h2>
+    <div class="me-panel-body">
+      <label class="me-field"><span style="width:120px">Music volume</span><input class="me-range" type="range" min="0" max="100" value="50"><span class="me-value">50%</span></label>
+      <label class="me-field"><span style="width:120px">Effects volume</span><input class="me-range" type="range" min="0" max="100" value="70"><span class="me-value">70%</span></label>
+      <label class="me-field"><input class="me-check" type="checkbox"> Mute sound</label>
+      <fieldset class="me-fieldset">
+        <legend class="me-label">Motion</legend>
+        <label class="me-field"><input class="me-radio" type="radio" name="motion" checked> Follow system</label>
+        <label class="me-field"><input class="me-radio" type="radio" name="motion"> Full</label>
+        <label class="me-field"><input class="me-radio" type="radio" name="motion"> Reduced</label>
+      </fieldset>
+      <label class="me-field"><input class="me-check" type="checkbox" checked> Screen shake</label>
+      <div class="me-panel-actions">
+        <button class="me-btn">Controls</button>
+        <button class="me-btn me-btn-danger">Reset progress</button>
+        <button class="me-btn me-btn-primary">Back</button>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

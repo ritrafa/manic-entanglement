@@ -1,0 +1,121 @@
+<!-- @dsCard group="Wallet" height=860 subtitle="Locked with goal, starter picker with live preview, mint states" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mint</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .mint { width: 400px; max-width: 100%; }
+  .pick { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: var(--space-16); align-items: start; }
+  .pick .me-label { display: block; margin-bottom: var(--space-4); }
+  .mini { width: 296px; }
+</style>
+</head>
+<body>
+<div class="me-stage">
+  <div class="me-col">
+    <p class="me-caption">Locked: shows the goal and how far you are</p>
+    <section class="me-panel mint" aria-label="Mint a reptile, locked">
+      <h2 class="me-panel-title is-sm">Mint a reptile</h2>
+      <div class="me-panel-body">
+        <div class="me-row" style="flex-wrap:nowrap;align-items:flex-start">
+          <div class="me-stagebox"><div class="me-sprite is-locked" style="--s:96px"><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""></div></div>
+          <div class="me-col">
+            <p><span class="me-tag is-locked">Locked</span></p>
+            <p class="me-display-sm">Reach depth 5 in one run</p>
+            <div class="me-row" style="flex-wrap:nowrap"><div class="me-meter is-gold" style="--v:60%" role="progressbar" aria-label="Best depth toward the goal" aria-valuenow="3" aria-valuemin="0" aria-valuemax="5"><i></i></div><span class="me-display-sm me-gold">3/5</span></div>
+            <p class="me-hint">One reptile per wallet. You pay only the network fee.</p>
+          </div>
+        </div>
+        <button class="me-btn me-btn-block" disabled>Mint locked</button>
+      </div>
+    </section>
+
+    <p class="me-caption">Unlocked: pick a look from the starter traits</p>
+    <section class="me-panel mint" aria-label="Mint a reptile">
+      <h2 class="me-panel-title is-sm">Mint a reptile</h2>
+      <div class="me-panel-body">
+        <div class="pick">
+          <div class="me-col">
+            <div class="me-stagebox"><div class="me-sprite" id="stage" style="--s:144px" role="img" aria-label="The picture that gets minted">
+              <img data-layer="Body" src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt="">
+              <img data-layer="Eye" src="/_blob/05fac2229711e6dce87ceb4a58ca46c8" alt="">
+              <img data-layer="Head" src="/_blob/cca0837c2cac366a1cee4636274256da" alt="">
+            </div></div>
+            <span class="me-label" style="text-align:center">This gets minted</span>
+            <div class="me-row" style="flex-wrap:nowrap">
+              <div class="me-sprite" id="runner" style="--s:48px" role="img" aria-label="Your runner in the maze">
+                <img data-layer="Body" src="/_blob/aabc7f9dae919867e190ec783162a134" alt="">
+                <img data-layer="Eye" src="/_blob/9ce74e4eb077be5e892f346d6f07ff8c" alt="">
+                <img data-layer="Head" src="/_blob/75c2bdfeed7473f285850f7881bb9a87" alt="">
+              </div>
+              <span class="me-hint">In the maze</span>
+            </div>
+          </div>
+          <div class="me-col" id="picker">
+            <div><span class="me-label">Body</span><div class="me-row" role="radiogroup" aria-label="Body">
+              <button class="me-chip is-on" role="radio" aria-checked="true" data-layer="Body" data-pfp="/_blob/23ee92916807e3d0035e5a8195ffc2a2" data-run="/_blob/aabc7f9dae919867e190ec783162a134">Green</button>
+              <button class="me-chip" role="radio" aria-checked="false" data-layer="Body" data-pfp="/_blob/6c82115b961c42bb2640d5a92bd5dbf3" data-run="/_blob/6f10e5b6388a6e38c24e3d3864705aa3">Blue</button>
+            </div></div>
+            <div><span class="me-label">Eye</span><div class="me-row" role="radiogroup" aria-label="Eye">
+              <button class="me-chip is-on" role="radio" aria-checked="true" data-layer="Eye" data-pfp="/_blob/05fac2229711e6dce87ceb4a58ca46c8" data-run="/_blob/9ce74e4eb077be5e892f346d6f07ff8c">Regular</button>
+              <button class="me-chip" role="radio" aria-checked="false" data-layer="Eye" data-pfp="/_blob/4733be58b7f22125d454d414e11c0d42" data-run="/_blob/0515e5f987749dcc418a454b2b93d641">Asleep</button>
+            </div></div>
+            <div><span class="me-label">Head</span><div class="me-row" role="radiogroup" aria-label="Head">
+              <button class="me-chip" role="radio" aria-checked="false" data-layer="Head" data-pfp="" data-run="">None</button>
+              <button class="me-chip is-on" role="radio" aria-checked="true" data-layer="Head" data-pfp="/_blob/cca0837c2cac366a1cee4636274256da" data-run="/_blob/75c2bdfeed7473f285850f7881bb9a87">Hood</button>
+            </div></div>
+          </div>
+        </div>
+        <p class="me-hint">Everything else is found in the maze or won through feats. One reptile per wallet; you pay only the network fee.</p>
+        <button class="me-btn me-btn-gold me-btn-block">Mint this reptile</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="me-col">
+    <p class="me-caption">After the button: one state at a time</p>
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-now">Approve</li><li>Mint</li></ol>
+      <p class="me-status is-busy" role="status">Approve in your wallet</p>
+      <button class="me-btn me-btn-block" disabled>Waiting for wallet</button>
+    </div>
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-done">Approve</li><li class="is-now">Mint</li></ol>
+      <p class="me-status is-busy" role="status">Minting your reptile</p>
+      <button class="me-btn me-btn-block" disabled>Minting</button>
+    </div>
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-done">Approve</li><li class="is-done">Mint</li></ol>
+      <div class="me-wallet-id">
+        <div class="me-sprite" style="--s:48px;background:var(--well)"><img src="/_blob/23ee92916807e3d0035e5a8195ffc2a2" alt=""><img src="/_blob/05fac2229711e6dce87ceb4a58ca46c8" alt=""><img src="/_blob/cca0837c2cac366a1cee4636274256da" alt=""></div>
+        <p class="me-status is-ok" role="status">Minted. This reptile is yours.</p>
+      </div>
+      <button class="me-btn me-btn-primary me-btn-block">Play</button>
+    </div>
+    <div class="me-wallet mini">
+      <ol class="me-steps"><li class="is-done">Approve</li><li class="is-bad">Mint</li></ol>
+      <p class="me-status is-bad" role="alert">Mint failed. Nothing was charged.</p>
+      <div class="me-row"><button class="me-btn me-btn-sm">Close</button><button class="me-btn me-btn-gold me-btn-sm">Try again</button></div>
+    </div>
+  </div>
+</div>
+<script>
+  // The picker is live: a chip swaps one layer on the PFP stage and on the runner.
+  document.getElementById('picker').addEventListener('click', function (e) {
+    var chip = e.target.closest('.me-chip'); if (!chip) return;
+    var layer = chip.getAttribute('data-layer');
+    chip.parentNode.querySelectorAll('.me-chip').forEach(function (c) {
+      c.classList.toggle('is-on', c === chip); c.setAttribute('aria-checked', c === chip ? 'true' : 'false');
+    });
+    [['stage', 'data-pfp'], ['runner', 'data-run']].forEach(function (pair) {
+      var img = document.querySelector('#' + pair[0] + ' img[data-layer="' + layer + '"]');
+      var src = chip.getAttribute(pair[1]);
+      img.style.visibility = src ? 'visible' : 'hidden';
+      if (src) img.src = src;
+    });
+  });
+</script>
+</body>
+</html>

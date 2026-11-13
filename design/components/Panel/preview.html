@@ -1,0 +1,55 @@
+<!-- @dsCard group="Surfaces" height=520 subtitle="Pause dialog and the run summary" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .board { background: var(--outline) url(/_blob/0e7b6ca6e6a7a247163584904adc654a) center / 640px auto; }
+</style>
+</head>
+<body>
+<div class="me-stage">
+  <div class="board">
+    <div class="me-scrim" style="width:360px;min-height:480px">
+      <section class="me-panel" role="dialog" aria-label="Paused" style="width:296px">
+        <h2 class="me-panel-title">Paused</h2>
+        <div class="me-panel-body">
+          <div class="me-col">
+            <button class="me-btn me-btn-primary me-btn-block">Resume</button>
+            <button class="me-btn me-btn-block">Restart</button>
+            <button class="me-btn me-btn-block">Settings</button>
+            <button class="me-btn me-btn-block">Quit to title</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="board">
+    <div class="me-scrim" style="width:400px;min-height:480px">
+      <section class="me-panel" role="dialog" aria-label="Game over" style="width:336px">
+        <h2 class="me-panel-title">Game over</h2>
+        <div class="me-panel-body">
+          <dl class="me-summary">
+            <dt>Mode</dt><dd>Descent</dd>
+            <dt>Cause</dt><dd class="me-danger">Lost a fight</dd>
+            <dt>Depth reached</dt><dd>4</dd>
+            <dt>Score</dt><dd>125</dd>
+            <dt>Best</dt><dd class="me-gold">New best!</dd>
+            <dt>Time</dt><dd>2:09</dd>
+            <dt>Gear banked</dt><dd>3</dd>
+            <dt>Gear lost</dt><dd>1</dd>
+          </dl>
+          <hr class="me-divider">
+          <div class="me-panel-actions">
+            <button class="me-btn me-btn-primary">Retry</button>
+            <button class="me-btn">Menu</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</body>
+</html>

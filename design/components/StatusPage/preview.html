@@ -1,0 +1,38 @@
+<!-- @dsCard group="Pages" height=420 subtitle="404 and the crash page" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StatusPage</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .pages { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-16); padding: var(--space-16); }
+  .frame { border: var(--border-thin) solid var(--line-quiet); height: 380px; }
+  .frame .me-statuspage { height: 100%; }
+  .strip { display: flex; }
+  .strip img { width: 48px; height: 48px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<div class="pages">
+  <div class="frame">
+    <main class="me-statuspage">
+      <div class="strip" aria-hidden="true"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""><img src="/_blob/0c62e0bf32ab7848b62f3d00902ae0b9" alt=""><img src="/_blob/e95d0754002732ad5a52c59d916b5b7f" alt=""></div>
+      <h1>404</h1>
+      <h2>No corridor here</h2>
+      <p>That page is not in this maze.</p>
+      <a class="me-btn me-btn-primary" href="#">Back to the title</a>
+    </main>
+  </div>
+  <div class="frame">
+    <main class="me-statuspage">
+      <div class="strip" aria-hidden="true"><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""><img src="/_blob/b3f55a8fa8ab22e979736f3ca68cca30" alt=""><img src="/_blob/ef9b245b6f809639ffd2383fc0f16e24" alt=""></div>
+      <h2>The maze tangled itself</h2>
+      <p>Something went wrong while the game was running.</p>
+      <p style="font-size:14px;line-height:20px">Reference: <code>3f9a01c7</code></p>
+      <button class="me-btn me-btn-primary">Try again</button>
+    </main>
+  </div>
+</div>
+</body>
+</html>

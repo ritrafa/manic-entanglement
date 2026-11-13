@@ -1,0 +1,60 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manic Entanglement</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--void); color: var(--ink); font-family: var(--font-body); overflow: hidden; }
+  .cover { position: relative; width: 960px; height: 288px; overflow: hidden; background: var(--void); }
+  .art { position: absolute; top: 0; left: 0; width: 960px; height: 120px; }
+  .art svg { display: block; width: 960px; height: 120px; }
+  .blk { rx: var(--radius-none); }
+  .maze { fill: var(--maze-500); }
+  .teal { fill: var(--energy); }
+  .gold { fill: var(--gold); }
+  .deep { fill: var(--maze-800); }
+  .feat { fill: var(--feat); }
+  .cut { fill: var(--void); rx: var(--radius-none); }
+  .words { position: absolute; left: var(--space-24); right: var(--space-24); bottom: var(--space-24); }
+  .name { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 48px; line-height: .95; color: var(--ink); white-space: nowrap; }
+  .tag { margin: var(--space-8) 0 0; font-size: 14px; line-height: 20px; color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 960 120" width="960" height="120">
+<!--
+  blocks      maze-500 384x120 (the wall green, largest) · energy 192x120 (pickup teal) · gold 96x120 (reward) · maze-800 240x120 (the deep theme green) · feat 48x120 once (it only ever means feat-only), all bleeding off the top; the band is 42% of 960x288
+  arrangement top-band skeleton (the name is too wide for the 440px zone): one flush strip of unequal bands, the way the game stacks board over HUD
+  pattern     tiles, from "pixel art on one 24-pixel grid": a single corridor of 24px tiles cut out of the blocks in void, turning at right angles like a maze run; about 50 tiles
+  scales      every side a multiple of space-24 (one tile); corridor width and pitch space-24; corners radius-none
+-->
+<rect class="maze blk" x="0" y="0" width="384" height="120"/>
+<rect class="teal blk" x="384" y="0" width="192" height="120"/>
+<rect class="gold blk" x="576" y="0" width="96" height="120"/>
+<rect class="deep blk" x="672" y="0" width="240" height="120"/>
+<rect class="feat blk" x="912" y="0" width="48" height="120"/>
+<rect class="cut" x="0" y="72" width="144" height="24"/>
+<rect class="cut" x="120" y="24" width="24" height="48"/>
+<rect class="cut" x="144" y="24" width="168" height="24"/>
+<rect class="cut" x="288" y="48" width="24" height="48"/>
+<rect class="cut" x="312" y="72" width="168" height="24"/>
+<rect class="cut" x="456" y="24" width="24" height="48"/>
+<rect class="cut" x="480" y="24" width="144" height="24"/>
+<rect class="cut" x="600" y="48" width="24" height="48"/>
+<rect class="cut" x="624" y="72" width="192" height="24"/>
+<rect class="cut" x="792" y="24" width="24" height="48"/>
+<rect class="cut" x="816" y="24" width="144" height="24"/>
+</svg>
+</div>
+<div class="words">
+<h1 class="name">Manic Entanglement</h1>
+<p class="tag">A maze that rewires itself with every step.</p>
+</div>
+</div>
+</body>
+</html>
