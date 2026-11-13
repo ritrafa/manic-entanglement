@@ -1,5 +1,201 @@
 # NOTES
 
+## NFT on-chain (N5): mint and save
+
+The on-chain part of the NFT stage: transaction builders, the two signing
+routes, the browser helper, the owner's delegate script and the devnet
+end-to-end run. Everything lives in `lib/nft/`, `app/api/nft/` and
+`scripts/nft/`. This section sits above the queue log on purpose, so queue
+cards appending at the bottom never collide with it.
+
+### Owner setup (once, on your own machine)
+
+1. **Make the game signer.** `solana-keygen new --no-bip39-passphrase -o game-signer.json`
+   and note the public key it prints (`solana-keygen pubkey game-signer.json`).
+   This is a hot key that will live in Vercel; it is not the collection
+   authority and it never needs any SOL, because players pay every fee.
+2. **Make it a collection Update Delegate** with your authority keypair
+   (the one for `rafaQ56a...`), which never leaves your machine:
+
+   ```
+   node scripts/nft/add-game-delegate.mjs <path-to-authority-keypair.json> <game-signer-pubkey> --cluster mainnet
+   ```
+
+   It prints only the transaction signature. It adds the `UpdateDelegate`
+   plugin to the collection with the game signer in `additionalDelegates`
+   (or appends to the list if the plugin is already there; a second run is a
+   no-op). Cost to the authority: one signature fee plus rent for a few
+   dozen bytes. Options: `--rpc <url>` (default: `SOLANA_RPC_URL`, else the public
+   endpoint), `--verbose true` to see a full error. To try it first:
+   `--cluster devnet --collection <a devnet collection>`.
+3. **Add the Vercel variables** (Production, and Preview if you want it there):
+   - `GAME_SIGNER_KEY` (Sensitive): the contents of `game-signer.json` (the
+     JSON array) or the same 64 bytes as base58.
+   - `RUN_TOKEN_SECRET` (Sensitive): `openssl rand -base64 32`.
+   - `SOLANA_RPC_URL`: the server-side RPC (Helius or similar; it must allow
+     `getAssetsByOwner` or `getProgramAccounts`, ideally both). Falls back to
+     `NEXT_PUBLIC_RPC_URL`.
+   - `NFT_CLUSTER`: `mainnet` (or `devnet`, which also needs
+     `NFT_COLLECTION` = a devnet test collection; on mainnet that variable is
+     ignored and the real collection is always used).
+
+   Until all of `GAME_SIGNER_KEY`, an RPC URL and `NFT_CLUSTER` are set, both
+   routes answer `503 {"error":"nft_off"}`. The routes also answer
+   `503 wrong_cluster` if the RPC is not the cluster `NFT_CLUSTER` names.
+4. Delete `game-signer.json` from disk once it is in Vercel (or keep it
+   somewhere safe). **To revoke the key**: remove it from the plugin's
+   `additionalDelegates` with the authority key, then replace the variable.
+
+**What a leaked game signer could do** (measured on the real Core program):
+create assets in the collection, rewrite any holder's attributes and uri,
+rename the collection or change its uri, and change the collection
+royalties. It cannot transfer or burn anyone's asset and cannot add or
+remove delegates; the cold authority can undo everything and revoke it.
+
+### Routes
+
+`POST /api/nft/mint` body `{ wallet, proofs, look }`;
+`POST /api/nft/save` body `{ wallet, asset, proofs, look }` (`look: null`
+keeps the look). `proofs` are the strings from `/api/run/verify`; `look` is
+`{ Back, Body, Clothes, Eye, Head, Background }`.
+
+Reply 200: `{ tx, asset, blockhash, lastValidBlockHeight, fee: { network,
+rent, protocol, total }, summary }`. `tx` is base64, already signed by the
+game signer (and the new asset's key on a mint); the wallet signs as fee
+payer and sends it. `fee` is in lamports, from simulating that exact
+transaction. `summary` is `{ kind: "mint", name, uri, attributes, applied }`
+or `{ kind: "save", applied, changes: [{ key, from, to }], uri: { from, to } | null }`.
+
+Every check is server-side, from the chain and the proofs:
+
+| Refusal | Status | When |
+|---|---|---|
+| `nft_off` | 503 | a variable is missing |
+| `rate_limited` | 429 | more than 10 requests a minute from one IP (per instance) |
+| `too_large` | 413 / 422 | body over 256 kB / the transaction would not fit a packet |
+| `bad_request`, `bad_look` | 400 | malformed body, wallet, asset or look |
+| `bad_proof` | 400 | a proof fails `readProof` |
+| `wrong_wallet` | 403 | a proof was made for another wallet |
+| `expired_proof` | 400 | a proof is 30 days old (or from the future) |
+| `goal_not_reached` | 403 | mint: no proof reaches depth 8 |
+| `locked_trait` | 400 | mint: anything but FREE_TRAITS/None on Void; save: a trait the merged progress has not unlocked |
+| `already_holds` | 409 | mint: the wallet owns a reptile of the collection |
+| `proof_used` | 409 | mint: every earning proof has already minted its asset |
+| `asset_not_found`, `not_in_collection`, `not_owner` | 404 / 403 | save: read from the asset account itself |
+| `nothing_to_save` | 409 | save: attributes and uri would not change (replayed proofs) |
+| `insufficient_funds` | 402 | the wallet cannot pay |
+| `simulation_failed` | 400 | the chain would reject it (last log lines in `detail`) |
+| `wrong_cluster`, `collection_missing` | 503 | misconfiguration |
+| `chain_unavailable` | 502 | the RPC failed (no detail on purpose) |
+
+Design points worth knowing:
+
+- **The server never signs anything a client sent.** The request has no
+  transaction field; the server builds the message itself, checks its shape
+  (`isReptileTransaction`: the two compute budget instructions, then one or
+  two Core instructions, paid by the wallet) and only then signs. The client
+  helper runs the same check before the wallet is asked, so the player's
+  signature can never cover a transfer.
+- **One proof mints one asset.** The new asset's keypair is derived
+  (HMAC) from the game signer's secret, the wallet and the earning proof's
+  `issuedAt`. A second mint with the same proof lands on the same address
+  and the chain refuses it, including when two requests race or the holder
+  index lags. A wallet that sells its reptile needs a new depth-8 run to
+  mint again. (Rotating `GAME_SIGNER_KEY` resets this for proofs under 30
+  days old.)
+- **Holder check**: DAS `getAssetsByOwner` and a `getProgramAccounts` scan of
+  the Core accounts, in parallel; either finding a reptile refuses the mint,
+  and the wallet is clear only if at least one could answer.
+- **Saves read the asset account directly** (owner, collection, attributes),
+  not the index, merge with `mergeProgress`, and write the whole list back
+  with unknown keys kept (`encodeAttributes(progress, current)`). An asset
+  without the Attributes plugin gets it added.
+- **Name**: `Entangled Reptile #<numMinted + 1>`, read at request time. Two
+  mints prepared in the same moment can get the same number.
+- **Compute budget**: each request simulates once unsigned to measure the
+  units, then sets the limit to units x 1.3 + 5,000 at 20,000 micro-lamports
+  per unit (a priority fee of roughly 1,100 to 2,300 lamports).
+- **Attribute budget**: with three signatures a mint fits an attribute list
+  of 595 bytes (4 + key + 4 + value, summed; 591 once the number has five
+  digits); a save fits 683. Pinned in `lib/nft/tx.test.ts`.
+
+### Browser helper (`lib/nft/client.ts`)
+
+No UI; imports only `@solana/web3.js`. For the Mint panel and Save button:
+
+```ts
+import { requestMint, requestSave, signAndSend, mintReptile, saveReptile, NftError } from '@/lib/nft/client';
+
+const quote = await requestMint({ wallet, proofs, look });           // or requestSave({ wallet, asset, proofs, look })
+// show quote.fee (lamports) and quote.summary, then:
+const signature = await signAndSend(quote, useWallet(), connection);  // signTransaction, send, confirm
+
+// or in one call; the callback gets the quote and returns whether the player agrees:
+const { signature, asset, fee, summary } = await mintReptile({ wallet, proofs, look }, useWallet(), connection, agree);
+```
+
+Everything that goes wrong throws `NftError` with a `code`: one of the
+server's refusal codes above, or `network`, `bad_reply`,
+`unsafe_transaction`, `no_wallet`, `declined`,
+`wallet_changed_transaction`, `send_failed`, `not_confirmed` (its `detail`
+is the signature: the transaction may still land). The quote is valid for
+about a minute (its blockhash); ask again rather than keeping one around.
+After a confirmed save, drop the proofs that were sent.
+
+### Pending interfaces
+
+`lib/nft/_pending.ts` holds stand-ins for E69 (`game/nftProgress.ts`) and
+E70 (`lib/server/runToken.ts`); it is the only file that would import them.
+Its header has the exact lines to replace it with once both have landed.
+`lib/nft/testkit.ts` signs test proofs through the same file.
+
+### Devnet end to end
+
+```
+node scripts/nft/devnet-e2e.mjs --keys <dir outside the repo> [--rpc <url>] [--local]
+```
+
+It creates throwaway keys in `--keys`, a test collection shaped like the real
+one, adds the delegate with the owner script's own code, then drives the
+real route logic and client helper: mint, three saves, a replay, an old-style
+asset, an asset with no Attributes plugin, and the refusals. It measures
+every cost from balances and compares it with the quoted fee. It refuses to
+run against mainnet. `--local` is for a `solana-test-validator` that cloned
+the Core program (`--clone-upgradeable-program CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`).
+
+### Measured (2026-11-13)
+
+The devnet faucet was closed that day (`requestAirdrop` on
+api.devnet.solana.com: "410 Gone ... The RPC faucet is closed on this
+cluster. Request test SOL at https://faucet.solana.com"), so the run above
+was made with `--local` against a `solana-test-validator` (Agave 2.3.12)
+that cloned the Core program from mainnet. The program bytes are identical
+on mainnet, devnet and that validator (810,273 bytes, sha256 `af40bd111c783e4c...`),
+and rent and signature fees are the same on every cluster. All 47 checks
+passed; every quoted fee equalled the measured cost to the lamport. To
+repeat on devnet, fund the throwaway authority the script prints from the
+web faucet and run it without `--local`.
+
+The Update Delegate assumption holds: a key in the collection's
+`UpdateDelegate.additionalDelegates` can create an asset into the collection
+(owner and payer = the player) and can update an asset's uri and its
+Attributes plugin. Before it was a delegate the same key was refused.
+
+| Action | Total (lamports) | SOL | Network | Rent | Core fee | Units | Tx bytes |
+|---|---|---|---|---|---|---|---|
+| Mint (685-byte account) | 7,174,563 | 0.007174563 | 16,083 | 5,658,480 | 1,500,000 | 37,783 | 1,089 |
+| Save, same size | 12,161 | 0.000012161 | 12,161 | 0 | 0 | 79,268 | 1,001 |
+| Save, list grows by 26 bytes (a first Sprint best) | 193,213 | 0.000193213 | 12,253 | 180,960 | 0 | 82,792 | 1,027 |
+| First save on an old holder's asset (look-only list) | 2,064,975 | 0.002064975 | 11,775 | 2,053,200 | 0 | 64,393 | 1,024 |
+| First save on an asset with no Attributes plugin | 3,609,547 | 0.003609547 | 11,227 | 3,598,320 | 0 | 43,326 | 962 |
+
+Rent is 6,960 lamports per byte, a deposit that comes back when the asset is
+burned. A save costs only the network fee unless the list gets longer; a
+value that gains a digit costs 6,960 lamports once. The network fee is
+5,000 lamports per signature (3 on a mint, 2 on a save) plus the priority
+fee. These numbers come from the stand-in codec in `_pending.ts`; E69's real
+list will move the rent a little.
+
 ## Queue log
 
 - Gave the game a wardrobe: the new pure `game/wardrobe.ts` holds `FREE_TRAITS`
