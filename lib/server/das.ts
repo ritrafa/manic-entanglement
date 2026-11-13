@@ -2,7 +2,7 @@
 // environment and one defensive JSON-RPC call. Nothing here signs or sends
 // anything and no key is read; the caller decides what a failure means.
 
-import { REPTILE_COLLECTION } from "@/lib/reptile";
+import { collectionAddress } from "@/lib/nft/config";
 
 /** Milliseconds a DAS lookup may take before the caller treats it as failed. */
 const DAS_TIMEOUT_MS = 4000;
@@ -74,13 +74,16 @@ export async function dasGetAsset(assetId: string): Promise<DasAssetResult> {
     }
 }
 
-/** The item's grouping contains our collection id? */
-export function assetInCollection(asset: unknown): boolean {
+/** The item's grouping contains the collection we work in (E72): the
+ *  configured one - NFT_COLLECTION on devnet, REPTILE_COLLECTION elsewhere,
+ *  both through collectionAddress - so devnet reptiles are found by the
+ *  routes on devnet and only the real collection counts on mainnet. */
+export function assetInCollection(asset: unknown, collection: string = collectionAddress()): boolean {
     if (!isRecord(asset)) return false;
     const grouping = asset.grouping;
     if (!Array.isArray(grouping)) return false;
     return grouping.some((entry) =>
-        isRecord(entry) && entry.group_value === REPTILE_COLLECTION);
+        isRecord(entry) && entry.group_value === collection);
 }
 
 /** The asset's Attributes plugin list, or null when it carries none. */

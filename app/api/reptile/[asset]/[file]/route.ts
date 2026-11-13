@@ -22,6 +22,7 @@ import {
     assetName,
     dasGetAsset,
 } from "@/lib/server/das";
+import { collectionAddress } from "@/lib/nft/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -164,7 +165,7 @@ export async function GET(
     if (result.status === "error") {
         return reply({ error: "das_unavailable" }, 502, { "Cache-Control": "no-store" });
     }
-    if (result.status === "missing" || !assetInCollection(result.asset)) {
+    if (result.status === "missing" || !assetInCollection(result.asset, collectionAddress())) {
         return reply({ error: "not_found" }, 404, { "Cache-Control": "no-store" });
     }
 

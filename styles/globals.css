@@ -1856,3 +1856,99 @@ body {
     justify-items: center;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   E72: the mint panel and the save-to-NFT panel (design/components/Mint and
+   design/components/SaveToNft), as the wallet box and the wardrobe open them.
+   Both are me-panels: they keep the design's own parts (me-sprite,
+   me-stagebox, me-chip, me-meter, me-changes, me-steps) and only add the
+   layout the previews show - the mint's stage beside the chips, the save's
+   two 96px stages with the arrow between, and the wardrobe's centred overlay.
+   --------------------------------------------------------------------------- */
+
+.mint-panel,
+.save-panel {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* The locked mint: the silhouette stage beside the goal line and its meter. */
+.mint-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  gap: var(--space-16);
+}
+
+.mint-meter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--space-8);
+}
+
+/* The picker: the 144px PFP stage and the 48px runner beside the chip rows. */
+.mint-pick {
+  display: grid;
+  grid-template-columns: 172px minmax(0, 1fr);
+  gap: var(--space-16);
+  align-items: start;
+}
+
+.mint-stage-col {
+  align-items: center;
+}
+
+.mint-stage-label {
+  text-align: center;
+}
+
+.mint-runner-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--space-8);
+}
+
+/* The save review: the two PFP stages side by side with the pixel arrow. */
+.save-looks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-16);
+}
+
+.save-stage-col {
+  align-items: center;
+}
+
+/* "After saving" wears the gold border (the preview's inline style). */
+.me-stagebox.is-gold-edge {
+  border-color: var(--gold);
+}
+
+/* The wallet picker inside the save panel, before a wallet is connected. */
+.me-wallet-connect {
+  display: flex;
+  justify-content: center;
+}
+
+/* The save panel the wardrobe opens sits over the panel, centred, on the
+   scrim's own well - the wardrobe itself never scrolls. */
+.wardrobe-save-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  background: color-mix(in srgb, var(--well) 72%, transparent);
+  z-index: 5;
+}
+
+@media (max-width: 720px) {
+  /* One column on a phone: the stage above the chips, as elsewhere. */
+  .mint-pick {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -6,6 +6,9 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { loadReptile } from '@/lib/reptile';
 import { pfpLayers, type Look } from '@/game/sprite';
 import GameState from '@/lib/GameState';
+import { peekProof } from '@/lib/nft/proofPeek';
+import MintPanel from './MintPanel';
+import { SavePanel } from './SavePanel';
 import WalletContextProvider from './WalletContextProvider';
 
 interface WalletBoxProps {
@@ -61,6 +64,14 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
     const { publicKey, disconnect } = useWallet();
     const [status, setStatus] = useState<LoadStatus>('idle');
     const [reptile, setReptile] = useState<FoundReptile | null>(null);
+    // True right after a load merged the reptile's carried progress into the
+    // save (Q24): the status line reads "Progress restored" once (the shell's
+    // toast says the same over the board).
+    const [restored, setRestored] = useState(false);
+    // The two panels the box opens (E72): Mint from "None found", Save from
+    // the found state. Each stays up until its own button closes it.
+    const [mintOpen, setMintOpen] = useState(false);
+    const [saveOpen, setSaveOpen] = useState(false);
     // The pending-proof count (E70): the shell keeps signed runs in the save
     // until the player saves them to the NFT; the box only hints at it.
     const model = useSyncExternalStore(gameState.subscribe, gameState.getSnapshot, gameState.getSnapshot);
@@ -84,8 +95,20 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
             // The loaded look goes straight to the shell; the HUD portrait follows.
             gameState.setLook(result.look);
             setReptile({ look: result.look, number: result.number ?? null });
+            // The shell learns the asset and the on-chain look (the save flow
+            // writes to it and compares against it), and the reptile restores
+            // the progress it carries (Q24): bests, totals, feats, traits and
+            // gear merge into the save, and the toast says so once.
+            gameState.setReptile({
+                asset: result.asset ?? null,
+                number: result.number ?? null,
+                look: result.progress?.look ?? null,
+            });
+            setRestored(result.progress !== undefined && gameState.restoreReptileProgress(result.progress));
         } else {
             setReptile(null);
+            gameState.setReptile(null);
+            setRestored(false);
         }
         setStatus(result.status);
     }, [publicKey, gameState]);
@@ -93,10 +116,20 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
     const handleDisconnect = useCallback(() => {
         setStatus('idle');
         setReptile(null);
+        setRestored(false);
+        setMintOpen(false);
+        setSaveOpen(false);
+        gameState.setReptile(null);
         void disconnect();
-    }, [disconnect]);
+    }, [disconnect, gameState]);
 
     const address = publicKey?.toBase58();
+    // The Save button wakes when this wallet has proofs waiting or the
+    // wardrobe picked a look since the reptile loaded (E72).
+    const saveReady = model.hasReptile
+        && (model.lookPickedSinceLoad
+            || (address !== undefined
+                && gameState.getPendingProofs().some((proof) => peekProof(proof)?.wallet === address)));
 
     return (
         <div className="left-box">
@@ -120,6 +153,9 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
                 {status === 'loading' && (
                     <p className="me-status is-busy" role="status">Loading...</p>
                 )}
+                {status === 'found' && restored && (
+                    <p className="me-status is-ok" role="status">Progress restored</p>
+                )}
                 {status === 'found' && reptile !== null && (
                     <>
                         <div className="me-wallet-id">
@@ -134,6 +170,14 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
                             </div>
                         </div>
                         <div className="me-row">
+                            <button
+                                type="button"
+                                className="me-btn me-btn-gold me-btn-sm"
+                                onClick={() => setSaveOpen(true)}
+                                disabled={!saveReady}
+                            >
+                                Save
+                            </button>
                             <button type="button" className="me-btn me-btn-sm" onClick={handleDisconnect}>Disconnect</button>
                         </div>
                     </>
@@ -142,6 +186,9 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
                     <>
                         {address !== undefined && <p className="me-hint">Wallet {shortAddress(address)}</p>}
                         <p className="me-status" role="status">No Entangled Reptile in this wallet</p>
+                        <button type="button" className="me-btn me-btn-block" onClick={() => setMintOpen(true)}>
+                            Mint a reptile
+                        </button>
                     </>
                 )}
                 {status === 'error' && (
@@ -151,6 +198,21 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
                             Try again
                         </button>
                     </>
+                )}
+                {mintOpen && address !== undefined && (
+                    <MintPanel
+                        gameState={gameState}
+                        wallet={address}
+                        onClose={() => setMintOpen(false)}
+                        onMinted={() => void handleCheckAssets()}
+                    />
+                )}
+                {saveOpen && (
+                    <SavePanel
+                        gameState={gameState}
+                        onClose={() => setSaveOpen(false)}
+                        onSaved={() => void handleCheckAssets()}
+                    />
                 )}
             </div>
         </div>

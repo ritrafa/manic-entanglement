@@ -1408,3 +1408,56 @@ run; web3.js retries and the run still completes.
   the 400/404/502 refusals, both cache headers, the 512x512 canvas, master
   pixels surviving the scaling exact and the gradient's two colours at the
   corners within 4.
+
+- E72: the player-facing NFT stage is in (NFT-PLAN N6): the mint panel, the
+  save-to-NFT flow and the restore on load. The peek: `lib/nft/proofPeek.ts`
+  (pure, atob only) decodes a proof body with no MAC check - the client
+  cannot do that one - answering `{ issuedAt, mode, depth, wallet }` or null,
+  with `bestVerifiedDepth(proofs, wallet)` and `MINT_GOAL_DEPTH = 8`, the
+  same value the mint route enforces; `lib/nft/proofPeek.test.ts` tampers the
+  MAC half (the peek never notices) and refuses every wrong-shaped body. The
+  Mint panel (`components/MintPanel.tsx`, design/components/Mint) opens from
+  the wallet box's "None found": locked until the best verified depth reaches
+  8 with the goal line and a gold best/8 meter, then the starter picker - one
+  `me-chip` radio row per layer of FREE_TRAITS (None where the layer has it),
+  the 144px PFP that gets minted and the 48px runner, both live, on the Void
+  background. The terms tell the honest cost - "One reptile per wallet.
+  Minting costs about {SOL} SOL, most of it a deposit you get back if the
+  reptile is ever burned." - filled from the quote's total fee to four
+  decimals; the quote is asked when the picker opens and refreshed on Mint
+  when older than 45 s. `signAndSend` walks the spec's Approve/Mint steps, and the NftError codes map to plain reasons: declined, network
+  (network/chain_unavailable/not_confirmed), the run could not be verified
+  (goal_not_reached/bad_proof/expired_proof/proof_used), "Your wallet needs
+  about {SOL} SOL." for insufficient_funds, and a generic line otherwise;
+  after "Minted" the box reloads the reptile. The Save panel
+  (`components/SavePanel.tsx`, design/components/SaveToNft) opens from the
+  wallet box's Save and from the wardrobe's "Save to NFT" (next/dynamic, so
+  the wallet code stays out of the first load): review first - the two 96px
+  PFP stages "On chain now" and "After saving" with the arrow, and the
+  `me-changes` rows from the quote's summary - then Approve, Verify, Save as
+  one state at a time, no fee amounts anywhere (the hint only says the wallet
+  pays the network fee), "Nothing new to save." disabling the gold button
+ (also on the server's `nothing_to_save`). It sends `look: null` unless the
+  wardrobe actually picked traits since the load: GameState tracks the picks
+  per layer (`lookPickedSinceLoad`, `getLookPicks`), so a save can never
+  strip an old holder's Crown, Purple or Clothes White through fitLook. On
+  "Saved" the proofs that were sent leave `pendingProofs` and the reptile
+  reloads. Q24: when the wallet's reptile loads, its decoded attributes merge
+  into the local save through `saveWithProgress` (max bests and totals,
+  unioned feats/traits/gear), the save is written, the board's toast and the
+  box's status say "Progress restored" once, and the reptile's own look shows
+  as before; `lib/reptile.ts` now carries the asset id and the decoded
+  progress out of getAssetsByOwner. The collection gate reads one function:
+  `collectionAddress(env)` in `lib/nft/config.ts` - NFT_COLLECTION on devnet,
+  REPTILE_COLLECTION everywhere else - used by `lib/server/das.ts`, the
+  reptile route and run/start, so devnet testing finds devnet reptiles while
+  mainnet never moves (tests in `lib/nft/config.test.ts`,
+  `lib/server/das.test.ts` and the route tests). The verify route gained the
+  per-gap move check (E72): the ticks between two consecutive moves with no
+  `next` between them must sum to at least `CONFIG.stepMs * 0.8 - 2`, so a
+  burst of instant moves inside an otherwise slow log is refused `too_fast`
+  even when the aggregate passes - and fifty bot runs recorded through
+  `RecordingRun` with moves handed out by a real `Stepper` on fake times all
+  still earn their proofs. A mid-run reset now un-verifies the live run: the
+  token is dropped, no proof is asked at the end and the HUD's Verified mark
+  goes (tests in `lib/gameState.test.ts`, on a GameState over a stubbed DOM).

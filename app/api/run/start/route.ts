@@ -11,7 +11,7 @@ import { randomBytes } from "node:crypto";
 import { dailySeed, MODES, type ModeId } from "@/game/modes";
 import { noGear, sanitizeGear, type GearLevels } from "@/game/gear";
 import { decodeAttributes } from "@/game/nftProgress";
-import { REPTILE_COLLECTION } from "@/lib/reptile";
+import { collectionAddress } from "@/lib/nft/config";
 import { issueToken, signingAvailable, type RunStartState } from "@/lib/server/runToken";
 import { dasUrl } from "@/lib/server/das";
 
@@ -67,8 +67,9 @@ function reptileAttributeList(items: unknown): unknown {
     for (const item of items) {
         if (!isRecord(item)) continue;
         const grouping = item.grouping;
+        const collection = collectionAddress();
         const inCollection = Array.isArray(grouping) && grouping.some((entry) =>
-            isRecord(entry) && entry.group_value === REPTILE_COLLECTION);
+            isRecord(entry) && entry.group_value === collection);
         if (!inCollection) continue;
         const plugins = item.plugins;
         const attributes = isRecord(plugins) ? plugins.attributes : undefined;

@@ -3,6 +3,7 @@
 // here signs or sends anything; the RPC host comes from the environment and
 // no key is required.
 import { DEFAULT_LOOK, Look, sanitizeLook } from '@/game/sprite';
+import { decodeAttributes, type NftProgress } from '@/game/nftProgress';
 
 /** The only collection the game looks for (same id the HUD matched before). */
 export const REPTILE_COLLECTION = 'Dj5gDUph6CuUiQBjh31HhpmJTXhhfHzbMTNK89wNHzvz';
@@ -26,12 +27,20 @@ export interface Reptile {
     /** The collection number as four digits ("0412"), null when the asset
      *  carries none. */
     number: string | null;
+    /** The asset's own address (E72): what a save is written to. Null when
+     *  the DAS item carries no usable id. */
+    asset: string | null;
+    /** The whole attribute list decoded (E72): the on-chain progress the
+     *  wallet box restores on load, and the look (Background included) the
+     *  save flow compares against. Null when the item carries no list. */
+    progress: NftProgress | null;
 }
 
 export type LoadResult =
     /** The number is present only when the asset carries one; saving and
      *  minting come later, so nothing else rides on the reply. */
-    | { status: 'found'; look: Look; image: string | null; number?: string }
+    | { status: 'found'; look: Look; image: string | null; number?: string;
+        asset?: string; progress?: NftProgress }
     | { status: 'none' }
     | { status: 'error' };
 
@@ -112,7 +121,16 @@ export function findReptile(items: unknown): Reptile | null {
             }
         }
         // Unknown or missing traits fall back to DEFAULT_LOOK per layer.
-        return { look: sanitizeLook(look), image: httpsImage(item), number: reptileNumber(item) };
+        // E72: the whole list also decodes to the on-chain progress (never
+        // throws), and the item's own id rides along for the save route.
+        const id = typeof item.id === 'string' && item.id !== '' ? item.id : null;
+        return {
+            look: sanitizeLook(look),
+            image: httpsImage(item),
+            number: reptileNumber(item),
+            asset: id,
+            progress: Array.isArray(rawList) ? decodeAttributes(rawList) : null,
+        };
     }
     return null;
 }
@@ -148,9 +166,14 @@ export async function loadReptile(
         const items = isRecord(reply.result) ? reply.result.items : undefined;
         const reptile = findReptile(items);
         if (reptile === null) return { status: 'none' };
-        return reptile.number === null
-            ? { status: 'found', look: reptile.look, image: reptile.image }
-            : { status: 'found', look: reptile.look, image: reptile.image, number: reptile.number };
+        const base = {
+            status: 'found' as const,
+            look: reptile.look,
+            image: reptile.image,
+            asset: reptile.asset ?? undefined,
+            progress: reptile.progress ?? undefined,
+        };
+        return reptile.number === null ? base : { ...base, number: reptile.number };
     } catch {
         return { status: 'error' };
     }

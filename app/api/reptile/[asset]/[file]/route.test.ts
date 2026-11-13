@@ -312,3 +312,37 @@ describe("the PNG", () => {
         near((511 * 512 + 511) * 4, [0x14, 0xf1, 0x95]); // bottom-right
     });
 });
+
+describe("the devnet collection (E72)", () => {
+    const DEVNET_COLLECTION = "CLH6sKfniaCf4h3NJmCNfzUgjtY6viVtnc8eA43NQNmx";
+    let savedCluster: string | undefined;
+    let savedCollection: string | undefined;
+
+    beforeEach(() => {
+        savedCluster = process.env.NFT_CLUSTER;
+        savedCollection = process.env.NFT_COLLECTION;
+        process.env.NFT_CLUSTER = "devnet";
+        process.env.NFT_COLLECTION = DEVNET_COLLECTION;
+    });
+
+    afterEach(() => {
+        if (savedCluster === undefined) delete process.env.NFT_CLUSTER;
+        else process.env.NFT_CLUSTER = savedCluster;
+        if (savedCollection === undefined) delete process.env.NFT_COLLECTION;
+        else process.env.NFT_COLLECTION = savedCollection;
+    });
+
+    test("a reptile of the devnet test collection is served", async () => {
+        const asset = reptileAsset(LIST);
+        asset.grouping = [{ group_value: DEVNET_COLLECTION }];
+        vi.stubGlobal("fetch", dasReply({ result: asset }));
+        const response = await get(ASSET, `${V}.json`);
+        expect(response.status).toBe(200);
+    });
+
+    test("on devnet the real collection is not the gate any more", async () => {
+        vi.stubGlobal("fetch", dasReply({ result: reptileAsset(LIST) }));
+        const response = await get(ASSET, `${V}.json`);
+        expect(response.status).toBe(404);
+    });
+});

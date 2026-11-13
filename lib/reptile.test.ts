@@ -159,7 +159,34 @@ describe('loadReptile', () => {
         const result = await loadReptile(OWNER, fakeFetch({
             result: { items: [reptileItem()] },
         }));
-        expect(result).toEqual({ status: 'found', look: FULL_LOOK, image: 'https://img.example/reptile.png' });
+        expect(result).toEqual({
+            status: 'found', look: FULL_LOOK, image: 'https://img.example/reptile.png',
+            asset: undefined, progress: expect.objectContaining({ look: expect.objectContaining(FULL_LOOK) }),
+        });
+    });
+
+    it('found: the asset id and the decoded progress ride along (E72)', async () => {
+        useEndpoint();
+        const item = reptileItem({
+            id: 'Rept1111111111111111111111111111111111111',
+            plugins: {
+                attributes: {
+                    data: {
+                        attribute_list: [
+                            ...Object.entries(FULL_LOOK).map(([key, value]) => ({ key, value })),
+                            { key: 'Best Descent', value: '4321' },
+                            { key: 'Best Depth', value: '9' },
+                        ],
+                    },
+                },
+            },
+        });
+        const result = await loadReptile(OWNER, fakeFetch({ result: { items: [item] } }));
+        expect(result.status).toBe('found');
+        if (result.status !== 'found') return;
+        expect(result.asset).toBe('Rept1111111111111111111111111111111111111');
+        expect(result.progress?.best.descent).toBe(4321);
+        expect(result.progress?.totals.deepest).toBe(9);
     });
 
     it('none: OK reply with an empty list', async () => {

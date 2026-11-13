@@ -1,12 +1,21 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import dynamic from 'next/dynamic';
 import GameState, { type GameSnapshot } from '@/lib/GameState';
 import { LAYER_ORDER, TRAITS, frameAt, pfpLayers, spriteLayers, type Layer, type Look } from '@/game/sprite';
 import { availableTraits, isUnlocked, pickupRarity, unlockedBy } from '@/game/wardrobe';
 import { featById } from '@/game/feats';
 import { cardsOnPage, clampPage, pageForIndex, pageCount } from '@/game/pages';
 import { classifyTouch } from '@/game/swipe';
+
+// The save-to-NFT panel (E72, design/components/SaveToNft), pulled in only
+// when the button opens it: it carries the wallet code, which must stay out
+// of the first-load bundle (the same rule as components/WalletGate.tsx).
+const SavePanelLazy = dynamic({
+    loader: () => import('./SavePanel').then((module) => ({ default: module.SavePanelWithProvider })),
+    ssr: false,
+});
 
 interface WardrobeProps {
     gameState: GameState;
@@ -171,6 +180,9 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
     const jumpRef = useRef(false);
     // One touch on the grid, for the swipe that turns pages.
     const touchRef = useRef<{ x: number; y: number; ms: number } | null>(null);
+    // The save-to-NFT panel (E72), opened from the wardrobe when the wallet's
+    // reptile is loaded.
+    const [saveOpen, setSaveOpen] = useState(false);
 
     // The card list is frozen per opening and per tab: the key carries both,
     // and an equip (which changes neither) never re-sorts it. Closing drops
@@ -499,7 +511,25 @@ const WardrobePanel: React.FC<WardrobeProps> = ({ gameState }) => {
                         </p>
                         <div className="me-panel-actions wardrobe-actions">
                             <button className="me-btn me-btn-primary" ref={firstButtonRef} onClick={closeWardrobe}>Back</button>
+                            {model.hasReptile && (
+                                <button
+                                    type="button"
+                                    className="me-btn me-btn-gold"
+                                    onClick={() => setSaveOpen(true)}
+                                    disabled={!(model.lookPickedSinceLoad || model.pendingProofs > 0)}
+                                    title={model.lookPickedSinceLoad || model.pendingProofs > 0
+                                        ? 'Write the loadout and the verified stats to the reptile'
+                                        : 'Nothing new to save'}
+                                >
+                                    Save to NFT
+                                </button>
+                            )}
                         </div>
+                        {saveOpen && (
+                            <div className="wardrobe-save-wrap">
+                                <SavePanelLazy gameState={gameState} onClose={() => setSaveOpen(false)} />
+                            </div>
+                        )}
                     </div>
                 </div>
             </section>

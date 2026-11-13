@@ -29,6 +29,13 @@ const WALL_CLOCK_SLACK_MS = 5000;
  *  and the log may run 10% faster than that before it reads as too_fast. */
 const MOVE_RATE_SLACK = 0.9;
 
+/** The per-gap allowance (E72): the milliseconds between two consecutive moves
+ *  (with no `next` between them) may not fall under this share of stepMs, less
+ *  2 ms of frame jitter. The aggregate alone lets a burst of instant moves hide
+ *  inside a long run; the Stepper makes a gap this small impossible. */
+const MOVE_GAP_FACTOR = 0.8;
+const MOVE_GAP_JITTER_MS = 2;
+
 function reject(reason: "bad_token" | "mismatch" | "too_fast" | "bad_log" | "expired"): Response {
     return Response.json({ error: reason }, { status: 400 });
 }
@@ -104,6 +111,28 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (tickMs > now - token.issuedAt + WALL_CLOCK_SLACK_MS) return reject("too_fast");
     if (moves * CONFIG.stepMs * MOVE_RATE_SLACK > tickMs) return reject("too_fast");
+
+    // The same rule per gap (E72): the Stepper never hands two steps closer
+    // than CONFIG.stepMs, so the ticks between two consecutive moves must
+    // account for about that much time - unless a `next` (the level change)
+    // sits between them, which is not a step the player made. A burst of
+    // instant moves inside an otherwise slow log fails here, not in the
+    // aggregate above, which it can slip through.
+    const minGapMs = CONFIG.stepMs * MOVE_GAP_FACTOR - MOVE_GAP_JITTER_MS;
+    let gapMs = 0;
+    let sinceMove = false;
+    for (const event of log.events) {
+        if (event.kind === "tick") {
+            if (sinceMove) gapMs += event.ms;
+        } else if (event.kind === "move") {
+            if (sinceMove && gapMs < minGapMs) return reject("too_fast");
+            gapMs = 0;
+            sinceMove = true;
+        } else if (event.kind === "next") {
+            sinceMove = false;
+            gapMs = 0;
+        }
+    }
 
     // The replay is the verdict: only a log a live shell could have written,
     // ending on a dead, finished or abandoned run, earns a proof.

@@ -95,6 +95,22 @@ export function parseAddress(value: unknown): PublicKey | null {
 }
 
 /**
+ * The collection the game looks for and mints into (E72): `NFT_COLLECTION`
+ * on devnet, so a test run works against a test collection, and the real
+ * `REPTILE_COLLECTION` everywhere else - mainnet behaviour never changes, and
+ * a stray variable cannot redirect it. A devnet override that is not a base58
+ * address reads as no override. Server-side readers (lib/server/das.ts, the
+ * reptile and run/start routes) all ask this one function.
+ */
+export function collectionAddress(env: Env = process.env): string {
+    if (env.NFT_CLUSTER === 'devnet') {
+        const override = parseAddress(env.NFT_COLLECTION);
+        if (override !== null) return override.toBase58();
+    }
+    return REPTILE_COLLECTION;
+}
+
+/**
  * The routes' configuration, or null when any required variable is missing or
  * malformed (the routes then answer 503):
  *   GAME_SIGNER_KEY  the game signer secret

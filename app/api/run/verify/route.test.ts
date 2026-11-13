@@ -10,6 +10,7 @@ import { issueToken, readProof, type TokenPayload } from "@/lib/server/runToken"
 import { RecordingRun, encodeLog, type RunLog, type RunLogEvent } from "@/game/runlog";
 import { replay } from "@/game/replay";
 import { nextStep } from "@/game/bot";
+import { Stepper, type Dir } from "@/game/stepper";
 import { MODES, type ModeId } from "@/game/modes";
 import { noGear, type GearLevels } from "@/game/gear";
 
@@ -207,4 +208,107 @@ describe("refusals carry their reason code", () => {
         const huge = JSON.stringify({ token: tokenFor(log), log: encodeLog(log) }) + " ".repeat(600 * 1024);
         expect(await refuse(huge)).toBe("bad_log");
     });
+});
+
+describe("the per-gap move check (E72)", () => {
+    test("a burst of instant moves inside a slow log: too_fast", async () => {
+        // The aggregate check alone lets this through: the run stays long,
+        // only one gap between two consecutive moves collapses. Take a real
+        // bot log and drop the tick between one move pair: the two moves
+        // now sit back to back, and no `next` separates them.
+        const log = botRun(21, "descent", noGear(), 300).getLog();
+        const at = log.events.findIndex((event, i) =>
+            event.kind === "move"
+            && log.events[i + 1]?.kind === "tick"
+            && log.events[i + 2]?.kind === "move");
+        expect(at).toBeGreaterThanOrEqual(0);
+        const events = log.events.filter((_, i) => i !== at + 1);
+        const burst: RunLog = { ...log, events };
+        // The aggregate still reads as stepper-paced: it is the gap that fails.
+        const tickMs = events.reduce((sum, e) => (e.kind === "tick" ? sum + e.ms : sum), 0);
+        const moves = events.filter((e) => e.kind === "move").length;
+        expect(moves * 110 * 0.9).toBeLessThanOrEqual(tickMs);
+        const response = await post({ token: tokenFor(burst), log: encodeLog(burst) });
+        expect(response.status).toBe(400);
+        expect(((await response.json()) as { error: string }).error).toBe("too_fast");
+    });
+
+    test("a level change between two moves is not a burst", async () => {
+        // The same collapsed gap, but with the `next` between the moves: the
+        // clear panel can be dismissed instantly, so the check must not fire.
+        const log = botRun(21, "descent", noGear(), 300).getLog();
+        const at = log.events.findIndex((event, i) =>
+            event.kind === "move"
+            && log.events[i + 1]?.kind === "tick"
+            && log.events[i + 2]?.kind === "move");
+        expect(at).toBeGreaterThanOrEqual(0);
+        const events = [...log.events];
+        events.splice(at + 1, 1, { kind: "next" });
+        const withNext: RunLog = { ...log, events };
+        // Whether the replay ends is not the question here - only that the
+        // gap check does not answer too_fast for this log.
+        const response = await post({ token: tokenFor(withNext), log: encodeLog(withNext) });
+        if (response.status === 400) {
+            expect(((await response.json()) as { error: string }).error).not.toBe("too_fast");
+        }
+    });
+});
+
+describe("fifty Stepper-paced bot runs all verify", () => {
+    // The check's other side: logs recorded from real RecordingRun play, the
+    // moves handed out by a Stepper on fake times exactly as the shell's
+    // frame loop does, are never too fast - fifty seeds deep, both modes.
+    function stepperRun(seed: number, mode: ModeId, gear: GearLevels, maxSteps: number): RecordingRun {
+        const run = new RecordingRun({ seed, gear, mode: MODES[mode], feats: [], pickedUp: [] });
+        run.start();
+        const stepper = new Stepper();
+        const dirOf = (dx: number, dy: number): Dir =>
+            dx < 0 ? "left" : dx > 0 ? "right" : dy < 0 ? "up" : "down";
+        let now = 0;
+        let lastTickAt = 0;
+        for (let i = 0; i < maxSteps && run.phase !== "dead" && run.phase !== "done"; i++) {
+            if (run.phase === "clear") {
+                run.nextLevel();
+                continue;
+            }
+            const step = nextStep(run);
+            if (step === null) break;
+            // The frame loop in fake time: the key goes down, the Stepper
+            // hands the step out when its cadence allows, the run ticks for
+            // the milliseconds that passed and takes the move.
+            stepper.press(dirOf(step.dx, step.dy), now);
+            let polled = stepper.poll(now);
+            while (polled === null) {
+                now += 16;
+                polled = stepper.poll(now);
+            }
+            stepper.release(polled);
+            run.tick(now - lastTickAt);
+            lastTickAt = now;
+            if (run.phase !== "playing") continue;
+            run.move(step.dx, step.dy);
+        }
+        if (run.phase === "playing" || run.phase === "clear") run.abandon();
+        return run;
+    }
+
+    const GEARS: GearLevels[] = [
+        noGear(),
+        { boots: 2, gloves: 1, shield: 0, speed: 0, backpack: 1 },
+        { boots: 0, gloves: 0, shield: 2, speed: 1, backpack: 0 },
+    ];
+
+    for (let seed = 1; seed <= 50; seed++) {
+        test(`seed ${seed} at stepper pace earns a proof`, async () => {
+            const mode: ModeId = seed % 5 === 0 ? "sprint" : "descent";
+            const run = stepperRun(seed, mode, GEARS[seed % GEARS.length], mode === "sprint" ? 3000 : 800);
+            const log = run.getLog();
+            const tickMs = log.events.reduce((sum, e) => (e.kind === "tick" ? sum + e.ms : sum), 0);
+            const response = await post({
+                token: tokenFor(log, tickMs + 20_000),
+                log: encodeLog(log),
+            });
+            expect(response.status).toBe(200);
+        });
+    }
 });

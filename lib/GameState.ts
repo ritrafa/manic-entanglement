@@ -2,7 +2,7 @@ import { Run } from '@/game/run';
 import { RecordingRun, encodeLog, type RunLog } from '@/game/runlog';
 import type { DeathCause, GameEvent } from '@/game/events';
 import { eventMessage } from './shell';
-import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers } from '@/game/sprite';
+import { LAYER_ORDER, TRAITS, Look, frameAt, sanitizeLook, spriteLayers, type Layer } from '@/game/sprite';
 import { stageSide, viewportFor } from '@/game/layout';
 import type { BoardViewport } from '@/game/layout';
 import { clampDt } from '@/game/clock';
@@ -21,6 +21,7 @@ import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/
 import { MODIFIER_INFO } from '@/game/modifiers';
 import { evaluateFeats, featById, updateTotals } from '@/game/feats';
 import { UNLOCKS, fitLook, isUnlocked, unlockedBy, type HeldTrait } from '@/game/wardrobe';
+import { saveWithProgress, type NftLook, type NftProgress } from '@/game/nftProgress';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -80,9 +81,29 @@ export interface GameSnapshot extends HudModel {
      *  the HUD shows a small "Verified" mark beside the wallet box. */
     verified: boolean;
     /** Signed proofs waiting in the save to be saved to the NFT (E70);
-     *  the wallet box prints "N runs to save". A hint only: the save button
-     *  arrives with a later card. */
+     *  the wallet box prints "N runs to save" and the save panel (E72)
+     *  offers them to the reptile. */
     pendingProofs: number;
+    /** True while the wallet's reptile is loaded (E72): the save entry in
+     *  the wallet box and the wardrobe wakes, and its target asset is known. */
+    hasReptile: boolean;
+    /** True when the wardrobe picked a look since the reptile was loaded
+     *  (E72): "Save to NFT" may then carry the new look; loading a reptile
+     *  clears it, every wardrobe pick sets it. */
+    lookPickedSinceLoad: boolean;
+}
+
+/** The wallet's reptile as the wallet box loaded it (E72): what a save is
+ *  written to, and what the save flow compares the local look against. The
+ *  look is the on-chain one, Background included - the traits an old holder
+ *  wears (Crown, Purple, a Clothes White) stay exactly as they are. */
+export interface LoadedReptile {
+    /** The asset address, null when the DAS item carried none. */
+    asset: string | null;
+    /** The collection number as four digits, null when it carries none. */
+    number: string | null;
+    /** The on-chain look decoded from the attributes, null without a list. */
+    look: NftLook | null;
 }
 
 /** The state a verified run must begin with, as /api/run/start hands it out
@@ -303,6 +324,15 @@ class GameState {
      *  verify card (NFT-PLAN N1): the last run that died, finished or was
      *  abandoned, ready to encode and send. Nothing is sent from here. */
     public lastRunLog: RunLog | null = null;
+    /** The wallet's reptile as the wallet box loaded it (E72); null while no
+     *  reptile stands loaded. The save panel writes to this asset. */
+    private reptile: LoadedReptile | null = null;
+    /** True once the wardrobe picked a look since the last reptile load (E72). */
+    private lookPickedSinceLoad: boolean = false;
+    /** The traits the wardrobe picked since the last reptile load, per layer
+     *  (E72): only these layers ride a save - the rest keep their on-chain
+     *  value, so fitLook can never strip a trait the player did not touch. */
+    private lookPicks: Partial<Record<Layer, string>> = {};
     /** The connected wallet's address, set by components/WalletBox.tsx; null
      *  while no wallet is connected (E70). Only a connected run asks the
      *  server for its seed. */
@@ -350,7 +380,7 @@ class GameState {
         // The look lives in the save; a fresh one is the default sprite, and a
         // saved look never wears a trait the earned feats do not unlock.
         this.look = fitLook(sanitizeLook(this.save.look), this.save.feats, this.save.pickedUp);
-        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null, verified: false, pendingProofs: this.save.pendingProofs.length };
+        this.hudSnapshot = { ...hudModel(this.run, this.hudBest()), screen: this.screen, summary: null, best: this.highScore, howtoFromPlay: false, settings: this.settings, announcement: null, tools: { ...this.run.tools }, anchored: this.run.anchored, armed: null, carried: countGear(this.run.carried), mode: this.modeId, modeName: this.modeRules.name, modeBlurb: this.modeRules.blurb, modeBestText: this.modeBestText(), finished: false, feats: [...this.save.feats], look: { ...this.look }, pickedUp: [...this.save.pickedUp], newTraits: [], heldTrait: null, verified: false, pendingProofs: this.save.pendingProofs.length, hasReptile: false, lookPickedSinceLoad: false };
         // The saved settings apply before anything could play; the sound box
         // itself stays silent until the player's first gesture unlocks it.
         this.settings = sanitizeSettings(this.save.settings);
@@ -433,7 +463,15 @@ class GameState {
      * in the save, and the sprite is redrawn at once.
      */
     setWardrobeLook(look: unknown): void {
-        this.look = fitLook(sanitizeLook(look), this.save.feats, this.save.pickedUp);
+        const fitted = fitLook(sanitizeLook(look), this.save.feats, this.save.pickedUp);
+        // E72: a pick that actually lands is remembered per layer, so a save
+        // sends only what the player chose. A pick fitLook quietly refuses
+        // (a trait the feats do not unlock) changes nothing and is not a pick.
+        for (const layer of LAYER_ORDER) {
+            if (fitted[layer] !== this.look[layer]) this.lookPicks[layer] = fitted[layer];
+        }
+        if (Object.keys(this.lookPicks).length > 0) this.lookPickedSinceLoad = true;
+        this.look = fitted;
         this.save = { ...this.save, look: { ...this.look } };
         writeSave(this.storage, this.save);
         this.preloadLook();
@@ -1040,6 +1078,11 @@ class GameState {
         this.run.banked = noGear();
         this.run.carried = noGear();
         this.runBanked = 0;
+        // E72: wiping the bank mid-run makes the run's story a lie - its
+        // replay would still credit the gear. The run stops being verified:
+        // its token is dropped, so no proof is asked at the end, and the
+        // HUD's Verified mark goes with it.
+        this.activeToken = null;
         this.publishHud();
     }
 
@@ -1184,6 +1227,72 @@ class GameState {
     setWallet(address: string | null): void {
         const clean = typeof address === 'string' && BASE58_WALLET.test(address) ? address : null;
         this.wallet = clean;
+    }
+
+    /**
+     * The wallet box reports the reptile it loaded (E72), or null when the
+     *  wallet holds none or the box closed. Loading a reptile is the moment
+     *  the save flow measures "since load" from: the wardrobe's picks and
+     *  the save entry both reset with it.
+     */
+    setReptile(reptile: LoadedReptile | null): void {
+        this.reptile = reptile;
+        this.lookPickedSinceLoad = false;
+        this.lookPicks = {};
+        this.publishHud();
+    }
+
+    /** The loaded reptile (E72), or null. The save panel writes to its asset. */
+    getReptile(): LoadedReptile | null {
+        return this.reptile;
+    }
+
+    /** The signed proofs waiting in the save (E70), as a fresh array: the
+     *  mint panel and the save panel read them, the wallet filter is
+     *  lib/nft/proofPeek.ts's job. */
+    getPendingProofs(): string[] {
+        return [...this.save.pendingProofs];
+    }
+
+    /** Drop the proofs a confirmed save carried to the NFT (E72): they are
+     *  spent, and the "N runs to save" hint counts what is left. */
+    removePendingProofs(sent: readonly string[]): void {
+        const spent = new Set(sent);
+        const kept = this.save.pendingProofs.filter((proof) => !spent.has(proof));
+        if (kept.length === this.save.pendingProofs.length) return;
+        this.save = { ...this.save, pendingProofs: kept };
+        writeSave(this.storage, this.save);
+        this.publishHud();
+    }
+
+    /** The traits the wardrobe picked since the reptile loaded (E72), per
+     *  layer: exactly what a save may write over the on-chain look. */
+    getLookPicks(): Partial<Record<Layer, string>> {
+        return { ...this.lookPicks };
+    }
+
+    /**
+     * Loading the wallet's reptile restores what it carries (Q24, E72): the
+     *  decoded on-chain progress merges into the local save with
+     *  saveWithProgress - bests and totals take the better value, feats,
+     *  held traits and gear the union - and the merged save is written at
+     *  once. When the merge actually changed something the board's toast
+     *  says "Progress restored" once and the HUD's announcement follows; a
+     *  reptile that carries nothing new stays quiet. Answers whether the
+     *  save changed, so the wallet box can wear the status line too.
+     */
+    restoreReptileProgress(progress: NftProgress): boolean {
+        const merged = saveWithProgress(this.save, progress);
+        const changed = JSON.stringify(merged) !== JSON.stringify(this.save);
+        this.save = merged;
+        writeSave(this.storage, this.save);
+        this.highScore = this.save.best[this.modeId] ?? 0;
+        if (changed) {
+            this.board.banner('Progress restored.', 'Your reptile carried it on chain.', TRAIT_TOAST_MS);
+            this.hudSnapshot = { ...this.hudSnapshot, announcement: 'Progress restored.' };
+        }
+        this.publishHud();
+        return changed;
     }
 
     /**
@@ -1391,6 +1500,8 @@ class GameState {
             heldTrait: this.run.heldTrait === null ? null : { ...this.run.heldTrait },
             verified: this.activeToken !== null,
             pendingProofs: this.save.pendingProofs.length,
+            hasReptile: this.reptile !== null,
+            lookPickedSinceLoad: this.lookPickedSinceLoad,
         };
         if (sameHudModel(this.hudSnapshot, next)
             && this.hudSnapshot.screen === next.screen
@@ -1413,7 +1524,9 @@ class GameState {
             && samePickups(this.hudSnapshot.pickedUp, next.pickedUp)
             && sameHeldTrait(this.hudSnapshot.heldTrait, next.heldTrait)
             && this.hudSnapshot.verified === next.verified
-            && this.hudSnapshot.pendingProofs === next.pendingProofs) {
+            && this.hudSnapshot.pendingProofs === next.pendingProofs
+            && this.hudSnapshot.hasReptile === next.hasReptile
+            && this.hudSnapshot.lookPickedSinceLoad === next.lookPickedSinceLoad) {
             return;
         }
         this.hudSnapshot = next;
