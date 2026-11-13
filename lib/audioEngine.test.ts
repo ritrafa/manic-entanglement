@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AudioEngine, type AudioContextLike, type AudioParamLike, type GainNodeLike, type OscillatorLike } from "./audioEngine";
+import { AudioEngine, type AudioBufferLike, type AudioBufferSourceLike, type AudioContextLike, type AudioParamLike, type BiquadFilterLike, type GainNodeLike, type OscillatorLike } from "./audioEngine";
 import type { Voice } from "@/game/audio/voice";
 
 /** A param that records every scheduled write. */
@@ -49,17 +49,80 @@ class FakeGain implements GainNodeLike {
     }
 }
 
+class FakeBuffer implements AudioBufferLike {
+    data: Float32Array;
+
+    constructor(channels: number, length: number) {
+        this.data = new Float32Array(channels * length);
+    }
+
+    getChannelData(_channel: number): Float32Array {
+        return this.data;
+    }
+}
+
+class FakeBufferSource implements AudioBufferSourceLike {
+    buffer: AudioBufferLike | null = null;
+    started: number | null = null;
+    stopped: number | null = null;
+    connectedTo: unknown = null;
+
+    connect(destination: unknown): void {
+        this.connectedTo = destination;
+    }
+
+    start(when: number): void {
+        this.started = when;
+    }
+
+    stop(when: number): void {
+        this.stopped = when;
+    }
+}
+
+class FakeFilter implements BiquadFilterLike {
+    type = "lowpass";
+    frequency = new FakeParam();
+    connectedTo: unknown = null;
+
+    connect(destination: unknown): void {
+        this.connectedTo = destination;
+    }
+}
+
 /** An engine plus every node its fake context made. */
 function harness(options: { throws?: boolean; currentTime?: number } = {}) {
     const oscillators: FakeOscillator[] = [];
     const gains: FakeGain[] = [];
+    const sources: FakeBufferSource[] = [];
+    const buffers: FakeBuffer[] = [];
+    const filters: FakeFilter[] = [];
     const destination = { name: "destination" };
     let resumes = 0;
     const context: AudioContextLike = {
         currentTime: options.currentTime ?? 1.5,
+        sampleRate: 44100,
         destination,
         resume(): void {
             resumes++;
+        },
+        createBufferSource(): AudioBufferSourceLike {
+            if (options.throws) throw new Error("no WebAudio");
+            const source = new FakeBufferSource();
+            sources.push(source);
+            return source;
+        },
+        createBuffer(channels: number, length: number): AudioBufferLike {
+            if (options.throws) throw new Error("no WebAudio");
+            const buffer = new FakeBuffer(channels, length);
+            buffers.push(buffer);
+            return buffer;
+        },
+        createBiquadFilter(): BiquadFilterLike {
+            if (options.throws) throw new Error("no WebAudio");
+            const filter = new FakeFilter();
+            filters.push(filter);
+            return filter;
         },
         createOscillator(): OscillatorLike {
             if (options.throws) throw new Error("no WebAudio");
@@ -78,7 +141,7 @@ function harness(options: { throws?: boolean; currentTime?: number } = {}) {
         if (options.throws) throw new Error("no AudioContext here");
         return context;
     });
-    return { engine, oscillators, gains, destination, resumes: () => resumes };
+    return { engine, oscillators, gains, sources, buffers, filters, destination, resumes: () => resumes };
 }
 
 const THREE_VOICES: Voice[] = [
@@ -227,6 +290,7 @@ describe("AudioEngine after unlock", () => {
         let calls = 0;
         const context: AudioContextLike = {
             currentTime: 0,
+            sampleRate: 44100,
             destination: {},
             resume(): void {},
             createOscillator(): OscillatorLike {
@@ -239,11 +303,112 @@ describe("AudioEngine after unlock", () => {
             createGain(): GainNodeLike {
                 return new FakeGain();
             },
+            createBufferSource(): AudioBufferSourceLike {
+                return new FakeBufferSource();
+            },
+            createBuffer(channels: number, length: number): AudioBufferLike {
+                return new FakeBuffer(channels, length);
+            },
+            createBiquadFilter(): BiquadFilterLike {
+                return new FakeFilter();
+            },
         };
         const engine = new AudioEngine(() => context);
         engine.unlock();
         expect(() => engine.play(THREE_VOICES, "sfx")).not.toThrow();
         expect(made).toHaveLength(2);
+    });
+});
+
+const NOISE_VOICES: Voice[] = [
+    { wave: "noise", freq: 1800, at: 0, dur: 0.12, gain: 0.2, decay: true, filter: { type: "bandpass", freq: 1800 } },
+    { wave: "noise", freq: 8000, at: 0.05, dur: 0.03, gain: 0.05, filter: { type: "highpass", freq: 7200 } },
+];
+
+describe("AudioEngine noise voices", () => {
+    it("a noise voice plays a buffer source, not an oscillator, and the buffer is made once", () => {
+        const { engine, oscillators, sources, buffers } = harness();
+        engine.unlock();
+        engine.play(NOISE_VOICES, "music");
+        expect(oscillators).toHaveLength(0);
+        expect(sources).toHaveLength(2);
+        expect(buffers).toHaveLength(1); // one shared noise buffer for the context
+        expect(sources[0].buffer).toBe(buffers[0]);
+        expect(sources[1].buffer).toBe(buffers[0]);
+        expect(sources[0].started).not.toBeNull();
+        expect((sources[0].stopped as number) > (sources[0].started as number)).toBe(true);
+        expect(sources[1].started).toBeCloseTo((sources[0].started as number) + 0.05, 6);
+    });
+
+    it("the shared noise buffer is filled with finite samples between -1 and 1", () => {
+        const { engine, buffers } = harness();
+        engine.unlock();
+        engine.play([NOISE_VOICES[0]], "music");
+        const data = buffers[0].getChannelData(0);
+        expect(data.length).toBeGreaterThan(0);
+        for (const sample of data) {
+            expect(Number.isFinite(sample)).toBe(true);
+            expect(Math.abs(sample)).toBeLessThanOrEqual(1);
+        }
+    });
+
+    it("a noise voice ignores its frequency, even a broken one", () => {
+        const { engine, sources } = harness();
+        engine.unlock();
+        engine.play([{ wave: "noise", freq: Number.NaN, at: 0, dur: 0.1, gain: 0.2 }], "music");
+        engine.play([{ wave: "noise", freq: 0, at: 0, dur: 0.1, gain: 0.2 }], "music");
+        expect(sources).toHaveLength(2);
+    });
+
+    it("a filtered voice is put through a biquad between source and envelope", () => {
+        const { engine, sources, filters, gains } = harness();
+        engine.unlock();
+        engine.play(NOISE_VOICES, "music");
+        expect(filters).toHaveLength(2);
+        expect(filters[0].type).toBe("bandpass");
+        expect(filters[0].frequency.events.some((e) => e.startsWith("set 1800"))).toBe(true);
+        expect(filters[1].type).toBe("highpass");
+        expect(sources[0].connectedTo).toBe(filters[0]);
+        expect(filters[0].connectedTo).toBeInstanceOf(FakeGain);
+        // The envelope is the gain node the filter hands on.
+        const envelope = filters[0].connectedTo as FakeGain;
+        expect(gains).toContain(envelope);
+        expect(envelope.connectedTo).toBe(gains[1]); // the music bus
+    });
+
+    it("an oscillator voice can be filtered too", () => {
+        const { engine, oscillators, filters } = harness();
+        engine.unlock();
+        engine.play([{ wave: "sawtooth", freq: 110, at: 0, dur: 0.2, gain: 0.1, filter: { type: "lowpass", freq: 600 } }], "music");
+        expect(oscillators).toHaveLength(1);
+        expect(filters).toHaveLength(1);
+        expect(oscillators[0].connectedTo).toBe(filters[0]);
+    });
+
+    it("a filter without a usable frequency is skipped and the source connects straight on", () => {
+        const { engine, sources, filters } = harness();
+        engine.unlock();
+        engine.play([{ wave: "noise", freq: 1, at: 0, dur: 0.1, gain: 0.2, filter: { type: "bandpass", freq: Number.NaN } }], "music");
+        expect(filters).toHaveLength(0);
+        expect(sources[0].connectedTo).toBeInstanceOf(FakeGain);
+    });
+
+    it("a decay voice falls exponentially from the peak to near zero instead of holding flat", () => {
+        const { engine, gains } = harness();
+        engine.unlock();
+        engine.play(
+            [
+                { wave: "noise", freq: 1800, at: 0, dur: 0.1, gain: 0.2, decay: true },
+                { wave: "sine", freq: 440, at: 0, dur: 0.1, gain: 0.2 },
+            ],
+            "music",
+            0,
+        );
+        const [decayed, flat] = [gains[gains.length - 2].gain, gains[gains.length - 1].gain];
+        expect(decayed.events.some((e) => /^exp [0-9.]+@0\.100$/.test(e) && Number(e.slice(4, e.indexOf("@"))) < 0.001)).toBe(true);
+        expect(decayed.events.every((e) => !e.startsWith("lin 0@"))).toBe(true); // no flat release
+        expect(flat.events.some((e) => e.startsWith("set 0.2@"))).toBe(true);
+        expect(flat.events[flat.events.length - 1]).toMatch(/^lin 0@/);
     });
 });
 

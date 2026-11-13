@@ -960,3 +960,30 @@
   (left 352, top 16) and 576 wide (top 600) — and since `--stage-size` is written
   only on load and on resize, those boxes are the same strings on the title,
   during the countdown, at level 1 and at level 3, equal to the pixel.
+
+- E66: new generated music in the spirit of the old drum loops, replacing the
+  pentatonic arpeggio. `game/audio/voice.ts` adds the `noise` wave (white noise
+  from one shared buffer, `freq` ignored), an optional `filter`
+  (`highpass`/`bandpass`/`lowpass` + freq) and a `decay` flag to `Voice`.
+  `lib/audioEngine.ts` plays a noise voice through an `AudioBufferSourceNode`
+  reading a one-second white-noise `AudioBuffer` made once per context, routes
+  any voice through a `BiquadFilterNode` when it asks for one, and gives a
+  decay voice an exponential fall from its peak to near zero instead of the
+  flat hold; the fake context in `lib/audioEngine.test.ts` grew the matching
+  sources, buffers and filters and new tests cover all three. `game/audio/
+  music.ts` is rewritten over a 128-step form — eight bars of sixteen
+  sixteenths in A minor, one chord to a bar (Am F C G Am F Dm E): kick (sine
+  150 Hz gliding to 45) on steps 0 and 8 plus step 10 in even bars, bandpassed
+  noise snare with a triangle body on 4 and 12, highpassed hats on every
+  second step and an open hat on step 14 of odd bars, a sawtooth bass driving
+  eighths under a lowpass with every second eighth an octave up, a quiet
+  triangle pad holding each chord, and a composed square tune (a note table:
+  chord tones on strong beats, a rising phrase in bars 1-4 answered by a
+  falling one in bars 5-8). Depth layers it in — 1 kick/hats/bass, 2 snare,
+  3 pad, 4 tune, 7 the tune doubled an octave up plus the sixteenth-note snare
+  fill every four bars — and under 25% energy the tune and pad leave while a
+  short high pulse marks every fourth step; `tempoFor`, the `Sequencer` and
+  the exported names are untouched, so `lib/GameState.ts` drives it unchanged.
+  `game/audio/music.test.ts` tests determinism, the bounds at every depth 1-12
+  and energy, the kick on step 0 of every bar, the snare from depth 2 only,
+  the tune from depth 4 only, no tune below 25% energy and the 128-step loop.
