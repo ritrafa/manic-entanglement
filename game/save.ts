@@ -236,6 +236,34 @@ export function resetProgress(save: SaveData): SaveData {
 }
 
 /**
+ * The save a linked wallet starts from (E76): every best, the gear bank, the
+ * lifetime totals, the feats and the held maze pickups cleared - the local,
+ * unverified progress gives way to what the wallet can prove (its reptile's
+ * on-chain progress and its signed runs not yet saved). Settings, the look,
+ * the seen messages and the pending proofs stay.
+ */
+export function walletStartSave(save: SaveData): SaveData {
+    return { ...resetProgress(save), pickedUp: [] };
+}
+
+/** Where the local progress is copied, once, before the first wallet link
+ *  clears it (E76). Nothing reads it back: it is a safety copy only. */
+export const LOCAL_BACKUP_KEY = "manic-entanglement.local-backup";
+
+/** Copy the save to LOCAL_BACKUP_KEY unless a copy is already there. True
+ *  when a copy was written; false (never a throw) otherwise. */
+export function backupLocalOnce(storage: StorageLike, data: SaveData): boolean {
+    if (storage === null) return false;
+    try {
+        if (storage.getItem(LOCAL_BACKUP_KEY) !== null) return false;
+        storage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(data));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Write the save to a storage. Returns true on success, and false — never a
  * throw — when storage is null, setItem throws (private browsing, blocked site
  * data, a full quota) or the data cannot be serialised.

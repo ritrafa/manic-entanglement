@@ -362,3 +362,68 @@ describe('Settings can switch wallet and verification off', () => {
         }
     });
 });
+
+// --- E76: a linked wallet starts from what it can prove --------------------
+
+function proofFor(wallet: string, over: Record<string, unknown> = {}): string {
+    const b64 = (text: string) => Buffer.from(text, 'utf8').toString('base64')
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const body = {
+        wallet, issuedAt: Date.now() - 60_000, mode: 'descent',
+        tally: { depth: 9 }, score: 420, pickedUp: [{ layer: 'Back', trait: 'Wings' }], gear: {},
+        ...over,
+    };
+    return `${b64(JSON.stringify(body))}.${b64('mac')}`;
+}
+
+const OTHER_WALLET = '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM';
+
+describe('linking a wallet clears the local stats (E76)', () => {
+    test("local progress gives way to the wallet's unsaved runs; a copy is kept once", () => {
+        vi.stubGlobal('fetch', (async () => new Response(null, { status: 204 })) as unknown as typeof fetch);
+        const gs = new GameState();
+        const mine = proofFor(WALLET);
+        const theirs = proofFor(OTHER_WALLET, { score: 9000 });
+        writeField(gs, 'save', {
+            ...readField<SaveData>(gs, 'save'),
+            best: { descent: 5000 },
+            totals: { kills: 77 },
+            gear: { ...noGear(), gloves: 3 },
+            pickedUp: [{ layer: 'Head', trait: 'Crown' }],
+            pendingProofs: [mine, theirs],
+        });
+
+        gs.setWallet(WALLET);
+
+        const saved = storedSave();
+        expect(saved.best.descent).toBe(420);               // only this wallet's run counts
+        expect(saved.totals.kills ?? 0).toBe(0);
+        expect(saved.gear.gloves).toBe(0);
+        expect(saved.pickedUp).toEqual([{ layer: 'Back', trait: 'Wings' }]);
+        expect(saved.pendingProofs).toEqual([mine, theirs]); // nothing signed is lost
+        expect(gs.getSnapshot().best).toBe(420);
+
+        const backup = JSON.parse(storage.dump()['manic-entanglement.local-backup']) as SaveData;
+        expect(backup.best.descent).toBe(5000);
+
+        // The same wallet again (the box re-reporting it) clears nothing more.
+        writeField(gs, 'save', { ...readField<SaveData>(gs, 'save'), best: { descent: 700 } });
+        gs.setWallet(null);
+        gs.setWallet(WALLET);
+        expect(readField<SaveData>(gs, 'save').best.descent).toBe(700);
+
+        // Another wallet clears again; the first copy is never overwritten.
+        gs.setWallet(OTHER_WALLET);
+        expect(storedSave().best.descent).toBe(9000);
+        expect((JSON.parse(storage.dump()['manic-entanglement.local-backup']) as SaveData).best.descent).toBe(5000);
+    });
+
+    test('with wallet and verification off in Settings, a link clears nothing', () => {
+        const gs = new GameState();
+        gs.setSetting('wallet', false);
+        writeField(gs, 'save', { ...readField<SaveData>(gs, 'save'), best: { descent: 5000 } });
+        gs.setWallet(WALLET);
+        expect(readField<SaveData>(gs, 'save').best.descent).toBe(5000);
+        expect(storage.dump()['manic-entanglement.local-backup']).toBeUndefined();
+    });
+});

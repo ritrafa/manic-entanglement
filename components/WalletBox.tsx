@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { loadReptile } from '@/lib/reptile';
-import { pfpLayers, type Look } from '@/game/sprite';
+import { loadReptile, numberFromName } from '@/lib/reptile';
+import { pfpLayers, sanitizeLook, type Look } from '@/game/sprite';
+import { decodeAttributes } from '@/game/nftProgress';
 import GameState from '@/lib/GameState';
 import { peekProof } from '@/lib/nft/proofPeek';
-import MintPanel from './MintPanel';
+import MintPanel, { type MintedReptile } from './MintPanel';
 import { SavePanel } from './SavePanel';
 import WalletContextProvider from './WalletContextProvider';
 import NftModal from './NftModal';
@@ -114,6 +115,34 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
         setStatus(result.status);
     }, [publicKey, gameState]);
 
+    // A wallet that connects is looked up at once (E76): the shell has just
+    // cleared the local stats, and the reptile's progress fills them back.
+    const checkedFor = useRef<string | null>(null);
+    useEffect(() => {
+        const address = publicKey ? publicKey.toBase58() : null;
+        if (address === null) {
+            checkedFor.current = null;
+            return;
+        }
+        if (checkedFor.current === address) return;
+        checkedFor.current = address;
+        void handleCheckAssets();
+    }, [publicKey, handleCheckAssets]);
+
+    // A confirmed mint (E76): the new reptile shows straight from the quote
+    // the wallet signed - the wallet's asset list takes a while to list a
+    // new mint, and asking it now would answer "none" and offer Mint again.
+    const handleMinted = useCallback((minted: MintedReptile) => {
+        const progress = decodeAttributes(minted.attributes);
+        const number = numberFromName(minted.name);
+        const look = sanitizeLook(progress.look);
+        gameState.setLook(look);
+        setReptile({ look, number });
+        gameState.setReptile({ asset: minted.asset, number, look: progress.look });
+        setRestored(gameState.restoreReptileProgress(progress));
+        setStatus('found');
+    }, [gameState]);
+
     const handleDisconnect = useCallback(() => {
         setStatus('idle');
         setReptile(null);
@@ -206,7 +235,7 @@ const WalletBoxContent: React.FC<WalletBoxProps> = ({ gameState }) => {
                             gameState={gameState}
                             wallet={address}
                             onClose={() => setMintOpen(false)}
-                            onMinted={() => void handleCheckAssets()}
+                            onMinted={handleMinted}
                         />
                     </NftModal>
                 )}

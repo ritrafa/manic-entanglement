@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from "vitest";
 
-import { bestVerifiedDepth, MINT_GOAL_DEPTH, peekProof } from "./proofPeek";
+import { bestVerifiedDepth, MINT_GOAL_DEPTH, peekProof, peekRun } from "./proofPeek";
 
 const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 const OTHER = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
@@ -110,5 +110,14 @@ describe("bestVerifiedDepth", () => {
 
     test("the mint goal is depth 8", () => {
         expect(MINT_GOAL_DEPTH).toBe(8);
+    });
+});
+
+describe("peekRun (E76)", () => {
+    test("the whole body of a proof issued to the wallet, null for anyone else's or a non-proof", () => {
+        expect(peekRun(proofText(body()), WALLET)).toEqual(body());
+        expect(peekRun(proofText(body()), OTHER)).toBeNull();
+        expect(peekRun(proofText({ wallet: WALLET }), WALLET)).toBeNull();
+        expect(peekRun("not a proof", WALLET)).toBeNull();
     });
 });

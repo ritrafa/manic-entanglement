@@ -12,7 +12,7 @@ import { ENEMY_KINDS } from '@/game/enemies';
 import { FxLimiter, fxFor, hapticFor, lowEnergy, type Motion } from '@/game/fx';
 import { Dir, Stepper } from '@/game/stepper';
 import { Board } from './board';
-import { addPendingProof, defaultSave, loadSave, resetProgress, seedSeenOnce, writeSave, type SaveData, type StorageLike } from '@/game/save';
+import { addPendingProof, backupLocalOnce, defaultSave, loadSave, resetProgress, seedSeenOnce, walletStartSave, writeSave, type SaveData, type StorageLike } from '@/game/save';
 import { GEAR_IDS, countGear, noGear, sanitizeGear, type GearLevels } from '@/game/gear';
 import { hudModel, isNewBest, sameHudModel, type HudModel } from '@/game/hud';
 import { formatTenths, nextScreen, sameSummary, summaryLines, type Screen, type ScreenAction, type SummaryLine } from '@/game/screens';
@@ -21,7 +21,8 @@ import { announcement, resolveMotion, sanitizeSettings, type Settings } from '@/
 import { MODIFIER_INFO } from '@/game/modifiers';
 import { evaluateFeats, featById, updateTotals } from '@/game/feats';
 import { UNLOCKS, fitLook, isUnlocked, unlockedBy, type HeldTrait } from '@/game/wardrobe';
-import { saveWithProgress, type NftLook, type NftProgress } from '@/game/nftProgress';
+import { decodeAttributes, mergeProgress, saveWithProgress, type NftLook, type NftProgress } from '@/game/nftProgress';
+import { peekRun } from '@/lib/nft/proofPeek';
 import { TOOL_IDS, type ToolId } from '@/game/tools';
 import { Sequencer } from '@/game/audio/music';
 import { AudioEngine } from './audioEngine';
@@ -365,6 +366,9 @@ class GameState {
      *  while no wallet is connected (E70). Only a connected run asks the
      *  server for its seed. */
     private wallet: string | null = null;
+    /** The wallet the save was last rebuilt for (E76): linking another (or
+     *  the first, after a reload) clears the local progress again. */
+    private profileWallet: string | null = null;
     /** The server start awaited by the running countdown, applied by the
      *  beginRun it belongs to; null for a local run (E70). */
     private pendingServer: ServerStart | null = null;
@@ -1279,11 +1283,41 @@ class GameState {
     setWallet(address: string | null): void {
         const clean = typeof address === 'string' && BASE58_WALLET.test(address) ? address : null;
         this.wallet = clean;
+        if (clean !== null && this.settings.wallet && clean !== this.profileWallet) {
+            this.enterWalletProfile(clean);
+        }
         if (clean !== null && clean !== this.warmedFor && this.settings.wallet) {
             this.warmedFor = clean;
             this.warmRunStart();
         }
         this.publishHud();
+    }
+
+    /**
+     * A wallet linked (E76): the local stats clear, so what the player sees
+     * is only what this wallet can prove - the progress of its signed runs
+     * not yet saved now, and its reptile's on-chain progress when the wallet
+     * box loads it (restoreReptileProgress). The first time ever, the local
+     * save is copied aside (game/save.ts LOCAL_BACKUP_KEY). A run already
+     * under way stops counting, as with Reset progress.
+     */
+    private enterWalletProfile(wallet: string): void {
+        this.profileWallet = wallet;
+        backupLocalOnce(this.storage, this.save);
+        const runs = this.save.pendingProofs
+            .map((proof) => peekRun(proof, wallet))
+            .filter((run): run is Record<string, unknown> => run !== null);
+        const { progress } = mergeProgress(decodeAttributes([]), runs);
+        this.save = saveWithProgress(walletStartSave(this.save), progress);
+        this.look = fitLook(this.look, this.save.feats, this.save.pickedUp);
+        this.save = { ...this.save, look: { ...this.look } };
+        writeSave(this.storage, this.save);
+        this.highScore = this.save.best[this.modeId] ?? 0;
+        this.bestBeforeRun = this.highScore;
+        this.run.banked = this.gearForMode();
+        this.run.carried = noGear();
+        this.runBanked = 0;
+        this.activeToken = null;
     }
 
     /**

@@ -144,11 +144,18 @@ const Hud: React.FC<HudProps> = ({ gameState }) => {
                     Verified
                 </span>
             )}
-            {/* A wallet is connected but the server did not answer in time:
-                this run plays on, but says plainly that it will not count. */}
-            {!model.verified && model.walletLinked && playing && (
-                <span className="me-verified is-off" role="status" title="The server did not answer in time: this run will not count. Start a new run to try again.">
-                    Not verified
+            {/* Every run that is not verified says so for as long as it
+                lasts (E76), in the Verified mark's place: its progress will
+                not reach a reptile. Hidden when Settings turned the wallet off. */}
+            {!model.verified && hasWallet && (playing || model.screen === 'paused') && (
+                <span
+                    className="me-verified is-off"
+                    role="status"
+                    title={model.walletLinked
+                        ? 'This run is not verified: its progress will not be saved to your reptile.'
+                        : 'No wallet connected: this run will not be saved. Connect a wallet before a run to save it.'}
+                >
+                    Not saved
                 </span>
             )}
         </div>

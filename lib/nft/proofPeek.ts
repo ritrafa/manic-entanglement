@@ -56,18 +56,8 @@ function decodeBase64UrlSegment(part: string): string | null {
  * server-side read (readProof) decides.
  */
 export function peekProof(text: unknown): ProofPeek | null {
-    if (typeof text !== "string") return null;
-    const parts = text.split(".");
-    if (parts.length !== 2) return null;
-    const json = decodeBase64UrlSegment(parts[0]);
-    if (json === null) return null;
-    let payload: unknown;
-    try {
-        payload = JSON.parse(json);
-    } catch {
-        return null;
-    }
-    if (!isRecord(payload)) return null;
+    const payload = proofBody(text);
+    if (payload === null) return null;
     const { wallet, issuedAt, mode, tally } = payload;
     if (typeof wallet !== "string" || !BASE58_WALLET.test(wallet)) return null;
     if (typeof issuedAt !== "number" || !Number.isFinite(issuedAt)) return null;
@@ -76,6 +66,33 @@ export function peekProof(text: unknown): ProofPeek | null {
     const depth = tally.depth;
     if (typeof depth !== "number" || !Number.isFinite(depth)) return null;
     return { issuedAt, mode: mode as ModeId, depth, wallet };
+}
+
+/** The JSON body of a proof text, unchecked; null when it is not one. */
+function proofBody(text: unknown): Record<string, unknown> | null {
+    if (typeof text !== "string") return null;
+    const parts = text.split(".");
+    if (parts.length !== 2) return null;
+    const json = decodeBase64UrlSegment(parts[0]);
+    if (json === null) return null;
+    try {
+        const payload: unknown = JSON.parse(json);
+        return isRecord(payload) ? payload : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The whole body of one proof (E76), unchecked, when peekProof reads it as a
+ * proof issued to `wallet`: the run mergeProgress folds. The shell uses it
+ * only to show a linked wallet the progress its unsaved runs carry; what
+ * reaches the chain is still decided by the server's signed read.
+ */
+export function peekRun(text: unknown, wallet: string): Record<string, unknown> | null {
+    const peek = peekProof(text);
+    if (peek === null || peek.wallet !== wallet) return null;
+    return proofBody(text);
 }
 
 /**

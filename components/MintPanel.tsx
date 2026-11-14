@@ -20,13 +20,22 @@ import { bestVerifiedDepth, MINT_GOAL_DEPTH, peekProof } from '@/lib/nft/proofPe
 import { FREE_TRAITS } from '@/game/wardrobe';
 import { DEFAULT_LOOK, LAYER_ORDER, TRAITS, frameAt, pfpLayers, spriteLayers, type Layer, type Look } from '@/game/sprite';
 
+/** What a confirmed mint hands the wallet box (E76): the new asset as the
+ *  quote described it, so the box shows it at once - the wallet's asset
+ *  list lags a new mint by a while. */
+export interface MintedReptile {
+    asset: string;
+    name: string;
+    attributes: { key: string; value: string }[];
+}
+
 interface MintPanelProps {
     gameState: GameState;
     /** The connected wallet's address (base58). */
     wallet: string;
     onClose: () => void;
-    /** Called after a confirmed mint so the box reloads the reptile. */
-    onMinted: () => void;
+    /** Called after a confirmed mint with the new reptile. */
+    onMinted: (minted: MintedReptile) => void;
 }
 
 /** A quote older than this is refreshed before the mint (the server's own
@@ -146,15 +155,20 @@ const MintPanel: React.FC<MintPanelProps> = ({ gameState, wallet, onClose, onMin
     const lookRef = useRef(look);
     useEffect(() => { lookRef.current = look; }, [look]);
     const requestedRef = useRef(false);
+    // The proofs the current quote was asked about: a confirmed mint folded
+    // them all into the new reptile, so they leave the save.
+    const sentRef = useRef<string[]>([]);
     useEffect(() => {
         if (!unlocked || requestedRef.current) return;
         requestedRef.current = true;
         let cancelled = false;
         void (async () => {
             try {
+                const sent = proofsForWallet();
                 const prepared = await requestMint({
-                    wallet, proofs: proofsForWallet(), look: mintChoice(lookRef.current),
+                    wallet, proofs: sent, look: mintChoice(lookRef.current),
                 });
+                sentRef.current = sent;
                 if (!cancelled) { setQuote(prepared); setQuoteAt(Date.now()); }
             } catch {
                 // The terms line then reads without a number, and Mint will
@@ -174,7 +188,9 @@ const MintPanel: React.FC<MintPanelProps> = ({ gameState, wallet, onClose, onMin
         try {
             let current = quote;
             if (current === null || Date.now() - quoteAt > QUOTE_MAX_AGE_MS) {
-                current = await requestMint({ wallet, proofs: proofsForWallet(), look: mintChoice(look) });
+                const sent = proofsForWallet();
+                current = await requestMint({ wallet, proofs: sent, look: mintChoice(look) });
+                sentRef.current = sent;
                 setQuote(current);
                 setQuoteAt(Date.now());
                 setQuoteFailed(false);
@@ -182,17 +198,21 @@ const MintPanel: React.FC<MintPanelProps> = ({ gameState, wallet, onClose, onMin
             setPhase('minting');
             await signAndSend(current, { publicKey, signTransaction }, connection);
             setPhase('minted');
-            // The reptile is real now: the box reloads it behind the panel.
-            onMinted();
+            // The reptile is real now: its proofs are spent, and the box
+            // shows it behind the panel straight from the quote.
+            gameState.removePendingProofs(sentRef.current);
+            if (current.summary.kind === 'mint') {
+                onMinted({ asset: current.asset, name: current.summary.name, attributes: current.summary.attributes });
+            }
         } catch (error) {
             setReason(mintReason(error, sol));
             setPhase('failed');
         }
-    }, [publicKey, signTransaction, connection, quote, quoteAt, wallet, proofsForWallet, look, onMinted, sol]);
+    }, [publicKey, signTransaction, connection, quote, quoteAt, wallet, proofsForWallet, look, onMinted, sol, gameState]);
 
     const terms = `One reptile per wallet. Minting costs about ${sol} SOL, most of it a deposit you get back if the reptile is ever burned.`;
 
-    if (!unlocked) {
+    if (!unlocked && phase === 'form') {
         return (
             <section className="me-panel mint-panel" aria-label="Mint a reptile, locked">
                 <h2 className="me-panel-title is-sm">Mint a reptile</h2>

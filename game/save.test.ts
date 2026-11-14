@@ -4,8 +4,11 @@ import {
   PENDING_PROOF_MAX_AGE_MS,
   SEEN_INIT,
   SAVE_KEY,
+  LOCAL_BACKUP_KEY,
   addPendingProof,
+  backupLocalOnce,
   defaultSave,
+  walletStartSave,
   hasSeenMarkers,
   loadSave,
   proofIssuedAt,
@@ -400,5 +403,46 @@ describe("pendingProofs (E70)", () => {
     expect(proofIssuedAt("junk")).toBeNull();
     expect(proofIssuedAt("e30.x")).toBeNull(); // {} carries no issuedAt
     expect(proofIssuedAt(null)).toBeNull();
+  });
+});
+
+describe("the wallet start (E76)", () => {
+  it("clears bests, gear, totals, feats and pickups; keeps settings, look, seen and proofs", () => {
+    const save: SaveData = {
+      ...defaultSave(),
+      best: { descent: 5 },
+      gear: { ...defaultSave().gear, boots: 2 },
+      totals: { kills: 3 },
+      feats: ["first-exit"],
+      pickedUp: [{ layer: "Back", trait: "Wings" }],
+      settings: { volume: 0.5 },
+      look: { Body: "Purple" },
+      seen: { howto: true },
+      pendingProofs: ["p.q"],
+    };
+    const start = walletStartSave(save);
+    expect(start.best).toEqual(defaultSave().best);
+    expect(start.gear).toEqual(defaultSave().gear);
+    expect(start.totals).toEqual(defaultSave().totals);
+    expect(start.feats).toEqual([]);
+    expect(start.pickedUp).toEqual([]);
+    expect(start.settings).toEqual({ volume: 0.5 });
+    expect(start.look).toEqual({ Body: "Purple" });
+    expect(start.seen).toEqual({ howto: true });
+    expect(start.pendingProofs).toEqual(["p.q"]);
+  });
+
+  it("copies the save aside once, never over an earlier copy, never throwing", () => {
+    const store: Record<string, string> = {};
+    const storage: StorageLike = {
+      getItem: (key) => (key in store ? store[key] : null),
+      setItem: (key, value) => { store[key] = value; },
+    };
+    expect(backupLocalOnce(storage, { ...defaultSave(), best: { descent: 1 } })).toBe(true);
+    expect(backupLocalOnce(storage, { ...defaultSave(), best: { descent: 2 } })).toBe(false);
+    expect(JSON.parse(store[LOCAL_BACKUP_KEY]).best.descent).toBe(1);
+    expect(backupLocalOnce(null, defaultSave())).toBe(false);
+    const broken: StorageLike = { getItem: () => { throw new Error("blocked"); }, setItem: () => {} };
+    expect(backupLocalOnce(broken, defaultSave())).toBe(false);
   });
 });

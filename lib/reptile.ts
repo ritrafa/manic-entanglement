@@ -87,11 +87,17 @@ function reptileNumber(item: Record<string, unknown>): string | null {
         if (isRecord(metadata)) names.push(metadata.name);
     }
     for (const name of names) {
-        if (typeof name !== 'string') continue;
-        const match = /#\s*(\d{1,4})/.exec(name);
-        if (match !== null) return match[1].padStart(4, '0');
+        const number = numberFromName(name);
+        if (number !== null) return number;
     }
     return null;
+}
+
+/** The "#123" in an asset name as four digits ("0123"), or null. */
+export function numberFromName(name: unknown): string | null {
+    if (typeof name !== 'string') return null;
+    const match = /#\s*(\d{1,4})/.exec(name);
+    return match === null ? null : match[1].padStart(4, '0');
 }
 
 /** Walk the asset list defensively (anything may be missing or of the wrong
