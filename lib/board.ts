@@ -13,6 +13,26 @@ import type { CameraWindow } from '@/game/camera';
 import { entityPx, markTiles, tileDiff } from '@/game/view';
 import { FLOAT_RISE_MS, floatLineOffset, type Fx, type FloatText, type FxTone } from '@/game/fx';
 
+/** A box in stage pixels: relative to the top-left of the board's parent. */
+interface DiveBox {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+/** What the level dive keeps of the cleared board (Board.captureDive). */
+export interface DiveSnapshot {
+    /** The cleared board as a still picture, under the live board. */
+    clone: HTMLElement;
+    /** The reptile as it stood on the exit, lifted out to glide to the new start. */
+    ghost: HTMLElement | null;
+    /** The exit square, in stage pixels. */
+    exit: DiveBox;
+    /** The cleared board's box, in stage pixels. */
+    board: DiveBox;
+}
+
 /** Tile pictures live at images/<code>.png. */
 const WALL_IMAGE_BASE = '/images/';
 
@@ -439,6 +459,146 @@ export class Board {
         const shiftY = this.camera !== null ? this.camera.y * this.cell : 0;
         board.style.setProperty('--zoom-origin', `${x - shiftX}px ${y - shiftY}px`);
         this.restartAnimation(board, 'fx-zoom', whole);
+    }
+
+    /**
+     * The level dive, part one (called just before the next level is built):
+     * the cleared board is copied into the stage, under the live board, as a
+     * still picture without the reptile; the reptile itself is lifted out as
+     * a ghost that will glide to the new start. Null when there is nothing
+     * to dive from (not mounted, no exit, no Web Animations).
+     */
+    captureDive(): DiveSnapshot | null {
+        const board = this.boardElement;
+        const host = board?.parentElement ?? null;
+        const exitElement = this.exitElement;
+        if (!board || !host || !exitElement || typeof board.animate !== 'function') return null;
+        const hostBox = host.getBoundingClientRect();
+        const rel = (r: DOMRect): DiveBox => ({ x: r.left - hostBox.left, y: r.top - hostBox.top, w: r.width, h: r.height });
+        const boardBox = rel(board.getBoundingClientRect());
+        const exit = rel(exitElement.getBoundingClientRect());
+        if (!(boardBox.w > 0 && boardBox.h > 0 && exit.w > 0 && exit.h > 0)) return null;
+
+        // The picture keeps the board's id, so every #maze rule (the galaxy,
+        // the clip) still draws it; it goes after the live board, so the
+        // document's #maze is still the live one.
+        const clone = board.cloneNode(true) as HTMLElement;
+        clone.classList.remove('fx-shake', 'fx-zoom', 'low-energy', 'diving');
+        clone.querySelectorAll('canvas, .player').forEach((element) => element.remove());
+        clone.setAttribute('aria-hidden', 'true');
+        Object.assign(clone.style, {
+            position: 'absolute',
+            left: `${boardBox.x}px`,
+            top: `${boardBox.y}px`,
+            width: `${boardBox.w}px`,
+            height: `${boardBox.h}px`,
+            margin: '0',
+            zIndex: '0',
+            pointerEvents: 'none',
+        });
+        host.insertBefore(clone, board.nextSibling);
+
+        let ghost: HTMLElement | null = null;
+        if (this.playerElement) {
+            const at = rel(this.playerElement.getBoundingClientRect());
+            ghost = this.playerElement.cloneNode(true) as HTMLElement;
+            ghost.classList.add('dive-ghost');
+            ghost.setAttribute('aria-hidden', 'true');
+            Object.assign(ghost.style, {
+                left: `${at.x}px`,
+                top: `${at.y}px`,
+                width: `${at.w}px`,
+                height: `${at.h}px`,
+                transform: 'none',
+                transformOrigin: '0 0',
+                transition: 'none',
+                zIndex: '2',
+                pointerEvents: 'none',
+            });
+            host.appendChild(ghost);
+        }
+        // The live board draws over the picture, and builds the next level
+        // without any glide (the camera and the reptile jump into place).
+        board.style.zIndex = '1';
+        board.classList.add('diving');
+        return { clone, ghost, exit, board: boardBox };
+    }
+
+    /**
+     * The level dive, part two (the next level is built): the new board
+     * starts exactly inside the old exit square and grows to fill the board,
+     * while the old picture grows by the same factor about the same point -
+     * so the new maze always sits in the exit square it came out of - and
+     * fades out. The reptile's ghost glides from the exit to the new start.
+     * `done` runs once, when the dive ends (or could not play).
+     */
+    playDive(snap: DiveSnapshot, ms: number, done: () => void): void {
+        const board = this.boardElement;
+        const host = board?.parentElement ?? null;
+        const player = this.playerElement;
+        let finished = false;
+        const finish = (): void => {
+            if (finished) return;
+            finished = true;
+            snap.clone.remove();
+            snap.ghost?.remove();
+            if (board) {
+                board.style.zIndex = '';
+                board.style.transformOrigin = '';
+                board.classList.remove('diving');
+            }
+            if (player) player.style.visibility = '';
+            done();
+        };
+        if (!board || !host) {
+            finish();
+            return;
+        }
+        const hostBox = host.getBoundingClientRect();
+        const r = board.getBoundingClientRect();
+        const live: DiveBox = { x: r.left - hostBox.left, y: r.top - hostBox.top, w: r.width, h: r.height };
+        const sx = snap.exit.w / live.w;
+        const sy = snap.exit.h / live.h;
+        if (!(sx > 0 && sx < 1 && sy > 0 && sy < 1)) {
+            finish();
+            return;
+        }
+        // The one point (stage pixels) both pictures scale about: scaled by
+        // (sx, sy) about it, the new board lands exactly on the exit square.
+        const fx = live.x + (snap.exit.x - live.x) / (1 - sx);
+        const fy = live.y + (snap.exit.y - live.y) / (1 - sy);
+        // Both animations share one easing on the whole effect, so at every
+        // moment the old picture is exactly 1/s times the new board.
+        const timing: KeyframeAnimationOptions = { duration: Math.max(1, Math.round(ms)), easing: 'cubic-bezier(0.45, 0, 0.3, 1)' };
+
+        // Where the reptile ends up: read before the board starts shrinking.
+        const target = player ? player.getBoundingClientRect() : null;
+
+        board.style.transformOrigin = `${fx - live.x}px ${fy - live.y}px`;
+        const grow = board.animate([{ transform: `scale(${sx}, ${sy})` }, { transform: 'scale(1, 1)' }], timing);
+        snap.clone.style.transformOrigin = `${fx - snap.board.x}px ${fy - snap.board.y}px`;
+        snap.clone.animate([
+            { offset: 0, transform: 'scale(1, 1)', opacity: 1 },
+            { offset: 0.55, opacity: 1 },
+            { offset: 1, transform: `scale(${1 / sx}, ${1 / sy})`, opacity: 0 },
+        ], timing);
+
+        if (snap.ghost && player && target && target.width > 0) {
+            player.style.visibility = 'hidden';
+            const dx = target.left - hostBox.left - snap.ghost.offsetLeft;
+            const dy = target.top - hostBox.top - snap.ghost.offsetTop;
+            const scale = target.width / Math.max(1, snap.ghost.offsetWidth);
+            snap.ghost.animate([
+                { transform: 'translate(0px, 0px) scale(1)' },
+                { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+            ], timing);
+        } else {
+            snap.ghost?.remove();
+        }
+
+        grow.addEventListener('finish', finish, { once: true });
+        grow.addEventListener('cancel', finish, { once: true });
+        setTimeout(finish, (timing.duration as number) + 250);
     }
 
     /** Put an effect element on the fx layer, gone at animationend or on the timeout. */

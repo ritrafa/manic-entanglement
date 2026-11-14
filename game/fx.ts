@@ -84,8 +84,9 @@ export function fxFor(event: GameEvent, context: FxContext): Fx[] {
             if (reduced) return [];
             const exit = context.exit ?? { x: 0, y: 0 };
             return [
+                // The zoom into the exit is the level dive now (lib/board.ts
+                // captureDive / playDive), played when the next level is built.
                 { kind: 'burst', x: exit.x, y: exit.y, count: clampCount(FX.clearBurstCount), tone: 'teal' },
-                { kind: 'zoom', x: exit.x, y: exit.y, ms: clampMs(FX.clearZoomMs) },
             ];
         }
         case 'levelStart':

@@ -204,6 +204,20 @@ body {
   will-change: transform;
 }
 
+/* The level dive (lib/board.ts playDive): while the next maze grows out of
+   the exit square, nothing on the new board glides - the camera window and
+   the reptile are already where the level starts. */
+#maze.diving .camera-move,
+#maze.diving .player {
+  transition: none;
+}
+
+/* The reptile's ghost on its way from the exit to the new start: placed by
+   left/top in the stage, moved by its own animation. */
+.player.dive-ghost {
+  position: absolute;
+}
+
 /* The E56 minimap: a small square in a board corner, shown only in camera
    mode (lib/board.ts drawMinimap). The maze's walls at 1-2 px a tile, the
    reptile and the exit as single bright pixels and the camera window as an

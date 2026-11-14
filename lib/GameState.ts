@@ -1747,22 +1747,32 @@ class GameState {
                     // Only score modes record at the exit; a time mode records
                     // its milliseconds once, when the run finishes.
                     if (this.modeRules.scoring === 'score') this.recordBest(this.run.score);
-                    // The board pulls toward the exit for the zoom's length; the
-                    // next level turns over when it is done. Reduced motion gets
-                    // no zoom, so it waits not at all.
+                    // The cleared maze holds a beat (the burst, the points),
+                    // then the next maze grows out of the exit square and the
+                    // reptile glides to its start (the board's level dive).
+                    // The clock waits for the dive. Reduced motion gets no
+                    // beat and no dive: the next level simply appears.
                     this.after(this.reducedMotion() ? 0 : FX.clearZoomMs, () => {
                         // The last level of a limited mode ended the run at the
                         // exit ("done"): there is no next level to turn over to.
                         if (this.run.phase !== 'clear') return;
                         if (this.screen === 'paused') {
-                            // The zoom finished behind the pause panel: turn the
+                            // The beat finished behind the pause panel: turn the
                             // level over on resume instead, so the clock never runs paused.
                             this.pendingNextLevel = true;
                             return;
                         }
+                        const dive = this.reducedMotion() ? null : this.board.captureDive();
                         this.run.nextLevel();
                         this.handleEvents();
-                        this.startClock();
+                        if (dive === null) {
+                            this.startClock();
+                            return;
+                        }
+                        this.board.playDive(dive, FX.levelDiveMs, () => {
+                            // A pause, a quit or a death during the dive keeps the clock off.
+                            if (this.screen === 'playing' && this.run.phase === 'playing') this.startClock();
+                        });
                     });
                     break;
                 case 'levelStart':

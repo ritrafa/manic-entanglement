@@ -142,8 +142,12 @@ export const FX = {
     /** Pixels and milliseconds of the fight's board shake. */
     fightShakePx: 4,
     fightShakeMs: 150,
-    /** Milliseconds of the zoom toward the exit on level clear. */
+    /** Milliseconds the cleared maze holds (the exit burst, the gained
+     *  points) before the dive into the next level begins. */
     clearZoomMs: 300,
+    /** Milliseconds of the level dive: the next maze grows out of the exit
+     *  square to fill the board while the reptile glides to its start. */
+    levelDiveMs: 900,
     /** Milliseconds of the fade that opens a level. */
     levelStartFadeMs: 200,
     /** Milliseconds of the death flash. */

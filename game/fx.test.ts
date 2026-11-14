@@ -40,10 +40,9 @@ describe("fxFor with full motion", () => {
         ]);
     });
 
-    it("levelClear bursts teal 14 at the exit and zooms toward it for 300 ms", () => {
+    it("levelClear bursts teal 14 at the exit (the dive into the next maze is the board's)", () => {
         expect(fxFor(LEVEL_CLEAR, { motion: "full", exit: EXIT })).toEqual([
             { kind: "burst", x: EXIT.x, y: EXIT.y, count: 14, tone: "teal" },
-            { kind: "zoom", x: EXIT.x, y: EXIT.y, ms: 300 },
         ]);
     });
 
