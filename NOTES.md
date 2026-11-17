@@ -1,5 +1,35 @@
 # NOTES
 
+## Open (2026-11-17)
+
+Where things stand after 1637a23. The owner's decisions and the review history are in Life
+Memory's `.local/agent-backlog/manic-entanglement/DECISIONS.md`.
+
+- **Owner retest on the agent/queue preview (devnet).** The preview is
+  https://manic-entanglement-git-agent-queue-robert-ritters-projects.vercel.app. Check that:
+  - connecting a wallet clears the local stats and looks the reptile up by itself;
+  - after a mint the box shows the new reptile at once, with no second Mint offered;
+  - a verified run saves to the reptile;
+  - a run with a wallet linked but no verification shows "Not saved" in the HUD.
+- **Merge agent/queue into main after that retest** (`/lm-queue-review manic-entanglement`).
+  - agent/queue is 17 commits ahead of main.
+  - Production still has the broken wallet button and the old dependencies.
+- **Mainnet setup, by the owner.** Follow "Owner setup" below for the real collection:
+  - the delegate, the server variables (the signing key marked Sensitive, never in a
+    `NEXT_PUBLIC_` variable), then one small real mint;
+  - the owner confirms that the collection's update authority (rafaQ56...) is theirs; Claude
+    never reads that key.
+- **For the owner to confirm:**
+  - the mint terms line, which states the real cost (mostly a deposit you get back) instead of
+    the spec's "network fee only";
+  - the Still Water feat (depth 8 in Zen) earning the Solana background and Body Solana.
+- **Known gaps:**
+  - at 360x780 the wardrobe shows only 2 cards a page;
+  - `design/pixel-art.md` lags the design system page (the Q27 forecast-marks rule): copy it
+    in while no card runs;
+  - the pre-wallet save copy (`manic-entanglement.local-backup`) is kept, but nothing reads it
+    back yet.
+
 ## NFT on-chain (N5): mint and save
 
 The on-chain part of the NFT stage: transaction builders, the two signing
