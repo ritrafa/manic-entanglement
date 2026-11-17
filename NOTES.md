@@ -14,6 +14,9 @@ Memory's `.local/agent-backlog/manic-entanglement/DECISIONS.md`.
 - **Merge agent/queue into main after that retest** (`/lm-queue-review manic-entanglement`).
   - agent/queue is 17 commits ahead of main.
   - Production still has the broken wallet button and the old dependencies.
+  - GitHub reports 8 Dependabot alerts on main (2 high, 6 moderate, seen 2026-11-17). The
+    dependency update f87def8 on agent/queue should clear most of them; check the alerts after
+    the merge.
 - **Mainnet setup, by the owner.** Follow "Owner setup" below for the real collection:
   - the delegate, the server variables (the signing key marked Sensitive, never in a
     `NEXT_PUBLIC_` variable), then one small real mint;
